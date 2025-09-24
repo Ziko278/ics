@@ -1,0 +1,148 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <a title="Actions" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Actions</h6>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                        <button title="Add Group" type="button" style="width:100%" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+                            <i class="bi bi-plus-circle"></i> Add Group
+                        </button>
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                         <button class="btn btn-sm btn-info text-white" style="width:100%" data-bs-toggle="modal" data-bs-target="#groupHelperModal">
+                            <i class="bi bi-question-circle"></i> Helper
+                        </button>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">Permission Groups / Roles</h5>
+
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Group Name</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for group in group_list %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ group.name|title }}</td>
+                    <td class="text-center">
+                        <a title="Manage Permissions" href="{% url 'group_permissions' group.id %}" class="btn btn-primary btn-sm"><i class="bi bi-shield-lock"></i> </a>
+                        <button title="Edit Group Name" type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editGroupModal{{ forloop.counter }}">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                        <a title="Delete Group" href="{% url 'group_delete' group.id %}" class="btn btn-danger btn-sm">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if not group_list %}
+                <div class="alert alert-warning text-center">
+                    <h5>No Groups Found</h5>
+                    <p>You haven't added any permission groups yet. Click the "Add Group" button to create roles like 'Teachers', 'Admin', or 'Accountant'.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Group Helper Modal -->
+<div class="modal fade" id="groupHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Permission Groups Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    <strong>What are Permission Groups?</strong><br>
+                    Groups (or Roles) are used to control what different types of users can see and do in the application.
+                </p>
+                <p>
+                    After creating a group (e.g., "Teachers"), you must click the <strong>"Permissions"</strong> button to assign specific permissions to it, like the ability to view student records or enter grades.
+                </p>
+                <div class="alert alert-success">
+                    <strong>Crucial Step:</strong> Once you've set up a group and its permissions, you can assign staff members to that group from the staff creation/editing page.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Group Modal -->
+<div class="modal fade" id="createGroupModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'group_create' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Add New Group</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating">
+                        {{ form.name }}
+                        <label for="id_name">Group Name (e.g., Teachers)<span class="text-danger">*</span></label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Group</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Group Modals -->
+{% for group in group_list %}
+<div class="modal fade" id="editGroupModal{{ forloop.counter }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'group_edit' group.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit Group: {{ group.name|title }}</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating">
+                        <input type="text" name="name" value="{{ group.name }}" autocomplete="off" required class="form-control" id="id_name_{{ forloop.counter }}">
+                        <label for="id_name_{{ forloop.counter }}">Group Name<span class="text-danger">*</span></label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}

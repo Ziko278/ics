@@ -1,0 +1,99 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <a title="Actions" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Actions</h6>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'parent_create' %}">
+                        <button title="Register New Parent" type="button" style="width:100%" class="btn btn-sm btn-primary">
+                            <i class="bi bi-person-plus"></i> Register New Parent
+                        </button>
+                    </a>
+                </li>
+                 <li>
+                    <a class="dropdown-item" href="#">
+                         <button class="btn btn-sm btn-info text-white" style="width:100%" data-bs-toggle="modal" data-bs-target="#parentHelperModal">
+                            <i class="bi bi-question-circle"></i> Helper
+                        </button>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">Parents & Guardians List</h5>
+
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">Parent / Guardian</th>
+                    <th scope="col">Parent ID</th>
+                    <th scope="col">Contact</th>
+                    <th scope="col" class="text-center">No. of Wards</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for parent in parent_list %}
+                <tr>
+                    <td>
+                        <img {% if parent.image %} src="{{ parent.image.url }}" {% else %} src="https://placehold.co/40x40/EFEFEF/AAAAAA?text={{ parent.first_name|first|upper }}" {% endif %} alt="{{ parent }}" class="rounded-circle me-2" width="40" height="40" style="object-fit: cover;">
+                        {{ parent.first_name|title }} {{ parent.last_name|title }}
+                    </td>
+                    <td>{{ parent.parent_id }}</td>
+                    <td>{% if parent.mobile %} {{ parent.mobile }} {% endif %}</td>
+                    <td class="text-center">{{ parent.wards.count }}</td>
+                    <td class="text-center">
+                        <a title="Register Ward" href="{% url 'student_create' parent.id %}" class="btn btn-success btn-sm"><i class="bi bi-person"></i></a>
+                        <a title="View Details" href="{% url 'parent_detail' parent.id %}" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i></a>
+                        <a title="Edit Parent" href="{% url 'parent_edit' parent.id %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil-square"></i></a>
+                        <a title="Delete Parent" href="{% url 'parent_delete' parent.id %}" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if not parent_list %}
+                <div class="alert alert-warning text-center">
+                    <h5>No Parents Registered</h5>
+                    <p>There are no parents or guardians in the system yet. Click "Register New Parent" to begin the student enrollment process.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Parent Helper Modal -->
+<div class="modal fade" id="parentHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Parent Management Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    This page lists all the parents and guardians who have children enrolled in the school.
+                </p>
+                <p>
+                    The first step to enrolling a new student is to <strong>register their parent or guardian</strong> here. Once a parent is created, you can then proceed to add one or more students (wards) to their profile.
+                </p>
+                 <div class="alert alert-success">
+                    <strong>Workflow:</strong> Register Parent ➔ Add Student(s) to Parent.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

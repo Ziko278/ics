@@ -1,0 +1,107 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-10 offset-lg-1 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Update Item: {{ item.name|title }}</h5>
+            <p class="card-description">
+                Modify the details for this inventory item. Stock levels must be changed via Stock In/Out actions.
+            </p>
+
+            <form method="POST" class="row g-3">
+                {% csrf_token %}
+
+                <!-- Section 1: Core Item Details -->
+                <div class="col-12 border-bottom pb-3">
+                    <h6 class="card-subtitle mb-2 text-muted">Core Details</h6>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <div class="form-floating">
+                                {{ form.name }}
+                                <label for="id_name">Item Name <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="form-floating">
+                                {{ form.category }}
+                                <label for="id_category">Category <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                         <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.unit }}
+                                <label for="id_unit">Unit of Measure <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.barcode }}
+                                <label for="id_barcode">Barcode (SKU)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Pricing and Stock Levels (Read-only) -->
+                 <div class="col-12 border-bottom pt-3 pb-3">
+                    <h6 class="card-subtitle mb-2 text-muted">Pricing & Stock Levels</h6>
+                     <div class="row">
+                         <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.current_selling_price }}
+                                <label for="id_current_selling_price">Selling Price (₦) <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.reorder_level }}
+                                <label for="id_reorder_level">Re-order Level <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        
+                        <!-- Display current quantities as read-only text -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Current Shop Quantity</label>
+                            <div class="form-control-plaintext ps-3">{{ item.shop_quantity|floatformat:2 }}</div>
+                             <div class="form-text">Cannot be changed here. Use Stock In/Out for adjustments.</div>
+                        </div>
+                         <div class="col-md-6 mb-3">
+                            <label class="form-label">Current Store Quantity</label>
+                            <div class="form-control-plaintext ps-3">{{ item.store_quantity|floatformat:2 }}</div>
+                            <div class="form-text">Cannot be changed here. Use Stock In/Out for adjustments.</div>
+                        </div>
+                     </div>
+                </div>
+
+                <!-- Section 3: Settings -->
+                 <div class="col-12 pt-3">
+                     <h6 class="card-subtitle mb-2 text-muted">Settings</h6>
+                    <div class="row">
+                         <div class="col-md-6 mb-3">
+                             <div class="form-floating">
+                                {{ form.location }}
+                                <label for="id_location">Available In <span class="text-danger">*</span></label>
+                            </div>
+                         </div>
+                         <div class="col-md-6 mb-3 d-flex align-items-center">
+                            <div class="form-check form-switch">
+                                {{ form.is_active }}
+                                <label class="form-check-label" for="id_is_active">
+                                    <strong>Is Active?</strong>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-start mt-2">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="{{ item.get_absolute_url }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

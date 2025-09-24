@@ -1,0 +1,103 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">
+                {% if mode == 'update' %}
+                    Update School Settings
+                {% else %}
+                    Configure School Settings
+                {% endif %}
+            </h5>
+
+            {{ form.errors }}
+
+            <form method="POST">
+                {% csrf_token %}
+
+                <!-- Financial Settings Section -->
+                <h6 class="card-subtitle mb-2"><b>Financial Settings</b></h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.max_student_debt }}
+                            <label for="id_max_student_debt">Max Student Debt (NGN)</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.low_balance }}
+                            <label for="id_low_balance">Low Balance Threshold (NGN)</label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mt-4">
+                        <div class="form-check form-switch">
+                            {{ form.allow_student_debt }}
+                            <label class="form-check-label" for="id_allow_student_debt">Allow Students to Owe Fees</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mt-4">
+                        <div class="form-check form-switch">
+                            {{ form.auto_low_balance_notification }}
+                            <label class="form-check-label" for="id_auto_low_balance_notification">Send Low Balance Notifications</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Academic Settings Section -->
+                <h6 class="card-subtitle mb-2"><b>Academic Settings</b></h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <label for="id_session" class="form-label">Current Academic Session<span class="text-danger">*</span></label>
+                        {{ form.session }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_term" class="form-label">Current Term<span class="text-danger">*</span></label>
+                        {{ form.term }}
+                    </div>
+                </div>
+
+                <!-- Bank Account Details Section -->
+                <h6 class="card-subtitle mb-2"><b>Bank Account Details (Optional)</b></h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            {{ form.bank }}
+                            <label for="id_bank">Bank Name</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            {{ form.account_name }}
+                            <label for="id_account_name">Account Name</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            {{ form.account_number }}
+                            <label for="id_account_number">Account Number</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-start mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        {% if mode == 'update' %}
+                            Save Changes
+                        {% else %}
+                            Save Settings
+                        {% endif %}
+                    </button>
+                    {% if mode == 'update' %}
+                         <a href="{% url 'admin_site:school_setting_detail' %}" class="btn btn-secondary">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

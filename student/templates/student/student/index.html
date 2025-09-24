@@ -1,0 +1,114 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <a title="Actions" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Actions</h6>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'select_parent' %}">
+                        <button title="Register New Student" type="button" style="width:100%" class="btn btn-sm btn-primary">
+                            <i class="bi bi-person-plus"></i> Register New Student
+                        </button>
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'student_select_class' %}">
+                        <button title="View Students by Class" type="button" style="width:100%" class="btn btn-sm btn-success">
+                            <i class="bi bi-filter-square"></i> View Students by Class
+                        </button>
+                    </a>
+                </li>
+                 <li>
+                    <a class="dropdown-item" href="#">
+                         <button class="btn btn-sm btn-info text-white" style="width:100%" data-bs-toggle="modal" data-bs-target="#studentHelperModal">
+                            <i class="bi bi-question-circle"></i> Helper
+                        </button>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">
+                {% if selected_class %}
+                    Student List for: <span class="text-primary">{{ selected_class.name|upper }} {{ selected_section.name|upper }}</span>
+                {% else %}
+                    All Active Students
+                {% endif %}
+            </h5>
+
+            {% if selected_class %}
+                <div class="alert alert-info d-flex justify-content-between align-items-center">
+                    <span>You are viewing a filtered list.</span>
+                    <a href="{% url 'student_index' %}" class="btn btn-light btn-sm">Clear Filter & View All</a>
+                </div>
+            {% endif %}
+
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">Student</th>
+                    <th scope="col">Reg. Number</th>
+                    <th scope="col">Class</th>
+                    <th scope="col">Parent/Guardian</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for student in student_list %}
+                <tr>
+                    <td>
+                        <img {% if student.image %} src="{{ student.image.url }}" {% else %} src="https://placehold.co/40x40/EFEFEF/AAAAAA?text={{ student.first_name|first|upper }}" {% endif %} alt="{{ student }}" class="rounded-circle me-2" width="40" height="40" style="object-fit: cover;">
+                        {{ student.first_name|title }} {{ student.last_name|title }}
+                    </td>
+                    <td>{{ student.registration_number }}</td>
+                    <td>{{ student.student_class|default:"N/A" }} {% if student.class_section %}{{ student.class_section }}{% endif %}</td>
+                    <td>{{ student.parent.first_name|title }} {{ student.parent.last_name|title }}</td>
+                    <td class="text-center">
+                        <a title="View Student Profile" href="{% url 'student_detail' student.id %}" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i></a>
+                        <a title="View Parent Profile" href="{% url 'parent_detail' student.parent.id %}" class="btn btn-info btn-sm"><i class="bi bi-person-circle"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if not student_list %}
+                <div class="alert alert-warning text-center">
+                    <h5>No Students Found</h5>
+                    <p>There are no students matching the current criteria.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Student Helper Modal -->
+<div class="modal fade" id="studentHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Student Management Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    This page lists all active students in the school. You can use the "Actions" menu to begin new student registration or to filter the list by a specific class.
+                </p>
+                 <div class="alert alert-info">
+                    <strong>Registration Workflow:</strong> To register a new student, you must first search for or create their parent/guardian. The system will then guide you to register the student under that parent.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

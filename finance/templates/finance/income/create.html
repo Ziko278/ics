@@ -1,0 +1,144 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="card-title mb-0">Record New Income</h4>
+                <div>
+                    <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#incomeHelperModal"><b>Helper</b></button>
+                    <a href="{% url 'income_index' %}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to List
+                    </a>
+                </div>
+            </div>
+
+            {% include 'admin_site/partials/error.html' %}
+
+            <form method="POST" action="" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Income Details</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+
+                                    <!-- Category -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.category.id_for_label }}" class="form-label">
+                                            Category <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.category }}
+                                    </div>
+
+                                    <!-- Amount -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.amount.id_for_label }}" class="form-label">
+                                            Amount (₦) <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.amount }}
+                                    </div>
+
+                                    <!-- Income Date -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.income_date.id_for_label }}" class="form-label">
+                                            Date <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.income_date }}
+                                    </div>
+
+                                    <!-- Source -->
+                                    <div class="col-md-12 mb-3">
+                                        <label for="{{ form.source.id_for_label }}" class="form-label">Source of Income</label>
+                                        {{ form.source }}
+                                        <small class="form-text text-muted">
+                                            e.g., "Donation from XYZ Foundation", "Asset Sale", etc.
+                                        </small>
+                                    </div>
+
+                                    <!-- Reference -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.reference.id_for_label }}" class="form-label">Reference</label>
+                                        {{ form.reference }}
+                                    </div>
+
+                                    <!-- Receipt (file) -->
+                                    <div class="col-md-12 mb-3">
+                                        <label for="{{ form.receipt.id_for_label }}" class="form-label">Receipt (optional)</label>
+                                        {{ form.receipt }}
+                                        <small class="form-text text-muted">
+                                            Max file size: 5 MB. Allowed: PDF, JPG, PNG.
+                                        </small>
+                                    </div>
+
+                                    <!-- Description / Notes -->
+                                    <div class="col-md-12">
+                                        <label for="{{ form.description.id_for_label }}" class="form-label">
+                                            Notes / Description
+                                        </label>
+                                        {{ form.description }}
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions card -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted">Fill in the income details and click save.</p>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" name="save" class="btn btn-primary">
+                                        <i class="bi bi-check-circle"></i> Save Income
+                                    </button>
+                                    <a href="{% url 'income_index' %}" class="btn btn-outline-secondary">Cancel</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Income Helper Modal -->
+<div class="modal fade" id="incomeHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Income Record Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>This form records any money received that is not a direct patient payment.</p>
+                <hr>
+                <h6>Field Explanations:</h6>
+                <ul>
+                    <li><strong>Source of Income:</strong> Describe where the money came from (e.g., donor, asset sale).</li>
+                    <li><strong>Reference:</strong> External receipt or transaction number for cross-reference.</li>
+                    <li><strong>Receipt:</strong> Optional upload of supporting document (PDF/JPG/PNG).</li>
+                </ul>
+                <div class="alert alert-info">
+                    <strong>Note:</strong> A unique internal <strong>Income Number</strong> is generated automatically when you save.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

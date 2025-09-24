@@ -1,0 +1,150 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <!-- Dropdown for actions like 'Add' and 'Helper' -->
+            <a title="Actions" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Actions</h6>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                        <button title="Add Class Section" type="button" style="width:100%" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createSectionModal">
+                            <i class="bi bi-plus-circle"></i> Add Section
+                        </button>
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                         <button class="btn btn-sm btn-info text-white" style="width:100%" data-bs-toggle="modal" data-bs-target="#sectionHelperModal">
+                            <i class="bi bi-question-circle"></i> Helper
+                        </button>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">Class Sections</h5>
+
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Section Name</th>
+                    <th scope="col">Created At</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for section in class_section_list %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ section.name|upper }}</td>
+                    <td>{{ section.created_at|date:"d M, Y" }}</td>
+                    <td class="text-center">
+                        <!-- Button to trigger the unique 'edit' modal for this section -->
+                        <button title="Edit Section" type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editSectionModal{{ forloop.counter }}">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                        <!-- Link to the delete confirmation page -->
+                        <a title="Delete Section" href="{% url 'class_section_delete' section.id %}" class="btn btn-danger btn-sm">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if not class_section_list %}
+                 <div class="alert alert-warning text-center">
+                    <h5>No Class Sections Found</h5>
+                    <p>You haven't added any class sections yet. Click the "Add Section" button to get started.</p>
+                 </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Helper Modal: Provides context and tips for the user -->
+<div class="modal fade" id="sectionHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Class Section Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    <strong>What are Class Sections?</strong><br>
+                    Class Sections are subdivisions of a main class. For example, a "JSS 1" class might be divided into sections like "JSS 1A", "JSS 1B", and "JSS 1C".
+                </p>
+                <div class="alert alert-info">
+                    <strong>Tip:</strong> Create sections before you create your main classes. This will allow you to assign these sections to a class later.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Section Modal: Pops up for adding a new section -->
+<div class="modal fade" id="createSectionModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'class_section_create' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Add New Class Section</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating">
+                        {{ form.name }}
+                        <label for="floatingName">Section Name (e.g., A, B, Gold)<span class="text-danger"><b>*</b></span></label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Section</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Section Modals: A unique modal is generated for each section in the list -->
+{% for section in class_section_list %}
+<div class="modal fade" id="editSectionModal{{ forloop.counter }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'class_section_edit' section.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit Section: {{ section.name|upper }}</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating">
+                        <!-- We manually create the input to pre-fill it with the section's current name -->
+                        <input type="text" name="name" value="{{ section.name }}" autocomplete="off" required class="form-control" id="id_name_{{ forloop.counter }}">
+                        <label for="id_name_{{ forloop.counter }}">Section Name<span class="text-danger"><b>*</b></span></label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}

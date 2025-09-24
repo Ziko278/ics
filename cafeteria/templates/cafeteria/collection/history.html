@@ -1,0 +1,104 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-12">
+    <div class="card overflow-auto">
+        <div class="card-body">
+            <h5 class="card-title">Meal Collection History</h5>
+            <p class="card-description">
+                A log of all meal collections. Use the filters below to narrow down the results.
+            </p>
+
+            <!-- Filter and Search Form -->
+            <form method="GET" action="{% url 'cafeteria_collection_history' %}">
+                <div class="row g-3 align-items-center mb-3 p-3 border rounded bg-light">
+                    <div class="col-xl-3 col-md-6">
+                        <label class="form-label">Search Student</label>
+                        <input type="text" class="form-control form-control-sm" name="q" value="{{ search_query }}" placeholder="Name or Reg. No...">
+                    </div>
+                    <div class="col-xl-2 col-md-6">
+                        <label class="form-label">Meal Type</label>
+                        <select name="meal" class="form-select form-select-sm">
+                            <option value="">All Meals</option>
+                             {% for meal in meals %}
+                                <option value="{{ meal.pk }}" {% if selected_meal == meal.pk|stringformat:"s" %}selected{% endif %}>
+                                    {{ meal.name|title }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-xl-2 col-md-6">
+                        <label class="form-label">Session</label>
+                        <select name="session" class="form-select form-select-sm">
+                            <option value="">All Sessions</option>
+                            {% for session in sessions %}
+                            <option value="{{ session.pk }}" {% if selected_session.pk == session.pk %}selected{% endif %}>
+                                {{ session }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-xl-1 col-md-6">
+                         <label class="form-label">Start</label>
+                        <input type="date" class="form-control form-control-sm" name="start_date" value="{{ start_date }}">
+                    </div>
+                    <div class="col-xl-1 col-md-6">
+                         <label class="form-label">End</label>
+                        <input type="date" class="form-control form-control-sm" name="end_date" value="{{ end_date }}">
+                    </div>
+                    <div class="col-xl-3 col-md-12 d-flex align-items-end">
+                        <button class="btn btn-sm btn-secondary w-100" type="submit">Filter Results</button>
+                    </div>
+                </div>
+            </form>
+
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th>Date & Time</th>
+                    <th>Student</th>
+                    <th>Class</th>
+                    <th>Meal</th>
+                    <th>Served By</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for collection in collections %}
+                <tr>
+                    <td>{{ collection.collection_date|date:"d M, Y" }} at {{ collection.collection_time|time:"H:i" }}</td>
+                    <td>{{ collection.student.first_name }} {{ collection.student.last_name }}</td>
+                    <td>{{ collection.student.student_class.name }}</td>
+                    <td>{{ collection.meal.name }}</td>
+                    <td>{{ collection.served_by.staff_profile.user.get_full_name|title|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5">
+                        <div class="alert alert-secondary text-center" role="alert">
+                           No meal collection records found matching your criteria.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Pagination Controls -->
+            {% if is_paginated %}
+            <nav aria-label="Page navigation">
+              <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                  <li class="page-item"><a class="page-link" href="?page=1&q={{ search_query }}&meal={{ selected_meal }}&session={{ selected_session.pk }}&start_date={{ start_date }}&end_date={{ end_date }}">&laquo;</a></li>
+                {% endif %}
+                <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+                {% if page_obj.has_next %}
+                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&meal={{ selected_meal }}&session={{ selected_session.pk }}&start_date={{ start_date }}&end_date={{ end_date }}">&raquo;</a></li>
+                {% endif %}
+              </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

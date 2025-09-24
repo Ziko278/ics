@@ -1,0 +1,163 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="row">
+    <!-- Profile Sidebar -->
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-body profile-card pt-4 d-flex flex-column align-items-center">
+                <img {% if staff.image %} src="{{ staff.image.url }}" {% else %} src="https://placehold.co/120x120/EFEFEF/AAAAAA?text={{ staff.first_name|first|upper }}" {% endif %} alt="Profile" class="rounded-circle" style="width: 120px; height: 120px; object-fit: cover;">
+                <h2 class="mt-3">{{ staff.first_name|title }} {{ staff.last_name|title }}</h2>
+                <h3>{{ staff.group.name|title|default:"No Role Assigned" }}</h3>
+                <div class="mt-2">
+                    {% if staff.status == 'active' %}
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Active</span>
+                    {% else %}
+                        <span class="badge bg-danger"><i class="bi bi-exclamation-octagon me-1"></i> Inactive</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Panel -->
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-body pt-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Staff Details</h5>
+                    <div>
+                        <a href="{% url 'staff_index' %}" class="btn btn-secondary btn-sm" title="Back to List"><i class="bi bi-arrow-left"></i></a>
+                        <a href="{% url 'staff_edit' staff.pk %}" class="btn btn-warning btn-sm" title="Edit Staff"><i class="bi bi-pencil-square"></i></a>
+                        <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmDeleteModal" title="Delete Staff"><i class="bi bi-trash"></i></button>
+                    </div>
+                </div>
+
+                <!-- Personal & Contact Info -->
+                <h6 class="card-subtitle mt-4 mb-2 text-muted">Personal & Contact Information</h6>
+                <div class="row border-top pt-3">
+                    <div class="col-lg-3 col-md-4 label fw-bold">Full Name</div>
+                    <div class="col-lg-9 col-md-8">{{ staff.first_name|title }} {{ staff.last_name|title }}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-lg-3 col-md-4 label fw-bold">Staff ID</div>
+                    <div class="col-lg-9 col-md-8">{{ staff.staff_id }}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-lg-3 col-md-4 label fw-bold">Email</div>
+                    <div class="col-lg-9 col-md-8">{{ staff.email|lower }}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-lg-3 col-md-4 label fw-bold">Mobile</div>
+                    <div class="col-lg-9 col-md-8">{{ staff.mobile|default:"Not Provided" }}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-lg-3 col-md-4 label fw-bold">Gender</div>
+                    <div class="col-lg-9 col-md-8">{{ staff.get_gender_display }}</div>
+                </div>
+
+                <!-- Account & Security -->
+                <h6 class="card-subtitle mt-4 mb-2 text-muted">Account & Security</h6>
+                <div class="row border-top pt-3">
+                    <div class="col-lg-3 col-md-4 label fw-bold">Permission Group</div>
+                    <div class="col-lg-9 col-md-8">{{ staff.group.name|title|default:"Not Assigned" }}</div>
+                </div>
+                <div class="row mt-2 align-items-center">
+                    <div class="col-lg-3 col-md-4 label fw-bold">User Account</div>
+                    <div class="col-lg-9 col-md-8">
+                        {% if staff.staff_profile %}
+                            <span class="badge bg-primary">Username: {{ staff.staff_profile.user.username }}</span>
+                            <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#confirmUpdateLoginModal">Reset Password</button>
+                        {% else %}
+                             <span class="badge bg-secondary">No Login Account</span>
+                             <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#confirmGenerateLoginModal">Generate Login</button>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mt-2 align-items-center">
+                    <div class="col-lg-3 col-md-4 label fw-bold">Account Status</div>
+                    <div class="col-lg-9 col-md-8">
+                        {% if staff.status == 'active' %}
+                            <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmDisableModal">Disable Account</button>
+                        {% else %}
+                            <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#confirmEnableModal">Enable Account</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- All Confirmation Modals -->
+<!-- Disable Modal -->
+<div class="modal fade" id="confirmDisableModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Confirm Disable</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">Are you sure you want to disable this staff member's account? They will not be able to log in.</div>
+    <div class="modal-footer">
+      <form method="post" action="{% url 'staff_disable' staff.pk %}">{% csrf_token %}
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger">Yes, Disable</button>
+      </form>
+    </div>
+  </div></div>
+</div>
+
+<!-- Enable Modal -->
+<div class="modal fade" id="confirmEnableModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Confirm Enable</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">Are you sure you want to enable this staff member's account?</div>
+    <div class="modal-footer">
+      <form method="post" action="{% url 'staff_enable' staff.pk %}">{% csrf_token %}
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-success">Yes, Enable</button>
+      </form>
+    </div>
+  </div></div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Confirm Deletion</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">This will permanently delete the staff record and their associated user account. This action cannot be undone. Are you sure?</div>
+    <div class="modal-footer">
+      <form method="post" action="{% url 'staff_delete' staff.pk %}">{% csrf_token %}
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger">Yes, Delete Permanently</button>
+      </form>
+    </div>
+  </div></div>
+</div>
+
+<!-- Generate Login Modal -->
+<div class="modal fade" id="confirmGenerateLoginModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Generate Login Credentials</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">This will create a new user account for this staff member and email them their login details. Proceed?</div>
+    <div class="modal-footer">
+      <form method="post" action="{% url 'staff_generate_login' staff.pk %}">{% csrf_token %}
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Generate and Email</button>
+      </form>
+    </div>
+  </div></div>
+</div>
+
+<!-- Update Login (Reset Password) Modal -->
+<div class="modal fade" id="confirmUpdateLoginModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Reset Password</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">This will generate a new random password for this staff member and email it to them. Are you sure?</div>
+    <div class="modal-footer">
+      <form method="post" action="{% url 'staff_update_login' staff.pk %}">{% csrf_token %}
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-info">Reset and Email</button>
+      </form>
+    </div>
+  </div></div>
+</div>
+
+{% endblock %}

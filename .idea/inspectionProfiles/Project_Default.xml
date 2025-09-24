@@ -1,0 +1,69 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="HtmlUnknownAttribute" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="myValues">
+        <value>
+          <list size="1">
+            <item index="0" class="java.lang.String" itemvalue="lga" />
+          </list>
+        </value>
+      </option>
+      <option name="myCustomValuesEnabled" value="true" />
+    </inspection_tool>
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="6">
+            <item index="0" class="java.lang.String" itemvalue="Django" />
+            <item index="1" class="java.lang.String" itemvalue="asgiref" />
+            <item index="2" class="java.lang.String" itemvalue="PyMySQL" />
+            <item index="3" class="java.lang.String" itemvalue="pytz" />
+            <item index="4" class="java.lang.String" itemvalue="xlsxwriter" />
+            <item index="5" class="java.lang.String" itemvalue="sqlparse" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredIdentifiers">
+        <list>
+          <option value="admin_dashboard.models.SchoolAcademicInfoModel.objects" />
+          <option value="human_resource.models.StaffProfileModel.objects" />
+          <option value="patient.models.PatientModel.objects" />
+          <option value="consultation.models.ConsultationModel.*" />
+          <option value="consultation.models.ConsultationPrescriptionModel.*" />
+          <option value="consultation.models.ConsultationTestModel.*" />
+          <option value="pharmacy.models.DrugStrengthModel.*" />
+          <option value="laboratory.models.ConductTestResultModel.*" />
+          <option value="django.db.models.fields.related.ForeignKey.insurance_provider" />
+          <option value="django.db.models.fields.CharField.upper" />
+          <option value="django.db.models.fields.related.ForeignKey.store_name" />
+          <option value="admin_site.models.SiteInfoModel.objects" />
+          <option value="admin_site.models.SiteSettingModel.*" />
+          <option value="vendor.models.VendorProfileModel.objects" />
+          <option value="vendor.models.VendorModel.*" />
+          <option value="admin_site.models.ItemModel.*" />
+          <option value="admin_site.models.ServiceModel.*" />
+          <option value="admin_site.models.ItemCategoryModel.*" />
+          <option value="patient.models.PatientSettingModel.objects" />
+          <option value="patient.models.PatientProfileModel.objects" />
+          <option value="patient.models.PatientIDGeneratorModel.objects" />
+          <option value="patient.models.PatientInsuranceModel.objects" />
+          <option value="patient.models.PatientModel.id" />
+          <option value="patient.models.HMOModel.objects" />
+          <option value="admin_site.forms.StaffProfileModel.objects" />
+          <option value="admin_site.forms.StaffModel.staff_profile" />
+          <option value="django.db.models.fields.related.ForeignKey.user_set" />
+          <option value="admin_site.models.StaffProfileModel.objects" />
+          <option value="admin_site.models.StaffModel.objects" />
+          <option value="admin_site.models.OrderChargeModel.objects" />
+          <option value="dispatch_site.models.DispatchVerificationModel.objects" />
+          <option value="vendor_site.models.VendorAccountModel.objects" />
+          <option value="vendor_site.models.VendorFundingModel.objects" />
+          <option value="vendor_site.models.VendorModel.objects" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>

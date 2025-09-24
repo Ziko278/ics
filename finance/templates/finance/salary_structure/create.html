@@ -1,0 +1,96 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-12">
+    <form method="POST">
+        {% csrf_token %}
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title">Create New Salary Structure</h5>
+                    <a href="{% url 'finance_salary_structure_list' %}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back to List</a>
+                </div>
+
+                <div class="row">
+                    <!-- Left Column: Form Inputs -->
+                    <div class="col-md-8">
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Staff Member <span class="text-danger">*</span></label>{{ form.staff }}</div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Effective From <span class="text-danger">*</span></label>{{ form.effective_from }}</div>
+
+                            <h6 class="mt-3 text-muted">Earnings</h6><hr>
+                            <div class="col-md-6 mb-3"><label class="form-label">Basic Salary (₦) <span class="text-danger">*</span></label>{{ form.basic_salary }}</div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Housing Allowance (₦)</label>{{ form.housing_allowance }}</div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Transport Allowance (₦)</label>{{ form.transport_allowance }}</div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Medical Allowance (₦)</label>{{ form.medical_allowance }}</div>
+                            <div class="col-md-12 mb-3"><label class="form-label">Other Allowances (₦)</label>{{ form.other_allowances }}</div>
+
+                            <h6 class="mt-3 text-muted">Deduction Rates</h6><hr>
+                            <div class="col-md-6 mb-3"><label class="form-label">Tax Rate (%)</label>{{ form.tax_rate }}</div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Pension Rate (%)</label>{{ form.pension_rate }}</div>
+
+                            <div class="col-12 mt-3"><div class="form-check form-switch">{{ form.is_active }}<label class="form-check-label">Set as Active</label></div></div>
+                        </div>
+                    </div>
+                    <!-- Right Column: Summary & Actions -->
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h5 class="card-title">Live Summary</h5>
+                                <div class="d-flex justify-content-between mb-2"><span>Gross Salary:</span><strong id="summary-gross">₦0.00</strong></div>
+                                <div class="d-flex justify-content-between"><span>Tax (PAYE):</span><strong id="summary-tax" class="text-danger">₦0.00</strong></div>
+                                <div class="d-flex justify-content-between"><span>Pension:</span><strong id="summary-pension" class="text-danger">₦0.00</strong></div>
+                                <hr>
+                                <div class="d-flex justify-content-between h4"><strong>Net Salary:</strong><strong id="summary-net" class="text-success">₦0.00</strong></div>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle"></i> Save Salary Structure</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const salaryInputs = ['id_basic_salary', 'id_housing_allowance', 'id_transport_allowance', 'id_medical_allowance', 'id_other_allowances', 'id_tax_rate', 'id_pension_rate'];
+    const grossEl = document.getElementById('summary-gross');
+    const taxEl = document.getElementById('summary-tax');
+    const pensionEl = document.getElementById('summary-pension');
+    const netEl = document.getElementById('summary-net');
+
+    function formatCurrency(num) { return '₦' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    function calculateSalary() {
+        const basic = parseFloat(document.getElementById('id_basic_salary').value) || 0;
+        const housing = parseFloat(document.getElementById('id_housing_allowance').value) || 0;
+        const transport = parseFloat(document.getElementById('id_transport_allowance').value) || 0;
+        const medical = parseFloat(document.getElementById('id_medical_allowance').value) || 0;
+        const others = parseFloat(document.getElementById('id_other_allowances').value) || 0;
+        const taxRate = parseFloat(document.getElementById('id_tax_rate').value) || 0;
+        const pensionRate = parseFloat(document.getElementById('id_pension_rate').value) || 0;
+
+        const gross = basic + housing + transport + medical + others;
+        const taxAmount = gross * (taxRate / 100);
+        const pensionAmount = basic * (pensionRate / 100);
+        const net = gross - taxAmount - pensionAmount;
+
+        grossEl.textContent = formatCurrency(gross);
+        taxEl.textContent = formatCurrency(taxAmount);
+        pensionEl.textContent = formatCurrency(pensionAmount);
+        netEl.textContent = formatCurrency(net);
+    }
+
+    salaryInputs.forEach(id => {
+        const inputEl = document.getElementById(id);
+        if (inputEl) { inputEl.addEventListener('input', calculateSalary); }
+    });
+    calculateSalary();
+});
+</script>
+
+{% endblock %}

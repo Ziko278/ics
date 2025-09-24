@@ -1,0 +1,89 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Edit Staff: {{ staff.first_name }} {{ staff.last_name }}</h5>
+                <a href="{% url 'staff_detail' staff.pk %}" class="btn btn-secondary btn-sm" title="Back to Detail">
+                    <i class="bi bi-arrow-left"></i> Back to Detail Page
+                </a>
+            </div>
+
+            <p class="card-description mt-2">
+                Update the details for this staff member below.
+            </p>
+
+            {% include 'admin_site/partials/messages.html' %}
+
+            <form method="POST" enctype="multipart/form-data" class="mt-4">
+                {% csrf_token %}
+
+                <!-- Personal Details Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Personal Details</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.first_name }}
+                            <label for="id_first_name">First Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.last_name }}
+                            <label for="id_last_name">Last Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_gender" class="form-label">Gender<span class="text-danger">*</span></label>
+                        {{ form.gender }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_image" class="form-label">Change Profile Image</label>
+                        {{ form.image }}
+                        <div class="form-text">Optional. Upload a new image to replace the current one.</div>
+                        {% if staff.image %}
+                            <div class="mt-2">
+                                <span class="form-text">Current Image:</span><br>
+                                <img src="{{ staff.image.url }}" alt="Current Profile Image" class="img-thumbnail" style="max-height: 80px;">
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Contact & Account Details Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Contact & Account Details</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.email }}
+                            <label for="id_email">Email Address<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                     <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.mobile }}
+                            <label for="id_mobile">Mobile Number<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_group" class="form-label">Permission Group / Role<span class="text-danger">*</span></label>
+                        {{ form.group }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_status" class="form-label">Account Status<span class="text-danger">*</span></label>
+                        {{ form.status }}
+                    </div>
+                </div>
+
+                <div class="text-start mt-3">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="{% url 'staff_detail' staff.pk %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

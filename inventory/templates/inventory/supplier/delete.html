@@ -1,0 +1,25 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Supplier</h4>
+            
+            <p>You are about to permanently delete the following supplier:</p>
+            <h5 class="text-center my-3"><em>"{{ supplier.name|title }}"</em></h5>
+
+            <div class="alert alert-danger">
+                <strong>Warning:</strong> Deleting a supplier is a permanent action and cannot be undone. All associated purchase orders and payment records will remain in the system but will no longer be linked to this supplier.
+            </div>
+            
+            <p>Are you sure you want to proceed?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete Supplier</button>
+                <a class="btn btn-secondary" href="{% url 'inventory_supplier_list' %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,158 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="card-title mb-0">Edit Expense Record</h4>
+                <div>
+                    <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#expenseHelperModal"><b>Helper</b></button>
+                    <a href="{% url 'expense_index' %}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to List
+                    </a>
+                </div>
+            </div>
+
+            {% include 'admin_site/partials/error.html' %}
+
+            <form method="POST" action="" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="row">
+                    <!-- Left column: form fields -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header"><h5 class="mb-0">Expense Details</h5></div>
+                            <div class="card-body">
+                                <div class="row">
+
+                                    <!-- Category -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.category.id_for_label }}" class="form-label">Category <span class="text-danger">*</span></label>
+                                        {{ form.category }}
+                                        {% if form.category.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.category.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Amount -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.amount.id_for_label }}" class="form-label">Amount (₦) <span class="text-danger">*</span></label>
+                                        {{ form.amount }}
+                                        {% if form.amount.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.amount.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Expense Date -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.expense_date.id_for_label }}" class="form-label">Date <span class="text-danger">*</span></label>
+                                        {{ form.expense_date }}
+                                        {% if form.expense_date.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.expense_date.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Payment Method -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.payment_method.id_for_label }}" class="form-label">Payment Method</label>
+                                        {{ form.payment_method }}
+                                    </div>
+
+                                    <!-- Reference -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.reference.id_for_label }}" class="form-label">Reference</label>
+                                        {{ form.reference }}
+                                    </div>
+
+                                    <!-- Receipt (existing + upload) -->
+                                    <div class="col-md-12 mb-3">
+                                        <label class="form-label">Receipt (optional)</label>
+                                        {% if expense.receipt %}
+                                            <div class="mb-2">
+                                                <a href="{{ expense.receipt.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-file-earmark-text"></i> View Current Receipt
+                                                </a>
+                                                <label class="ms-2 form-check-label">
+                                                    <input type="checkbox" name="remove_receipt" value="1"> Remove current receipt
+                                                </label>
+                                            </div>
+                                        {% endif %}
+                                        {{ form.receipt }}
+                                        <small class="form-text text-muted">Max file size: 5 MB. Allowed: PDF, JPG, PNG.</small>
+                                        {% if form.receipt.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.receipt.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Description / Notes -->
+                                    <div class="col-md-12">
+                                        <label for="{{ form.notes.id_for_label }}" class="form-label">Notes / Description</label>
+                                        {{ form.notes }}
+                                        {% if form.notes.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.notes.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right column: actions -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header"><h5 class="mb-0">Actions</h5></div>
+                            <div class="card-body">
+                                <p class="text-muted">Update fields as needed and click Save.</p>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Recorded by</label>
+                                    <input type="text" class="form-control" value="{{ expense.created_by.get_full_name|default:expense.created_by.username }}" disabled>
+                                </div>
+
+                                <div class="d-grid gap-2">
+                                    <button type="submit" name="save" class="btn btn-primary">
+                                        <i class="bi bi-check-circle"></i> Save Changes
+                                    </button>
+                                    <a href="{% url 'expense_detail' expense.pk %}" class="btn btn-outline-secondary">Cancel</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-body">
+                                <h6 class="mb-2">Record Info</h6>
+                                <p class="mb-1"><strong>Recorded At:</strong> {{ expense.created_at|date:"d M Y, P" }}</p>
+                                <p class="mb-0"><strong>Record ID:</strong> {{ expense.pk }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<!-- Expense Helper Modal (same as create) -->
+<div class="modal fade" id="expenseHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Expense Record Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>This form edits a recorded expense. Use reference for transaction numbers and receipt for supporting docs.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

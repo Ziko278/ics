@@ -1,0 +1,39 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="pagetitle"><h1>Payroll Dashboard</h1></div>
+
+<section class="section dashboard">
+    <div class="row">
+        <div class="col-md-6"><div class="card info-card revenue-card"><div class="card-body"><h5 class="card-title">Total Payroll <span>| This Month</span></h5><div class="d-flex align-items-center"><div class="card-icon rounded-circle d-flex align-items-center justify-content-center"><i class="bi bi-currency-dollar"></i></div><div class="ps-3"><h6>₦{{ total_payroll_current|floatformat:2|intcomma }}</h6></div></div></div></div></div>
+        <div class="col-md-6"><div class="card info-card sales-card"><div class="card-body"><h5 class="card-title">Staff Paid <span>| This Month</span></h5><div class="d-flex align-items-center"><div class="card-icon rounded-circle d-flex align-items-center justify-content-center"><i class="bi bi-people"></i></div><div class="ps-3"><h6>{{ staff_paid_count }}</h6></div></div></div></div></div>
+        <div class="col-md-6"><div class="card info-card customers-card"><div class="card-body"><h5 class="card-title">Average Net Salary</h5><div class="d-flex align-items-center"><div class="card-icon rounded-circle d-flex align-items-center justify-content-center"><i class="bi bi-wallet2"></i></div><div class="ps-3"><h6>₦{{ average_net_salary|floatformat:2|intcomma }}</h6></div></div></div></div></div>
+        <div class="col-md-6"><div class="card info-card"><div class="card-body"><h5 class="card-title">Change <span>| vs Last Month</span></h5><div class="d-flex align-items-center"><div class="card-icon rounded-circle d-flex align-items-center justify-content-center"><i class="bi bi-graph-up-arrow"></i></div><div class="ps-3">{% if percent_change > 0 %}<span class="text-danger small pt-1 fw-bold">{{ percent_change|floatformat:2 }}%</span> <span class="text-muted small pt-2 ps-1">increase</span>{% elif percent_change < 0 %}<span class="text-success small pt-1 fw-bold">{{ percent_change|floatformat:2 }}%</span> <span class="text-muted small pt-2 ps-1">decrease</span>{% else %}<span class="text-muted small pt-2 ps-1">No change</span>{% endif %}</div></div></div></div></div>
+    </div>
+    <div class="row">
+        <div class="col-lg-12"><div class="card"><div class="card-body"><h5 class="card-title">Payroll Cost by Department <span>| Current Month</span></h5><div id="deptPayrollChart" style="min-height: 400px;"></div></div></div></div>
+    </div>
+    <div class="row">
+        <div class="col-lg-7"><div class="card"><div class="card-body"><h5 class="card-title">Salary Trend <span>| Last 12 Months</span></h5><div id="salaryTrendChart" style="min-height: 400px;"></div></div></div></div>
+        <div class="col-lg-5"><div class="card"><div class="card-body"><h5 class="card-title">Average Salary by Position</h5><div id="positionSalaryChart" style="min-height: 400px;"></div></div></div></div>
+    </div>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const deptData = {{ dept_payroll_data|safe }};
+    if (deptData.length > 0) {
+        echarts.init(document.querySelector("#deptPayrollChart")).setOption({ tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, xAxis: { type: 'category', data: deptData.map(d => d.name) }, yAxis: { type: 'value', axisLabel: { formatter: '₦{value}' } }, series: [{ name: 'Total Payroll', type: 'bar', data: deptData.map(d => d.value), itemStyle: { color: '#4154f1' } }] });
+    }
+    const trendData = {{ salary_trend_data|safe }};
+    if (trendData.length > 0) {
+        new ApexCharts(document.querySelector("#salaryTrendChart"), { series: [{ name: 'Total Net Salary', data: trendData.map(d => d.total) }], chart: { type: 'area', height: 400, toolbar: { show: false } }, markers: { size: 4 }, colors: ['#2eca6a'], fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0.4, stops: [0, 90, 100] }}, dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 2 }, xaxis: { type: 'category', categories: trendData.map(d => d.month) }, tooltip: { y: { formatter: (val) => `₦${val.toLocaleString()}` } } }).render();
+    }
+    const positionData = {{ position_payroll_data|safe }};
+    if (positionData.length > 0) {
+        echarts.init(document.querySelector("#positionSalaryChart")).setOption({ tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true }, xAxis: { type: 'value', axisLabel: { formatter: '₦{value}' } }, yAxis: { type: 'category', data: positionData.map(d => d.name).reverse() }, series: [{ name: 'Average Net Salary', type: 'bar', data: positionData.map(d => d.value).reverse(), itemStyle: { color: '#ff771d' } }] });
+    }
+});
+</script>
+{% endblock %}

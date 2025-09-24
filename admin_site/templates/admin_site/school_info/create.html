@@ -1,0 +1,86 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">
+                {% if mode == 'update' %}
+                    Update School Information
+                {% else %}
+                    Create School Information
+                {% endif %}
+            </h5>
+
+            <!-- Include partial for displaying flashed error/success messages -->
+            {% include 'admin_site/partials/messages.html' %}
+
+            <!-- The form's action URL is dynamically set by the view -->
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.name }}
+                            <label for="id_name">School's Full Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.short_name }}
+                            <label for="id_short_name">Short Name / Abbreviation<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.mobile }}
+                            <label for="id_mobile">Primary Phone Number<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.email }}
+                            <label for="id_email">Official Email Address<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating">
+                            {{ form.address }}
+                            <label for="id_address">School Address<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="id_logo" class="form-label">School Logo</label>
+                        {{ form.logo }}
+                        <div class="form-text">Upload a new logo to replace the current one.</div>
+                    </div>
+
+                    <!-- Display current logo if it exists -->
+                    {% if school_info.logo %}
+                        <div class="col-md-6">
+                            <label class="form-label">Current Logo</label><br>
+                            <img src="{{ school_info.logo.url }}" alt="Current School Logo" class="img-thumbnail" style="max-height: 100px;">
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="text-start mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        {% if mode == 'update' %}
+                            Save Changes
+                        {% else %}
+                            Save Information
+                        {% endif %}
+                    </button>
+                    {% if mode == 'update' %}
+                        <a href="{% url 'admin_site:school_info_detail' %}" class="btn btn-secondary">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

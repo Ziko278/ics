@@ -1,0 +1,194 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+<style>
+    #student-card { display: none; }
+    #student-image { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #eee; }
+    .status-eligible { color: var(--bs-success); }
+    .status-ineligible { color: var(--bs-danger); }
+</style>
+
+<div class="col-lg-10 offset-lg-1">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Live Meal Collection</h5>
+            <p class="card-description">Search for a student by name, registration number, or by scanning their ID card barcode.</p>
+            <div class="input-group mb-3">
+                <input type="text" id="student-search-input" class="form-control form-control-lg" placeholder="Search or Scan..." autofocus>
+                <button class="btn btn-primary" type="button" id="search-btn"><i class="bi bi-search"></i> Search</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Details Card -->
+    <div class="card" id="student-card">
+        <div class="card-body">
+            <div class="text-center" id="loading-spinner" style="display: none;">
+                <div class="spinner-border text-primary my-5" role="status"><span class="visually-hidden">Loading...</span></div>
+            </div>
+
+            <div class="row align-items-center" id="student-details" style="display: none;">
+                <div class="col-md-3 text-center">
+                    <img id="student-image" src="{% static 'admin_site/img/default-avatar.png' %}" class="my-3">
+                </div>
+                <div class="col-md-9">
+                    <h3 id="student-name"></h3>
+                    <p id="student-class" class="text-muted"></p>
+                    <h4 id="eligibility-status"></h4>
+                    <p>Meals taken today: <strong id="meals-today"></strong></p>
+                    <div id="meal-buttons" class="d-flex flex-wrap gap-2">
+                        <!-- Meal buttons will be inserted here by JS -->
+                    </div>
+                </div>
+            </div>
+             <div class="alert alert-danger mt-3" id="error-message" style="display: none;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Limit Reached Modal -->
+<div class="modal fade" id="infoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="infoModalTitle"><i class="bi bi-exclamation-triangle-fill"></i> Notification</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="infoModalMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('student-search-input');
+    const searchBtn = document.getElementById('search-btn');
+    const studentCard = document.getElementById('student-card');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const studentDetails = document.getElementById('student-details');
+    const errorMessage = document.getElementById('error-message');
+    
+    const studentImage = document.getElementById('student-image');
+    const studentName = document.getElementById('student-name');
+    const studentClass = document.getElementById('student-class');
+    const eligibilityStatus = document.getElementById('eligibility-status');
+    const mealsToday = document.getElementById('meals-today');
+    const mealButtons = document.getElementById('meal-buttons');
+    let currentStudentId = null;
+
+    const infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
+    const infoModalTitle = document.getElementById('infoModalTitle');
+    const infoModalMessage = document.getElementById('infoModalMessage');
+
+    function showInfoModal(title, message) {
+        infoModalTitle.textContent = title;
+        infoModalMessage.textContent = message;
+        infoModal.show();
+    }
+
+    function searchStudent() {
+        const query = searchInput.value.trim();
+        if (!query) return;
+
+        studentCard.style.display = 'block';
+        loadingSpinner.style.display = 'block';
+        studentDetails.style.display = 'none';
+        errorMessage.style.display = 'none';
+        searchInput.disabled = true;
+        searchBtn.disabled = true;
+
+        fetch(`{% url 'cafeteria_ajax_search_student' %}?q=${query}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                displayStudent(data);
+            })
+            .catch(err => {
+                displayError(err.message);
+            })
+            .finally(() => {
+                searchInput.disabled = false;
+                searchBtn.disabled = false;
+                searchInput.focus();
+            });
+    }
+
+    function displayStudent(data) {
+        currentStudentId = data.student.id;
+        studentName.textContent = data.student.name;
+        studentClass.textContent = data.student.class;
+        studentImage.src = data.student.image_url || "{% static 'admin_site/img/default-avatar.png' %}";
+        eligibilityStatus.textContent = data.eligibility_message;
+        eligibilityStatus.className = data.is_eligible ? 'status-eligible' : 'status-ineligible';
+        mealsToday.textContent = data.meals_today_count;
+        
+        mealButtons.innerHTML = '';
+        if (data.is_eligible) {
+            data.available_meals.forEach(meal => {
+                const button = document.createElement('button');
+                button.className = 'btn btn-success';
+                button.textContent = `Record ${meal.name}`;
+                button.dataset.mealId = meal.id;
+                button.addEventListener('click', recordMeal);
+                mealButtons.appendChild(button);
+            });
+        } else {
+             showInfoModal('Student Ineligible', data.eligibility_message);
+        }
+
+        loadingSpinner.style.display = 'none';
+        studentDetails.style.display = 'flex';
+        searchInput.value = '';
+    }
+
+    function displayError(message) {
+        errorMessage.textContent = message;
+        errorMessage.style.display = 'block';
+        loadingSpinner.style.display = 'none';
+        studentDetails.style.display = 'none';
+    }
+
+    function recordMeal(event) {
+        const mealId = event.target.dataset.mealId;
+        const csrfToken = '{{ csrf_token }}';
+        
+        const formData = new FormData();
+        formData.append('student_id', currentStudentId);
+        formData.append('meal_id', mealId);
+
+        fetch('{% url "cafeteria_ajax_record_meal" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: new URLSearchParams(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showInfoModal('Success', data.message);
+                studentCard.style.display = 'none'; // Hide card to be ready for next scan
+            } else {
+                showInfoModal('Error', data.message);
+            }
+        })
+        .catch(err => {
+             showInfoModal('Error', 'A network error occurred. Please try again.');
+        });
+    }
+
+    searchBtn.addEventListener('click', searchStudent);
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            searchStudent();
+        }
+    });
+});
+</script>
+{% endblock %}
+

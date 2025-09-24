@@ -1,0 +1,171 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="pagetitle">
+  <h1>Manage Student Invoice</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'finance_invoice_list' %}">Student Invoices</a></li>
+      <li class="breadcrumb-item active">{{ invoice.invoice_number }}</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="row">
+    <!-- Left Column: Invoice Summary & Add Payment Form -->
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Invoice Summary</h5>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>Student:</strong> <a href="#">{{ invoice.student.student_profile.user.get_full_name|title }}</a>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>Class:</strong> <span>{{ invoice.student.student_class.name }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>Session/Term:</strong> <span>{{ invoice.session }} / {{ invoice.term.name|title }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>Invoice Total:</strong> <span>₦{{ invoice.total_amount|floatformat:2|intcomma }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between text-success">
+                        <strong>Amount Paid:</strong> <span>₦{{ invoice.amount_paid|floatformat:2|intcomma }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between text-danger">
+                        <strong>Balance Due:</strong> <span class="fw-bold">₦{{ invoice.balance|floatformat:2|intcomma }}</span>
+                    </li>
+                     <li class="list-group-item d-flex justify-content-between">
+                        <strong>Status:</strong>
+                        <span class="badge
+                            {% if invoice.status == 'paid' %}bg-success
+                            {% elif invoice.status == 'partially_paid' %}bg-warning text-dark
+                            {% else %}bg-danger{% endif %}">
+                            {{ invoice.get_status_display }}
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        {% if invoice.balance > 0 %}
+        <div class="card">
+             <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-wallet2"></i> Record New Payment</h5>
+                <form method="POST" class="row g-3">
+                    {% csrf_token %}
+                    <div class="col-12">
+                        <label for="{{ form.amount.id_for_label }}" class="form-label">Amount (₦)</label>
+                        {{ form.amount }}
+                        <small class="form-text text-muted">{{ form.amount.help_text }}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.payment_mode.id_for_label }}" class="form-label">Payment Mode</label>
+                        {{ form.payment_mode }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.date.id_for_label }}" class="form-label">Payment Date</label>
+                        {{ form.date }}
+                    </div>
+                     <div class="col-12">
+                        <label for="{{ form.reference.id_for_label }}" class="form-label">Reference</label>
+                        {{ form.reference }}
+                    </div>
+                     <div class="col-12">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">Notes</label>
+                        {{ form.notes }}
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary w-100">Save Payment</button>
+                    </div>
+                </form>
+             </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: Invoice Items and Payment History -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-body">
+                 <ul class="nav nav-tabs nav-tabs-bordered">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#invoice-items">Invoice Items</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payment-history">Payment History</button></li>
+                </ul>
+                <div class="tab-content pt-2">
+                    <!-- Invoice Items Tab -->
+                    <div class="tab-pane fade show active" id="invoice-items">
+                        <h5 class="card-title">Billed Items for this Invoice</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th class="text-end">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in invoice.items.all %}
+                                    <tr>
+                                        <td>{{ item.description|title }}</td>
+                                        <td class="text-end">₦{{ item.amount|floatformat:2|intcomma }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="table-light fw-bold">
+                                        <td class="text-end">Total:</td>
+                                        <td class="text-end">₦{{ invoice.total_amount|floatformat:2|intcomma }}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Payment History Tab -->
+                    <div class="tab-pane fade" id="payment-history">
+                         <h5 class="card-title">Payment History for this Invoice</h5>
+                         <div class="table-responsive">
+                            <table class="table table-striped table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th class="text-end">Amount</th>
+                                        <th>Mode</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for payment in payments %}
+                                    <tr>
+                                        <td>{{ payment.date|date:"d M, Y" }}</td>
+                                        <td class="text-end">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                                        <td>{{ payment.get_payment_mode_display }}</td>
+                                        <td>
+                                            {% if payment.status == 'confirmed' %}
+                                                <span class="badge bg-success">{{ payment.get_status_display }}</span>
+                                            {% else %}
+                                                <span class="badge bg-warning text-dark">{{ payment.get_status_display }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <!-- Add buttons for revert/receipt later -->
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="5" class="text-center">No payments recorded for this invoice yet.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,109 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-12">
+    <div class="card overflow-auto">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title">Purchase Orders</h5>
+                <a href="{% url 'inventory_po_create' %}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-plus-circle"></i> New Purchase Order
+                </a>
+            </div>
+
+            <!-- Filter and Search Form -->
+            <form method="GET" action="{% url 'inventory_po_list' %}">
+                <div class="row g-3 align-items-center mb-3">
+                    <div class="col-md-3">
+                        <label for="session" class="form-label">Session</label>
+                        <select name="session" id="session" class="form-select form-select-sm">
+                            <option value="">All Sessions</option>
+                            {% for session in sessions %}
+                                <option value="{{ session.pk }}" {% if selected_session.pk == session.pk %}selected{% endif %}>
+                                    {{ session }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="term" class="form-label">Term</label>
+                        <select name="term" id="term" class="form-select form-select-sm">
+                            <option value="">All Terms</option>
+                             {% for term in terms %}
+                                <option value="{{ term.pk }}" {% if selected_term.pk == term.pk %}selected{% endif %}>
+                                    {{ term.name|title }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                         <label for="q" class="form-label">Search</label>
+                        <input type="text" class="form-control form-control-sm" name="q" value="{{ search_query }}" placeholder="PO number or supplier name...">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-sm btn-secondary w-100" type="submit">Filter</button>
+                    </div>
+                </div>
+            </form>
+
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th scope="col">PO #</th>
+                    <th scope="col">Date</th>
+                    <th scope="col">Supplier</th>
+                    <th scope="col">Session/Term</th>
+                    <th scope="col">Total Amount</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for po in purchase_orders %}
+                <tr>
+                    <th scope="row"><a href="{{ po.get_absolute_url }}">{{ po.order_number }}</a></th>
+                    <td>{{ po.order_date|date:"d M, Y" }}</td>
+                    <td>{{ po.supplier.name|title }}</td>
+                    <td>{{ po.session }} / {{ po.term.name|title }}</td>
+                    <td>₦{{ po.total_amount|floatformat:2|intcomma }}</td>
+                    <td><span class="badge bg-primary">{{ po.get_status_display }}</span></td>
+                    <td class="text-center">
+                        <a title="View Details" href="{{ po.get_absolute_url }}" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
+                         {% if po.status == 'submitted' or po.status == 'partially_received' %}
+        <a title="Receive Items" href="{% url 'inventory_stock_in_from_po_create' po.pk %}" class="btn btn-sm btn-success">
+            <i class="bi bi-box-arrow-in-down"></i>
+        </a>
+    {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="alert alert-secondary text-center" role="alert">
+                           No purchase orders found matching your criteria.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Pagination Controls -->
+            {% if is_paginated %}
+            <nav aria-label="Page navigation">
+              <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                  <li class="page-item"><a class="page-link" href="?page=1&session={{ selected_session.pk }}&term={{ selected_term.pk }}&q={{ search_query }}">&laquo;</a></li>
+                {% endif %}
+                <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+                {% if page_obj.has_next %}
+                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&session={{ selected_session.pk }}&term={{ selected_term.pk }}&q={{ search_query }}">&raquo;</a></li>
+                {% endif %}
+              </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

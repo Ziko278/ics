@@ -1,0 +1,340 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+{% block 'main' %}
+<form action="" method="POST">
+    {% csrf_token %}
+    <div class="col-12">
+        <div class="card recent-sales overflow-auto">
+
+            <div class="card-body">
+                <h5 class="card-title"></h5>
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title text-center">Assign Permissions to {{ group.name|title }} Group</h5>
+                        <div class="accordion accordion-flush" id="accordionFlushExample">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="flush-admission-permission">
+                                    <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse1" aria-expanded="false" aria-controls="flush-collapseOne">
+                                        Student Registration Permissions
+                                    </button>
+                                </h2>
+                                <div id="flush-collapse1" class="accordion-collapse collapse" aria-labelledby="admission-permission" data-bs-parent="#accordionFlushExample">
+                                    <div class="accordion-body">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Student Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Register Student
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_studentmodel"
+                                                            {% if "add_studentmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Student Information
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_studentmodel"
+                                                            {% if "view_studentmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Update Student Information
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_studentmodel"
+                                                            {% if "change_studentmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Delete Student
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="delete_studentmodel"
+                                                            {% if "delete_studentmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="flush-academic-permission">
+                                    <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse2" aria-expanded="false" aria-controls="flush-collapseOne">
+                                        Inventory Management Permissions
+                                    </button>
+                                </h2>
+                                <div id="flush-collapse2" class="accordion-collapse collapse" aria-labelledby="academic-permission" data-bs-parent="#accordionFlushExample">
+                                    <div class="accordion-body">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Products, Product Categories, Product Suppliers</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can add Products, Categories and Suppliers
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_productmodel"
+                                                            {% if "add_productmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Products, Categories and Suppliers
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_productmodel"
+                                                            {% if "view_productmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Update Products, Categories and Suppliers
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_productmodel"
+                                                            {% if "change_productmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Delete Products, Categories and Suppliers
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="delete_productmodel"
+                                                            {% if "delete_productmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Stock Products
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_stockinmodel"
+                                                            {% if "add_stockinmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+
+                                </div>
+                            </div>
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="flush-finance-permission">
+                                    <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse3" aria-expanded="false" aria-controls="flush-collapseOne">
+                                        Student Wallet and Finance Permissions
+                                    </button>
+                                </h2>
+                                <div id="flush-collapse3" class="accordion-collapse collapse" aria-labelledby="finance-permission" data-bs-parent="#accordionFlushExample">
+                                    <div class="accordion-body">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Finance Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Fund Student Wallet
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_studentfundingmodel"
+                                                            {% if "add_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        View Student Funding
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_studentfundingmodel"
+                                                            {% if "view_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Confirm Student Funding by Parent
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_studentfundingmodel"
+                                                            {% if "change_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="flush-sale-permission">
+                                    <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse4" aria-expanded="false" aria-controls="flush-collapseOne">
+                                        Sales Permissions
+                                    </button>
+                                </h2>
+                                <div id="flush-collapse4" class="accordion-collapse collapse" aria-labelledby="sale-permission" data-bs-parent="#accordionFlushExample">
+                                    <div class="accordion-body">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Sales Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Place Orders
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_salemodel"
+                                                            {% if "add_salemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        View Orders
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_salemodel"
+                                                            {% if "view_salemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        View Statistics
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_salemodel"
+                                                            {% if "change_salemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+
+
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="flush-hr-permission">
+                                    <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse5" aria-expanded="false" aria-controls="flush-collapseOne">
+                                        Human Resource Permissions
+                                    </button>
+                                </h2>
+                                <div id="flush-collapse5" class="accordion-collapse collapse" aria-labelledby="hr-permission" data-bs-parent="#accordionFlushExample">
+                                    <div class="accordion-body">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Human Resource Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Register Staff
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_staffmodel"
+                                                            {% if "add_staffmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        View Staff Profile
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_staffmodel"
+                                                            {% if "view_staffmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Update Staff Information
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_staffmodel"
+                                                            {% if "change_staffmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Delete Staff
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="delete_staffmodel"
+                                                            {% if "delete_staffmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                   <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Assign Role and Permissions
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_group"
+                                                            {% if "add_group" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="flush-setting-permission">
+                                    <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse12" aria-expanded="false" aria-controls="flush-collapseOne">
+                                        General Settings Permission
+                                    </button>
+                                </h2>
+                                <div id="flush-collapse12" class="accordion-collapse collapse" aria-labelledby="setting-permission" data-bs-parent="#accordionFlushExample">
+                                    <div class="accordion-body">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">General Settings Permissions</h5>
+                                                <ul class="list-group">
+
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Update School Information
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_schoolinfomodel"
+                                                            {% if "change_schoolinfomodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Update School Setting
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_schoolsettingmodel"
+                                                            {% if "change_schoolsettingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Software Setup (Class Sections, Classes, Form Teachers)
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_classesmodel"
+                                                            {% if "add_classesmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <input type="hidden" name="name" value="{{group.name}}">
+                <button class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+
+</form>
+
+{% endblock %}
+

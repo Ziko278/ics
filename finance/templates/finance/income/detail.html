@@ -1,0 +1,205 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<style>
+    .details-card .label {
+        font-weight: 600;
+        color: #555;
+    }
+    .summary-card ul li {
+        padding: 0.75rem 0;
+    }
+    .amount-display {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.5rem;
+        background-color: #f8f9fa;
+        border-radius: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .amount-display .icon-circle {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(40, 167, 69, 0.1);
+    }
+    .amount-display .icon-circle i {
+        font-size: 1.5rem;
+        color: #28a745;
+    }
+    .meta-label { font-weight: 600; color: #333; }
+</style>
+
+<div class="col-lg-12">
+    <!-- Action Buttons Card -->
+    <div class="card mb-3">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="card-title mb-0">Income Record</h5>
+                <small class="text-muted">#{{ income.pk }}</small>
+            </div>
+            <div>
+                <a title="Edit Income Record" href="{% url 'income_update' income.pk %}" class="btn btn-warning">
+                    <i class="bi bi-pencil-square"></i> Edit
+                </a>
+                <a href="{% url 'income_index' %}" title="Go Back to List" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to List
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Row -->
+    <div class="row">
+        <!-- Left Column: Primary Details -->
+        <div class="col-lg-8">
+            <div class="card details-card">
+                <div class="card-body">
+                    <div class="amount-display">
+                        <div class="icon-circle">
+                            <i class="bi bi-currency-dollar"></i>
+                        </div>
+                        <div>
+                            <h2 class="mb-0 text-success">₦{{ income.amount|intcomma }}</h2>
+                            <small class="text-muted">Amount Received</small>
+                        </div>
+                    </div>
+
+                    <dl class="row">
+                        <dt class="col-sm-3 label">Category:</dt>
+                        <dd class="col-sm-9">{{ income.category.name|title }}</dd>
+
+                        <dt class="col-sm-3 label">Income Date:</dt>
+                        <dd class="col-sm-9">{{ income.income_date|date:"F d, Y" }}</dd>
+
+                        <dt class="col-sm-3 label">Source:</dt>
+                        <dd class="col-sm-9">{{ income.source|default:"Not specified." }}</dd>
+
+                        <dt class="col-sm-3 label">Reference:</dt>
+                        <dd class="col-sm-9">{{ income.reference|default:"—" }}</dd>
+
+                        <dt class="col-sm-3 label">Description:</dt>
+                        <dd class="col-sm-9">
+                            <p class="mb-0">{{ income.description|default:"No description provided." }}</p>
+                        </dd>
+
+                        <dt class="col-sm-3 label">Notes:</dt>
+                        <dd class="col-sm-9">
+                            <p class="mb-0">{{ income.notes|default:"—" }}</p>
+                        </dd>
+
+                        <dt class="col-sm-3 label">Receipt:</dt>
+                        <dd class="col-sm-9">
+                            {% if income.receipt %}
+                                <a href="{{ income.receipt.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-file-earmark-text"></i> View Receipt
+                                </a>
+                            {% else %}
+                                <span class="text-muted">No receipt uploaded</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Meta Details -->
+        <div class="col-lg-4">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <h5 class="card-title">Record Details</h5>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="meta-label">Session</span>
+                            <span>{% if income.session %}{{ income.session }}{% else %}—{% endif %}</span>
+                        </li>
+
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="meta-label">Term</span>
+                            <span>{% if income.term %}{{ income.term }}{% else %}—{% endif %}</span>
+                        </li>
+
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="meta-label">Recorded By</span>
+                            <span>
+                                {% if income.created_by %}
+                                    {{ income.created_by.get_full_name|default:income.created_by.username }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </span>
+                        </li>
+
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="meta-label">Recorded At</span>
+                            <span class="text-muted">{{ income.created_at|date:"d M Y, P" }}</span>
+                        </li>
+
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="meta-label">Record ID</span>
+                            <span class="text-muted">{{ income.pk }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Small actions card with modal-trigger Delete button -->
+            <div class="card mt-3">
+                <div class="card-body text-center">
+                    <!-- Trigger modal -->
+                    <button type="button" class="btn btn-danger btn-sm" title="Delete Income" data-bs-toggle="modal" data-bs-target="#confirmDeleteModal">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+
+                    <a class="btn btn-outline-secondary btn-sm ms-2" href="{% url 'income_index' %}">Close</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Central Confirmation Modal (Delete) -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Confirm Deletion</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <p>Are you sure you want to permanently delete this income record?</p>
+                <dl class="row">
+                    <dt class="col-sm-4">Record ID:</dt>
+                    <dd class="col-sm-8">#{{ income.pk }}</dd>
+
+                    <dt class="col-sm-4">Amount:</dt>
+                    <dd class="col-sm-8">₦{{ income.amount|intcomma }}</dd>
+
+                    <dt class="col-sm-4">Category:</dt>
+                    <dd class="col-sm-8">{{ income.category.name|title }}</dd>
+                </dl>
+
+                <div class="alert alert-warning mt-2">
+                    <strong>Warning:</strong> This action cannot be undone. Deleting this record may affect historical reports.
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <form method="post" action="{% url 'income_delete' income.pk %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                </form>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

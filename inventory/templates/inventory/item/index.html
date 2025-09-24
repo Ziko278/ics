@@ -1,0 +1,202 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title">Inventory Items</h5>
+                <div>
+                    <a href="{% url 'inventory_item_create' %}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-circle"></i> Add New Item
+                    </a>
+                </div>
+            </div>
+
+            <!-- Search Form -->
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <form method="GET" action="{% url 'inventory_item_list' %}">
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="q" value="{{ search_query }}" placeholder="Search by name or barcode..." id="item-search-input">
+                            <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i></button>
+                        </div>
+                    </form>
+                </div>
+                 <div class="col-md-6 text-md-end pt-2">
+                    <small class="text-muted">Tip: Click into the search box and use a barcode scanner for quick lookups.</small>
+                </div>
+            </div>
+
+
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Item Name</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Barcode</th>
+                    <th scope="col">Selling Price</th>
+                    <th scope="col">Total Qty</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for item in items %}
+                <tr>
+                    <th scope="row">{{ page_obj.start_index|add:forloop.counter0 }}</th>
+                    <td><a href="{{ item.get_absolute_url }}">{{ item.name|title }}</a></td>
+                    <td>{{ item.category.name|default:"-" }}</td>
+                    <td>{{ item.barcode|default:"N/A" }}</td>
+                    <td>₦{{ item.current_selling_price|floatformat:2|intcomma }}</td>
+                    <td>{{ item.total_quantity|floatformat:2 }} {{ item.get_unit_display }}s</td>
+                    <td>
+                        {% if item.is_low_stock %}
+                            <span class="badge bg-warning">Low Stock</span>
+                        {% else %}
+                             <span class="badge bg-success">In Stock</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <a title="View Details" href="{{ item.get_absolute_url }}" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
+                        <a title="Edit Item" href="{% url 'inventory_item_update' item.pk %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil-square"></i></a>
+                        <a title="Delete Item" href="{% url 'inventory_item_delete' item.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        {% if search_query %}
+                            {# This message shows ONLY when a search was performed and returned nothing. #}
+                            <div class="alert alert-warning text-center" role="alert">
+                               Your search for "<strong>{{ search_query }}</strong>" did not match any items. Try another search term.
+                            </div>
+                        {% else %}
+                            {# This message shows ONLY on initial load if the database is empty. #}
+                            <div class="alert alert-secondary text-center" role="alert">
+                               No inventory items have been added yet. Click the "Add New Item" button to get started.
+                            </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Pagination Controls -->
+            {% if is_paginated %}
+            <nav aria-label="Page navigation">
+              <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                  <li class="page-item"><a class="page-link" href="?page=1&q={{ search_query }}">&laquo; First</a></li>
+                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}">Previous</a></li>
+                {% endif %}
+
+                <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+
+                {% if page_obj.has_next %}
+                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}">Next</a></li>
+                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&q={{ search_query }}">Last &raquo;</a></li>
+                {% endif %}
+              </ul>
+            </nav>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+<!-- A simple toast element for barcode scan notifications -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+  <div id="barcode-toast" class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="barcode-toast-message">
+        Item with this barcode not found.
+      </div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    let barcodeScanInput = '';
+    let scanTimer = null;
+    const SCAN_TIMEOUT = 100; // ms between keystrokes to consider a scan complete
+    const MIN_BARCODE_LENGTH = 4; // Ignore short inputs to avoid accidental triggers
+
+    // Get the toast element for notifications
+    const toastEl = document.getElementById('barcode-toast');
+    const toast = new bootstrap.Toast(toastEl);
+    const toastMessageEl = document.getElementById('barcode-toast-message');
+
+    document.addEventListener('keydown', function (e) {
+        // Ignore inputs if the user is typing in the search box or other inputs
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        // Clear the timer on any new keystroke
+        if (scanTimer) {
+            clearTimeout(scanTimer);
+        }
+
+        // If it's a special key like Enter, process the input immediately
+        if (e.key === 'Enter') {
+            if (barcodeScanInput.length >= MIN_BARCODE_LENGTH) {
+                findItemByBarcode(barcodeScanInput);
+            }
+            barcodeScanInput = ''; // Reset buffer
+            return;
+        }
+
+        // Add the character to our buffer (ignore control keys)
+        if (e.key.length === 1) {
+            barcodeScanInput += e.key;
+        }
+
+        // Set a timer to process the barcode after a short delay
+        scanTimer = setTimeout(function () {
+            if (barcodeScanInput.length >= MIN_BARCODE_LENGTH) {
+                findItemByBarcode(barcodeScanInput);
+            }
+            barcodeScanInput = ''; // Reset buffer
+        }, SCAN_TIMEOUT);
+    });
+
+    function findItemByBarcode(barcode) {
+        console.log('Scanning for barcode:', barcode);
+        const ajaxUrl = `{% url 'inventory_item_ajax_scan' %}?barcode=${barcode}`;
+
+        fetch(ajaxUrl)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Item not found. Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success' && data.url) {
+                    // Success! Redirect to the item's detail page.
+                    window.location.href = data.url;
+                } else {
+                    // Handle case where API returns success but no URL (should not happen)
+                    showToast('Error: Invalid response from server.');
+                }
+            })
+            .catch(error => {
+                console.error('Barcode scan error:', error);
+                showToast(`Item with barcode "${barcode}" not found.`);
+            });
+    }
+
+    function showToast(message) {
+        toastMessageEl.textContent = message;
+        toast.show();
+    }
+});
+</script>
+{% endblock %}

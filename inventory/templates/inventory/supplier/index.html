@@ -1,0 +1,75 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2 pt-2">
+            <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#supplierHelperModal"><b><i class="bi bi-question-circle"></i> Helper</b></button>
+            <a href="{% url 'inventory_supplier_create' %}" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Supplier
+            </a>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">Suppliers List</h5>
+
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Supplier Name</th>
+                    <th scope="col">Contact Person</th>
+                    <th scope="col">Phone Number</th>
+                    <th scope="col">Balance Owed</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for supplier in suppliers %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td><a href="{% url 'inventory_supplier_detail' supplier.pk %}">{{ supplier.name|title }}</a></td>
+                    <td>{{ supplier.contact_person|default:"---" }}</td>
+                    <td>{{ supplier.phone_number|default:"---" }}</td>
+                    <td>₦{{ supplier.balance_owed|floatformat:2 }}</td>
+                    <td class="text-center">
+                        <a title="View Details" href="{% url 'inventory_supplier_detail' supplier.pk %}" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
+                        <a title="Edit Supplier" href="{% url 'inventory_supplier_update' supplier.pk %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil-square"></i></a>
+                        <a title="Delete Supplier" href="{% url 'inventory_supplier_delete' supplier.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% if not suppliers %}
+                 <div class="alert alert-secondary text-center" role="alert">
+                    No suppliers have been added yet. Click "Add Supplier" to get started.
+                 </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Supplier Helper Modal -->
+<div class="modal fade" id="supplierHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Supplier Management Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>This page lists all the vendors and suppliers your school procures items from.</p>
+                <ul>
+                    <li><b>Add Supplier:</b> Use this to register a new vendor in the system.</li>
+                    <li><b>Balance Owed:</b> This is a real-time calculation of how much money is owed to each supplier based on received goods versus payments made.</li>
+                    <li><b>Actions:</b> You can view detailed transaction history, edit supplier information, or delete a supplier.</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Confirm Deletion of Student</h5>
+
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading">Are you sure you want to delete this student?</h4>
+                <p>
+                    You are about to permanently delete the record for: <strong>"{{ student.first_name|title }} {{ student.last_name|title }}"</strong> (Reg. No: {{ student.registration_number }}).
+                </p>
+                <hr>
+                <p class="mb-0">
+                    <strong>Warning:</strong> This action cannot be undone. All academic records, financial history, and other data associated with this student will be permanently removed.
+                </p>
+            </div>
+
+            <form method="post" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete Permanently</button>
+            </form>
+
+            <a class="btn btn-secondary" href="{% url 'student_detail' student.pk %}">Cancel</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Inventory Item</h4>
+            
+            <p>You are about to permanently delete the following item:</p>
+            <h5 class="text-center my-3"><em>"{{ item.name|title }}"</em></h5>
+
+            {% with stock_in_count=item.get_stock_ins.count stock_out_count=item.get_stock_outs.count %}
+                {% if stock_in_count > 0 or stock_out_count > 0 %}
+                    <div class="alert alert-danger">
+                        <h6 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Warning: Transaction History Found!</h6>
+                        <p>
+                            This item has a history of stock movements (e.g., purchases or sales). Deleting it will cause inconsistencies in your historical inventory and sales records.
+                        </p>
+                        <hr>
+                        <p class="mb-0">
+                            <strong>It is strongly recommended to deactivate the item instead.</strong> This will hide it from new transactions but preserve your records. You can do this from the 'Update Item' page.
+                        </p>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        This action is permanent and cannot be undone.
+                    </div>
+                {% endif %}
+            {% endwith %}
+            
+            <p>Are you sure you want to proceed with the deletion?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete Permanently</button>
+                <a class="btn btn-secondary" href="{{ item.get_absolute_url }}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

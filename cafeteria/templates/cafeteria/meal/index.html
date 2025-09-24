@@ -1,0 +1,107 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-12">
+    <div class="card overflow-auto">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title">Meal Types</h5>
+                <div>
+                    <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#helperModal"><b><i class="bi bi-question-circle"></i> Helper</b></button>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
+                        <i class="bi bi-plus-circle"></i> Add Meal Type
+                    </button>
+                </div>
+            </div>
+            <p class="card-description">
+                Define the different meal types the school cafeteria offers (e.g., Breakfast, Lunch, Snack).
+            </p>
+
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for meal in meals %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ meal.name|title }}</td>
+                    <td>{{ meal.description|default:"---"|truncatechars:50 }}</td>
+                    <td>
+                        {% if meal.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <button title="Edit Meal" type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editModal{{ meal.pk }}"><i class="bi bi-pencil-square"></i></button>
+                        <a title="Delete Meal" href="{% url 'cafeteria_meal_delete' meal.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% if not meals %}
+                 <div class="alert alert-secondary text-center" role="alert">No meal types have been added yet.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Helper Modal -->
+<div class="modal fade" id="helperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title"><b>Meal Types Helper</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p><strong>Meal Types</strong> are the categories for the meals your cafeteria serves. This allows you to track meal collections accurately.</p></div></div></div>
+</div>
+
+<!-- Add New Meal Modal -->
+<form method="POST" action="{% url 'cafeteria_meal_create' %}">
+    {% csrf_token %}
+    <div class="modal fade" id="addModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><b>Add New Meal Type</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Name</label>{{ form.name }}</div>
+                    <div class="mb-3"><label class="form-label">Description</label>{{ form.description }}</div>
+                    <div class="form-check form-switch">{{ form.is_active }} <label class="form-check-label">Is Active</label></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Meal Type</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Edit Meal Modals -->
+{% for meal in meals %}
+<form method="POST" action="{% url 'cafeteria_meal_update' meal.pk %}">
+    {% csrf_token %}
+    <div class="modal fade" id="editModal{{ meal.pk }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><b>Edit Meal Type</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                     <div class="mb-3"><label class="form-label">Name</label><input type="text" name="name" value="{{ meal.name }}" class="form-control" required></div>
+                     <div class="mb-3"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="3">{{ meal.description|default:"" }}</textarea></div>
+                     <div class="form-check form-switch"><input type="checkbox" name="is_active" class="form-check-input" {% if meal.is_active %}checked{% endif %}> <label class="form-check-label">Is Active</label></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,319 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="pagetitle">
+  <h1>Purchase Order Details</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'inventory_po_list' %}">Purchase Orders</a></li>
+      <li class="breadcrumb-item active">{{ po.order_number }}</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="row">
+    <!-- Left Column: PO Details and Summary -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">PO Summary</h5>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>PO Number:</strong> <span>{{ po.order_number }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>Supplier:</strong> <a href="{% url 'inventory_supplier_detail' po.supplier.pk %}">{{ po.supplier.name|title }}</a>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>Order Date:</strong> <span>{{ po.order_date|date:"d M, Y" }}</span>
+                    </li>
+                     <li class="list-group-item d-flex justify-content-between">
+                        <strong>Session/Term:</strong> <span>{{ po.session }} / {{ po.term.name|title }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>Status:</strong> <span class="badge bg-primary">{{ po.get_status_display }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>Total Amount:</strong> <h5 class="mb-0">₦{{ po.total_amount|floatformat:2|intcomma }}</h5>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div class="card">
+             <div class="card-body">
+                <h5 class="card-title">Actions</h5>
+
+                 {% if po.status == 'draft' %}
+                    <button type="button" class="btn btn-sm btn-success confirm-action"
+                            data-bs-toggle="modal"
+                            data-bs-target="#confirmationModal"
+                            data-action="{% url 'inventory_po_update_status' po.pk %}"
+                            data-message="This will submit the PO to the supplier and lock it from further editing. Are you sure you want to proceed?"
+                            data-input-name="status"
+                            data-input-value="submitted"
+                            {% if not po.items.all %}disabled title="Add items before submitting"{% endif %}>
+                        <i class="bi bi-check-circle"></i> Submit PO
+                    </button>
+                 {% elif po.status == 'submitted' and not po.has_stock_received %}
+                    <button type="button" class="btn btn-sm btn-warning confirm-action"
+                            data-bs-toggle="modal"
+                            data-bs-target="#confirmationModal"
+                            data-action="{% url 'inventory_po_update_status' po.pk %}"
+                            data-message="This will revert the PO back to a Draft, allowing you to add or remove items. Are you sure?"
+                            data-input-name="status"
+                            data-input-value="draft">
+                        <i class="bi bi-arrow-counterclockwise"></i> Revert to Draft
+                    </button>
+                 {% endif %}
+
+                 <a href="{% url 'inventory_po_list' %}" class="btn btn-sm btn-secondary">Back to List</a>
+             </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Interactive Item Management -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Order Items</h5>
+
+                {% if po.status == 'draft' %}
+                <div class="p-3 mb-3 bg-light rounded border">
+                    <h6><i class="bi bi-plus-circle-fill"></i> Add Item to Order</h6>
+                    <hr>
+                    <div class="mb-3">
+                         <label class="form-label">Search Inventory (by Name or Barcode)</label>
+                        <input type="text" class="form-control" id="item-search-input" placeholder="Start typing to search or scan a barcode...">
+                        <div id="search-results" class="list-group mt-1 position-absolute" style="z-index: 1000; width: inherit;"></div>
+                    </div>
+
+                    <form id="add-item-form" method="POST" action="{% url 'inventory_po_add_item' po.pk %}" class="row g-2 align-items-end">
+                        {% csrf_token %}
+                        {{ item_form.item }}
+                        <div class="col-md-5">
+                            <label for="id_item_description" class="form-label-sm">Description</label>
+                            {{ item_form.item_description }}
+                        </div>
+                         <div class="col-md-2">
+                            <label for="id_quantity" class="form-label-sm">Quantity</label>
+                            {{ item_form.quantity }}
+                        </div>
+                         <div class="col-md-3">
+                            <label for="id_unit_cost" class="form-label-sm">Unit Cost (₦)</label>
+                            {{ item_form.unit_cost }}
+                        </div>
+                        <div class="col-md-2">
+                             <button type="submit" class="btn btn-primary btn-sm w-100">Add</button>
+                        </div>
+                    </form>
+                </div>
+                {% else %}
+                 <div class="alert alert-info">
+                    This Purchase Order has been submitted. To make changes, you must first revert it to a draft.
+                </div>
+                {% endif %}
+
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Qty</th>
+                                <th>Unit Cost</th>
+                                <th>Line Total</th>
+                                {% if po.status == 'draft' %}<th>Action</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in po.items.all %}
+                            <tr>
+                                <td>{{ item.item_description|title }}</td>
+                                <td>{{ item.quantity|floatformat:2 }}</td>
+                                <td>₦{{ item.unit_cost|floatformat:2|intcomma }}</td>
+                                <td>₦{{ item.line_total|floatformat:2|intcomma }}</td>
+                                {% if po.status == 'draft' %}
+                                <td>
+                                    <button type="button" class="btn btn-danger btn-sm confirm-action"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#confirmationModal"
+                                            data-action="{% url 'inventory_po_delete_item' item.pk %}"
+                                            data-message="Are you sure you want to remove this item from the purchase order?">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5" class="text-center">No items have been added to this purchase order yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generic Confirmation Modal -->
+<div class="modal fade" id="confirmationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmationMessage">Are you sure you want to proceed?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="confirmationForm" method="POST" action="">
+                    {% csrf_token %}
+                    <!-- This is where hidden inputs for status changes will be added by JS -->
+                    <button type="submit" class="btn btn-primary">Confirm</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // --- Reusable Confirmation Modal Logic ---
+    const confirmationModal = document.getElementById('confirmationModal');
+    if (confirmationModal) {
+        const confirmationForm = document.getElementById('confirmationForm');
+        const confirmationMessage = document.getElementById('confirmationMessage');
+
+        confirmationModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const actionUrl = button.getAttribute('data-action');
+            const message = button.getAttribute('data-message');
+
+            confirmationMessage.textContent = message || 'Are you sure you want to proceed?';
+            confirmationForm.action = actionUrl;
+
+            // Handle additional hidden inputs for status changes
+            const inputName = button.getAttribute('data-input-name');
+            if (inputName) {
+                const inputValue = button.getAttribute('data-input-value');
+                let hiddenInput = confirmationForm.querySelector('input[name="' + inputName + '"]');
+                if (!hiddenInput) {
+                    hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = inputName;
+                    confirmationForm.appendChild(hiddenInput);
+                }
+                hiddenInput.value = inputValue;
+            }
+        });
+
+        // Clean up extra hidden inputs after the modal is closed
+        confirmationModal.addEventListener('hidden.bs.modal', function() {
+            const extraInputs = confirmationForm.querySelectorAll('input[type="hidden"]:not([name="csrfmiddlewaretoken"])');
+            extraInputs.forEach(input => input.remove());
+        });
+    }
+
+    // --- Dynamic Item Adding Logic (only runs if the add-item form exists on the page) ---
+    const addItemFormContainer = document.getElementById('add-item-form');
+    if (addItemFormContainer) {
+        const searchInput = document.getElementById('item-search-input');
+        const searchResults = document.getElementById('search-results');
+        const hiddenItemId = addItemFormContainer.querySelector('input[name="item"]');
+        const itemDescription = addItemFormContainer.querySelector('input[name="item_description"]');
+        const itemQuantity = addItemFormContainer.querySelector('input[name="quantity"]');
+        const itemUnitCost = addItemFormContainer.querySelector('input[name="unit_cost"]');
+
+        let debounceTimer;
+
+        function fillAddItemForm(itemData) {
+            hiddenItemId.value = itemData.id;
+            itemDescription.value = itemData.name;
+            itemUnitCost.value = itemData.last_cost;
+            itemQuantity.value = '1';
+            searchResults.innerHTML = '';
+            searchInput.value = '';
+            itemQuantity.focus();
+        }
+
+        searchInput.addEventListener('keyup', function () {
+            clearTimeout(debounceTimer);
+            const query = searchInput.value;
+            if (query.length < 2) {
+                searchResults.innerHTML = '';
+                return;
+            }
+            debounceTimer = setTimeout(() => {
+                fetch(`{% url 'inventory_po_ajax_search' %}?q=${query}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        let resultsHtml = '';
+                        if (data.items.length > 0) {
+                            data.items.forEach(item => {
+                                resultsHtml += `<a href="#" class="list-group-item list-group-item-action search-result-item" data-id="${item.id}" data-name="${item.name}" data-cost="${item.last_cost}"><strong>${item.name}</strong> <small class="text-muted">(${item.unit})</small></a>`;
+                            });
+                        } else {
+                            resultsHtml = `<div class="list-group-item">No items found.</div>`;
+                        }
+                        searchResults.innerHTML = resultsHtml;
+                    });
+            }, 300);
+        });
+
+        searchResults.addEventListener('click', function (e) {
+            let target = e.target.closest('a.search-result-item');
+            if (target) {
+                e.preventDefault();
+                const itemData = { id: target.dataset.id, name: target.dataset.name, last_cost: target.dataset.cost };
+                fillAddItemForm(itemData);
+            }
+        });
+
+        let barcodeScanInput = '';
+        let scanTimer;
+        document.addEventListener('keydown', function (e) {
+            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+                if (document.activeElement.id !== 'item-search-input') return;
+            }
+            if (scanTimer) clearTimeout(scanTimer);
+            if (e.key === 'Enter') {
+                const codeToProcess = (document.activeElement.id === 'item-search-input') ? searchInput.value : barcodeScanInput;
+                if (codeToProcess.length > 3) findItemByBarcode(codeToProcess);
+                barcodeScanInput = '';
+                e.preventDefault();
+                return;
+            }
+            if (e.key.length === 1) {
+                if (document.activeElement.id !== 'item-search-input') barcodeScanInput += e.key;
+            }
+            scanTimer = setTimeout(() => {
+                if (barcodeScanInput.length > 3) findItemByBarcode(barcodeScanInput);
+                barcodeScanInput = '';
+            }, 150);
+        });
+
+        function findItemByBarcode(barcode) {
+            fetch(`{% url 'inventory_po_ajax_search' %}?q=${barcode}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.items.length === 1) {
+                        fillAddItemForm(data.items[0]);
+                    } else {
+                        searchInput.value = barcode;
+                        searchInput.dispatchEvent(new Event('keyup'));
+                    }
+                });
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!searchResults.contains(e.target) && e.target !== searchInput) {
+                searchResults.innerHTML = '';
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

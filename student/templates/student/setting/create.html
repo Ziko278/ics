@@ -1,0 +1,79 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">
+                {% if object %}
+                    Update Student & Parent Settings
+                {% else %}
+                    Configure Student & Parent Settings
+                {% endif %}
+            </h5>
+
+            <p class="card-description">
+                These settings control how Student and Parent IDs are generated throughout the application.
+            </p>
+
+            <form method="POST" class="mt-4">
+                {% csrf_token %}
+
+                <!-- Student ID Settings Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Student ID Settings</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-check form-switch mt-2">
+                            {{ form.auto_generate_student_id }}
+                            <label class="form-check-label" for="id_auto_generate_student_id">
+                                <strong>Auto-generate Student ID?</strong>
+                            </label>
+                            <div class="form-text">If enabled, a unique ID (e.g., STU-0001) will be created for each new student.</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.student_prefix }}
+                            <label for="id_student_prefix">Student ID Prefix</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parent ID Settings Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Parent ID Settings</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-check form-switch mt-2">
+                            {{ form.auto_generate_parent_id }}
+                            <label class="form-check-label" for="id_auto_generate_parent_id">
+                                <strong>Auto-generate Parent ID?</strong>
+                            </label>
+                            <div class="form-text">If enabled, a unique ID (e.g., PAR-0001) will be created for each new parent.</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.parent_prefix }}
+                            <label for="id_parent_prefix">Parent ID Prefix</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-start mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        {% if object %}
+                            Save Changes
+                        {% else %}
+                            Save Settings
+                        {% endif %}
+                    </button>
+                    {% if object %}
+                        <a href="{% url 'setting_detail' %}" class="btn btn-secondary">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

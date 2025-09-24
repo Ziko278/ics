@@ -1,0 +1,56 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Human Resources Settings</h5>
+                {% if hr_setting %}
+                    <a href="{% url 'hr_setting_edit' %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-pencil-square"></i> Update Settings
+                    </a>
+                {% endif %}
+            </div>
+
+            {% include 'admin_site/partials/messages.html' %}
+
+            {% if hr_setting %}
+                <p class="card-description mt-2">
+                    This is the current configuration for the HR module.
+                </p>
+
+                <div class="row border-top pt-3 mt-3">
+                    <div class="col-lg-4 col-md-5 label fw-bold">Auto-generate Staff ID</div>
+                    <div class="col-lg-8 col-md-7">
+                        {% if hr_setting.auto_generate_staff_id %}
+                            <span class="badge bg-success">Yes, Enabled</span>
+                        {% else %}
+                            <span class="badge bg-danger">No, Disabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-lg-4 col-md-5 label fw-bold">Staff ID Prefix</div>
+                    <div class="col-lg-8 col-md-7">{{ hr_setting.staff_prefix|default:"Not Set" }}</div>
+                </div>
+
+            {% else %}
+                <div class="alert alert-warning text-center mt-4">
+                    <h4 class="alert-heading">HR Settings Not Found!</h4>
+                    <p>
+                        The Human Resources settings have not been configured yet. These settings are required before you can add new staff members.
+                    </p>
+                    <hr>
+                    <a href="{% url 'hr_setting_create' %}" class="btn btn-primary">
+                        Configure Settings Now
+                    </a>
+                </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+{% endblock %}

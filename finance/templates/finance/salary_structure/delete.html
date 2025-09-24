@@ -1,0 +1,21 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Salary Structure</h4>
+            <p>You are about to permanently delete the salary structure for:</p>
+            <h5 class="text-center my-3"><em>"{{ object.staff.staff_profile.user.get_full_name|title }}"</em></h5>
+            <div class="alert alert-danger">
+                <strong>Warning:</strong> This action cannot be undone. While historical payslips will be preserved, this structure will be permanently removed.
+            </div>
+            <p>Are you sure you want to proceed?</p>
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                <a class="btn btn-secondary" href="{% url 'finance_salary_structure_detail' object.pk %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

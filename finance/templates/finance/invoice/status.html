@@ -1,0 +1,108 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-lg-10 offset-lg-1 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Invoice Generation Status</h5>
+
+            <div id="job-status-container">
+                <div class="alert alert-primary d-flex align-items-center" role="alert" id="status-in-progress">
+                    <div class="spinner-border text-primary me-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div>
+                        <strong>In Progress:</strong> Generating invoices. Please do not close this page. You can navigate away and the process will continue.
+                    </div>
+                </div>
+
+                <div class="alert alert-success d-none" role="alert" id="status-success">
+                    <h4 class="alert-heading"><i class="bi bi-check-circle-fill"></i> Success!</h4>
+                    <p>The invoice generation process has completed successfully. All invoices have been created.</p>
+                    <hr>
+                    <a href="{% url 'finance_invoice_list' %}" class="btn btn-success">View Generated Invoices</a>
+                </div>
+
+                <div class="alert alert-danger d-none" role="alert" id="status-failure">
+                     <h4 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Failure</h4>
+                    <p>An error occurred during the invoice generation process.</p>
+                    <hr>
+                    <p class="mb-0"><strong>Error Details:</strong> <span id="error-message"></span></p>
+                </div>
+
+                <div class="progress" style="height: 25px;">
+                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                </div>
+                <div class="text-center mt-2">
+                    <span id="progress-text">Initializing...</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const jobStatusContainer = document.getElementById('job-status-container');
+    const statusInProgress = document.getElementById('status-in-progress');
+    const statusSuccess = document.getElementById('status-success');
+    const statusFailure = document.getElementById('status-failure');
+    const errorMessageSpan = document.getElementById('error-message');
+    
+    const jobId = "{{ job.job_id }}";
+    const apiUrl = `{% url 'finance_invoice_job_status_api' job.job_id %}`;
+
+    let intervalId;
+
+    function checkStatus() {
+        fetch(apiUrl)
+            .then(response => response.json())
+            .then(data => {
+                let progress = 0;
+                if (data.total_students > 0) {
+                    progress = (data.processed_students / data.total_students) * 100;
+                }
+
+                // Update progress bar
+                progressBar.style.width = `${progress}%`;
+                progressBar.setAttribute('aria-valuenow', progress);
+                progressBar.textContent = `${Math.round(progress)}%`;
+
+                // Update progress text
+                progressText.textContent = `Processed ${data.processed_students} of ${data.total_students} students...`;
+
+                // Check if the job is complete
+                if (data.is_complete) {
+                    clearInterval(intervalId); // Stop polling
+                    statusInProgress.classList.add('d-none');
+                    progressBar.classList.remove('progress-bar-animated');
+
+                    if (data.status === 'Success') {
+                        statusSuccess.classList.remove('d-none');
+                        progressBar.classList.add('bg-success');
+                        progressText.textContent = `Completed: Processed ${data.total_students} students.`;
+                    } else { // Failure
+                        statusFailure.classList.remove('d-none');
+                        errorMessageSpan.textContent = data.error_message || 'An unknown error occurred.';
+                        progressBar.classList.add('bg-danger');
+                        progressText.textContent = `Failed after processing ${data.processed_students} students.`;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching job status:', error);
+                clearInterval(intervalId); // Stop polling on network error
+            });
+    }
+
+    // Start polling every 3 seconds
+    intervalId = setInterval(checkStatus, 3000);
+    // And run it once immediately
+    checkStatus();
+});
+</script>
+{% endblock %}

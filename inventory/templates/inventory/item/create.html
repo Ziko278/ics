@@ -1,0 +1,167 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-10 offset-lg-1 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Add New Inventory Item</h5>
+            <p class="card-description">
+                Use this form to register a new product or item. You can scan the item's barcode at any time to auto-fill the barcode field.
+            </p>
+
+            <form method="POST" class="row g-3">
+                {% csrf_token %}
+
+                <!-- Section 1: Core Item Details -->
+                <div class="col-12 border-bottom pb-3">
+                    <h6 class="card-subtitle mb-2 text-muted">Core Details</h6>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <div class="form-floating">
+                                {{ form.name }}
+                                <label for="id_name">Item Name <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="form-floating">
+                                {{ form.category }}
+                                <label for="id_category">Category <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                         <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.unit }}
+                                <label for="id_unit">Unit of Measure <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.barcode }}
+                                <label for="id_barcode">Barcode (SKU)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Pricing and Stock Levels -->
+                 <div class="col-12 border-bottom pt-3 pb-3">
+                    <h6 class="card-subtitle mb-2 text-muted">Pricing & Stock Levels</h6>
+                     <div class="row">
+                         <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.current_selling_price }}
+                                <label for="id_current_selling_price">Selling Price (₦) <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.reorder_level }}
+                                <label for="id_reorder_level">Re-order Level <span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.shop_quantity }}
+                                <label for="id_shop_quantity">Initial Shop Quantity</label>
+                            </div>
+                             <div class="form-text">{{ form.shop_quantity.help_text }}</div>
+                        </div>
+                         <div class="col-md-6 mb-3">
+                             <div class="form-floating">
+                                {{ form.store_quantity }}
+                                <label for="id_store_quantity">Initial Store Quantity</label>
+                            </div>
+                             <div class="form-text">{{ form.store_quantity.help_text }}</div>
+                        </div>
+                     </div>
+                </div>
+
+                <!-- Section 3: Settings -->
+                 <div class="col-12 pt-3">
+                     <h6 class="card-subtitle mb-2 text-muted">Settings</h6>
+                    <div class="row">
+                         <div class="col-md-6 mb-3">
+                             <div class="form-floating">
+                                {{ form.location }}
+                                <label for="id_location">Available In <span class="text-danger">*</span></label>
+                            </div>
+                         </div>
+                         <div class="col-md-6 mb-3 d-flex align-items-center">
+                            <div class="form-check form-switch">
+                                {{ form.is_active }}
+                                <label class="form-check-label" for="id_is_active">
+                                    <strong>Is Active?</strong>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="text-start mt-2">
+                    <button type="submit" class="btn btn-primary">Save Item</button>
+                    <a href="{% url 'inventory_item_list' %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block 'script' %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    let barcodeScanInput = '';
+    let scanTimer = null;
+    const SCAN_TIMEOUT = 100; // ms between keystrokes to consider a scan complete
+    const MIN_BARCODE_LENGTH = 4;
+    const barcodeField = document.getElementById('id_barcode');
+
+    document.addEventListener('keydown', function (e) {
+        // Only listen if the user is NOT typing in an input field already
+        // This prevents interference when manually typing.
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        if (scanTimer) {
+            clearTimeout(scanTimer);
+        }
+
+        if (e.key === 'Enter') {
+            if (barcodeScanInput.length >= MIN_BARCODE_LENGTH) {
+                fillBarcodeField(barcodeScanInput);
+            }
+            barcodeScanInput = ''; // Reset buffer
+            e.preventDefault(); // Prevent form submission
+            return;
+        }
+
+        if (e.key.length === 1) {
+            barcodeScanInput += e.key;
+        }
+
+        scanTimer = setTimeout(function () {
+            if (barcodeScanInput.length >= MIN_BARCODE_LENGTH) {
+                fillBarcodeField(barcodeScanInput);
+            }
+            barcodeScanInput = ''; // Reset buffer
+        }, SCAN_TIMEOUT);
+    });
+
+    function fillBarcodeField(barcode) {
+        if (barcodeField) {
+            console.log('Barcode scanned:', barcode);
+            barcodeField.value = barcode;
+
+            // Optional: Provide a visual cue that the field was auto-filled
+            barcodeField.classList.add('is-valid');
+            setTimeout(() => {
+                barcodeField.classList.remove('is-valid');
+            }, 1500);
+        }
+    }
+});
+</script>
+{% endblock %}

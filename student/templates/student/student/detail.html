@@ -1,0 +1,659 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+{% load humanize %}
+
+<div class="row">
+    <!-- Profile Sidebar -->
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-body profile-card pt-4 d-flex flex-column align-items-center">
+                <img {% if student.image %} src="{{ student.image.url }}" {% else %} src="https://placehold.co/120x120/EFEFEF/AAAAAA?text={{ student.first_name|first|upper }}" {% endif %} alt="Profile" class="rounded-circle" style="width: 120px; height: 120px; object-fit: cover;">
+                <h2 class="mt-3">{{ student.first_name|title }} {{ student.last_name|title }}</h2>
+                <h3>Reg. No: {{ student.registration_number }}</h3>
+                <div class="mt-2">
+                    <span class="badge bg-{{ student.get_status_color }}"><i class="bi bi-info-circle me-1"></i> {{ student.get_status_display }}</span>
+                    {% if student.is_fingerprint_enrolled %}
+                        <span class="badge bg-success ms-2"><i class="bi bi-fingerprint me-1"></i> Enrolled</span>
+                    {% else %}
+                        <span class="badge bg-warning ms-2"><i class="bi bi-fingerprint me-1"></i> Not Enrolled</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Panel with Tabs -->
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-body pt-3">
+
+                <!-- Tab Navigation -->
+                <ul class="nav nav-tabs nav-tabs-bordered">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#profile-overview">Profile Details</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#fingerprint-management">
+                            <i class="bi bi-fingerprint me-1"></i>Fingerprint Management
+                            {% if fingerprint_list|length > 0 %}
+                                <span class="badge bg-primary ms-1">{{ fingerprint_list|length }}</span>
+                            {% endif %}
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content pt-2">
+                    <!-- Profile Details Tab -->
+                    <div class="tab-pane fade show active" id="profile-overview">
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                             <h5 class="card-title mb-0 pt-0">Student Profile</h5>
+                            <div class="btn-group">
+                                <a href="{% url 'student_edit' student.pk %}" class="btn btn-warning btn-sm" title="Edit Student"><i class="bi bi-pencil-square"></i> Edit</a>
+                                <button type="button" class="btn btn-danger btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                   <i class="bi bi-gear"></i> Actions
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#confirmInactiveModal">Set as Inactive</a></li>
+                                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#confirmGraduatedModal">Set as Graduated</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-danger" href="{% url 'student_delete' student.pk %}">Delete Student Record</a></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Academic Info -->
+                        <h6 class="card-subtitle mt-4 mb-2 text-muted">Academic Information</h6>
+                        <div class="row border-top pt-3">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Registration No.</div>
+                            <div class="col-lg-9 col-md-8">{{ student.registration_number }}</div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Current Class</div>
+                            <div class="col-lg-9 col-md-8">{{ student.student_class|default:"Not Assigned" }} {{ student.class_section|default:"" }}</div>
+                        </div>
+
+                        <h6 class="card-subtitle mt-4 mb-2 text-muted">Wallet Information</h6>
+                        <div class="row border-top pt-3">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Balance</div>
+                            <div class="col-lg-9 col-md-8">₦{{ student.student_wallet.balance|floatformat|intcomma }}</div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Current Class</div>
+                            <div class="col-lg-9 col-md-8">{{ student.student_class|default:"Not Assigned" }} {{ student.class_section|default:"" }}</div>
+                        </div>
+
+                        <!-- Guardian Info -->
+                        <h6 class="card-subtitle mt-4 mb-2 text-muted">Parent / Guardian Information</h6>
+                        <div class="row border-top pt-3">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Name</div>
+                            <div class="col-lg-9 col-md-8">{{ student.parent }}</div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Contact</div>
+                            <div class="col-lg-9 col-md-8">{{ student.parent.mobile }} | {{ student.parent.email }}</div>
+                        </div>
+                         <div class="row mt-2">
+                            <div class="col-lg-3 col-md-4 label fw-bold"></div>
+                            <div class="col-lg-9 col-md-8">
+                                <a href="{% url 'parent_detail' student.parent.pk %}" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-person-circle"></i> View Full Parent Profile
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fingerprint Management Tab -->
+                    <div class="tab-pane fade" id="fingerprint-management">
+                        <div class="mt-3">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="card-subtitle mb-3 text-muted">
+                                        <i class="bi bi-fingerprint me-2"></i>Registered Fingerprints
+                                        <span class="badge bg-info ms-2">{{ fingerprint_list|length }}/{{ max_fingerprints }}</span>
+                                    </h6>
+
+                                    {% if fingerprint_list %}
+                                        <div class="list-group">
+                                            {% for fp in fingerprint_list %}
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>{{ fp.get_finger_name_display }}</strong>
+                                                    <small class="text-muted d-block">
+                                                        Captured: {{ fp.created_at|date:"d M, Y H:i" }}
+                                                        {% if fp.quality_score %}
+                                                            <br>Quality: {{ fp.quality_score|floatformat:1 }}/1.0
+                                                        {% endif %}
+                                                        {% if fp.usage_count > 0 %}
+                                                            <br>Used {{ fp.usage_count }} time{{ fp.usage_count|pluralize }}
+                                                        {% endif %}
+                                                    </small>
+                                                </div>
+                                                <button class="btn btn-outline-danger btn-sm" onclick="deleteFingerprintPrompt({{ fp.id }}, '{{ fp.get_finger_name_display }}')">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <div class="alert alert-light text-center">
+                                            <i class="bi bi-fingerprint fs-2 text-muted"></i>
+                                            <p class="mb-0 mt-2">No fingerprints have been registered for this student yet.</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="col-md-6">
+                                    <h6 class="card-subtitle mb-3 text-muted">
+                                        <i class="bi bi-plus-circle me-2"></i>Capture New Fingerprint
+                                    </h6>
+
+                                    <!-- Scanner Status Card -->
+                                    <div class="card border-0 bg-light mb-3">
+                                        <div class="card-body p-2">
+                                            <div class="d-flex align-items-center">
+                                                <div id="scanner-status-icon" class="me-2">
+                                                    <i class="bi bi-question-circle text-warning"></i>
+                                                </div>
+                                                <small id="scanner-status-text" class="text-muted">Checking scanner...</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                     <div class="border p-3 rounded">
+                                        {% if can_add_more %}
+                                            <div class="mb-3">
+                                                <label for="finger-name-select" class="form-label">Select Finger to Register</label>
+                                                <select id="finger-name-select" class="form-select">
+                                                    <option value="">-- Choose a finger --</option>
+                                                    <option value="LEFT_THUMB">Left Thumb</option>
+                                                    <option value="LEFT_INDEX">Left Index</option>
+                                                    <option value="LEFT_MIDDLE">Left Middle</option>
+                                                    <option value="LEFT_RING">Left Ring</option>
+                                                    <option value="LEFT_LITTLE">Left Little</option>
+                                                    <option value="RIGHT_THUMB">Right Thumb</option>
+                                                    <option value="RIGHT_INDEX">Right Index</option>
+                                                    <option value="RIGHT_MIDDLE">Right Middle</option>
+                                                    <option value="RIGHT_RING">Right Ring</option>
+                                                    <option value="RIGHT_LITTLE">Right Little</option>
+                                                </select>
+                                            </div>
+
+                                            <button class="btn btn-primary w-100" id="scan-finger-btn" type="button" disabled>
+                                                <i class="bi bi-fingerprint"></i> Scan Finger
+                                            </button>
+                                        {% else %}
+                                            <div class="alert alert-warning text-center">
+                                                <i class="bi bi-exclamation-triangle"></i>
+                                                <p class="mb-0 mt-2">Maximum {{ max_fingerprints }} fingerprints allowed per student.</p>
+                                                <small class="text-muted">Delete existing fingerprints to add new ones.</small>
+                                            </div>
+                                        {% endif %}
+
+                                        <div id="scan-status" class="mt-3"></div>
+
+                                        <!-- Scan Progress -->
+                                        <div id="scan-progress" class="mt-3" style="display: none;">
+                                            <div class="progress">
+                                                <div id="scan-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                            </div>
+                                            <small class="text-muted d-block mt-1">Scanning in progress...</small>
+                                        </div>
+                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Quick Actions -->
+                            <div class="mt-4 pt-3 border-top">
+                                <h6 class="text-muted mb-3">Quick Actions</h6>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-outline-info btn-sm" onclick="testScannerConnection()">
+                                        <i class="bi bi-gear"></i> Test Scanner
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshFingerprints()">
+                                        <i class="bi bi-arrow-clockwise"></i> Refresh List
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modals -->
+<!-- Set as Inactive Modal -->
+<div class="modal fade" id="confirmInactiveModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Status Change</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to set this student's status to <strong>Inactive</strong>?
+      </div>
+      <div class="modal-footer">
+        <form method="post" action="{% url 'change_student_status' student.pk 'inactive' %}">
+          {% csrf_token %}
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Yes, Set as Inactive</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Set as Graduated Modal -->
+<div class="modal fade" id="confirmGraduatedModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Status Change</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to set this student's status to <strong>Graduated</strong>?
+      </div>
+      <div class="modal-footer">
+        <form method="post" action="{% url 'change_student_status' student.pk 'graduated' %}">
+          {% csrf_token %}
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Yes, Set as Graduated</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Fingerprint Modal -->
+<div class="modal fade" id="deleteFingerprintModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Fingerprint</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to delete the fingerprint for <strong id="delete-finger-name"></strong>?
+        <br><small class="text-muted">This action cannot be undone.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn">
+          <i class="bi bi-trash"></i> Delete Fingerprint
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Include DigitalPersona SDK -->
+<script src="{% static 'admin_site/scripts/digitapersona/websdk.client.min.js' %}"></script>
+
+<script>
+   function updateScannerStatus(isConnected, message) {
+    const scannerStatusIcon = document.getElementById('scanner-status-icon');
+    const scannerStatusText = document.getElementById('scanner-status-text');
+
+    if (isConnected) {
+        scannerStatusIcon.innerHTML = '<i class="bi bi-check-circle text-success"></i>';
+        scannerStatusText.textContent = message;
+        scannerStatusText.className = 'text-success';
+    } else {
+        scannerStatusIcon.innerHTML = '<i class="bi bi-x-circle text-danger"></i>';
+        scannerStatusText.textContent = message;
+        scannerStatusText.className = 'text-danger';
+    }
+}
+
+// Initialize DigitalPersona SDK
+// Add this global variable
+let currentReader = null;
+
+async function initializeDigitalPersonaSDK() {
+    try {
+        if (typeof WebSdk === 'undefined') {
+            throw new Error('DigitalPersona WebSDK not loaded');
+        }
+
+        const client = new WebSdk.WebChannelClient("fingerprint");
+
+
+        client.onConnectionSucceed = function() {
+            updateScannerStatus(true, 'Scanner connected successfully');
+            document.getElementById('scan-finger-btn').disabled = false;
+            DPSDKInitialized = true;
+            currentReader = client;
+
+            // Debug: See what methods are available
+            console.log('Available methods:', Object.getOwnPropertyNames(client));
+            console.log('Client object:', client);
+        };
+
+        client.onConnectionFailed = function() {
+            updateScannerStatus(false, 'Scanner connection failed');
+        };
+
+        client.connect();
+        return client;
+
+    } catch (error) {
+        console.error('SDK initialization failed:', error);
+        updateScannerStatus(false, `Scanner error: ${error.message}`);
+        return null;
+    }
+}
+
+
+// Replace your existing initialization
+initializeDigitalPersonaSDK();
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // DOM Elements
+    const scanButton = document.getElementById('scan-finger-btn');
+    const fingerSelect = document.getElementById('finger-name-select');
+    const statusDiv = document.getElementById('scan-status');
+    const progressDiv = document.getElementById('scan-progress');
+    const progressBar = document.getElementById('scan-progress-bar');
+    const scannerStatusIcon = document.getElementById('scanner-status-icon');
+    const scannerStatusText = document.getElementById('scanner-status-text');
+
+    const studentId = "{{ student.pk }}";
+
+    // DigitalPersona SDK variables
+    let DPSDKInitialized = true;
+
+    // ===============================================================================
+    // DIGITALPERSONA SDK INITIALIZATION
+    // ===============================================================================
+
+    /**
+     * Initialize DigitalPersona WebSDK
+     */
+
+
+    /**
+     * Update scanner status display
+     */
+
+
+    /**
+     * Capture fingerprint using DigitalPersona SDK
+     */
+   async function captureFingerprint() {
+    if (!DPSDKInitialized || !currentReader) {
+        throw new Error('Scanner not initialized');
+    }
+
+    return new Promise((resolve, reject) => {
+        showScanProgress();
+
+        // Set up response handler
+        currentReader.onDataReceivedTxt = function(response) {
+            try {
+                const data = JSON.parse(response);
+                if (data.samples && data.samples.length > 0) {
+                    hideScanProgress();
+                    resolve({
+                        template: data.samples[0].Data,
+                        quality: data.samples[0].Quality || 0.8
+                    });
+                }
+            } catch (e) {
+                // Ignore parsing errors, keep waiting
+            }
+        };
+
+        // Send the acquire command
+        currentReader.sendDataTxt(JSON.stringify({
+            "Action": "acquire",
+            "Quality": 50,
+            "Timeout": 10000
+        }));
+
+        // Timeout after 15 seconds
+        setTimeout(() => {
+            hideScanProgress();
+            reject(new Error('Scan timeout - please try again'));
+        }, 15000);
+    });
+}
+
+    /**
+     * Show scan progress animation
+     */
+    function showScanProgress() {
+        progressDiv.style.display = 'block';
+        let progress = 0;
+
+        const interval = setInterval(() => {
+            progress += Math.random() * 30;
+            if (progress > 90) progress = 90;
+            progressBar.style.width = progress + '%';
+        }, 500);
+
+        // Store interval ID for cleanup
+        progressDiv.dataset.intervalId = interval;
+    }
+
+    /**
+     * Hide scan progress
+     */
+    function hideScanProgress() {
+        const intervalId = progressDiv.dataset.intervalId;
+        if (intervalId) {
+            clearInterval(intervalId);
+            delete progressDiv.dataset.intervalId;
+        }
+
+        progressBar.style.width = '100%';
+        setTimeout(() => {
+            progressDiv.style.display = 'none';
+            progressBar.style.width = '0%';
+        }, 500);
+    }
+
+    // ===============================================================================
+    // EVENT HANDLERS
+    // ===============================================================================
+
+    /**
+     * Handle scan button click
+     */
+    scanButton.addEventListener('click', async function () {
+        const fingerName = fingerSelect.value;
+
+        if (!fingerName) {
+            showStatus('warning', 'Please select a finger to register.');
+            return;
+        }
+
+        if (!DPSDKInitialized) {
+            showStatus('danger', 'Scanner not initialized. Please check connection.');
+            return;
+        }
+
+        // Check if finger already registered
+        const existingFingers = document.querySelectorAll('.list-group-item');
+        let fingerExists = false;
+
+        existingFingers.forEach(item => {
+            const fingerDisplay = fingerName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            if (item.textContent.includes(fingerDisplay)) {
+                fingerExists = true;
+            }
+        });
+
+        if (fingerExists) {
+            showStatus('warning', 'This finger is already registered. Please select a different finger.');
+            return;
+        }
+
+        scanButton.disabled = true;
+        showStatus('info', 'Place your finger on the scanner and hold steady...');
+
+        try {
+            // Capture fingerprint
+            const result = await captureFingerprint();
+
+            if (!result || !result.template) {
+                throw new Error('Failed to capture fingerprint');
+            }
+
+            showStatus('info', 'Fingerprint captured. Saving to database...');
+
+            // Send to server
+            const response = await fetch("{% url 'capture_fingerprint' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    student_id: studentId,
+                    finger_name: fingerName,
+                    fingerprint_data: result.template,
+                    quality_score: result.quality
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                showStatus('success', `Fingerprint saved successfully! Quality: ${(result.quality * 100).toFixed(0)}%`);
+
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+
+            } else {
+                throw new Error(data.message || 'Failed to save fingerprint');
+            }
+
+        } catch (error) {
+            console.error('Fingerprint capture error:', error);
+            showStatus('danger', `Error: ${error.message}`);
+            scanButton.disabled = false;
+        }
+    });
+
+    /**
+     * Handle finger selection change
+     */
+    fingerSelect.addEventListener('change', function() {
+        if (this.value && DPSDKInitialized) {
+            scanButton.disabled = false;
+        } else {
+            scanButton.disabled = true;
+        }
+    });
+
+    /**
+     * Display status message
+     */
+    function showStatus(type, message) {
+        const alertClass = `alert-${type}`;
+        statusDiv.innerHTML = `
+            <div class="alert ${alertClass} p-2 mb-0">
+                <i class="bi bi-${getStatusIcon(type)} me-2"></i>${message}
+            </div>
+        `;
+    }
+
+    /**
+     * Get appropriate icon for status type
+     */
+    function getStatusIcon(type) {
+        const icons = {
+            success: 'check-circle',
+            danger: 'exclamation-triangle',
+            warning: 'exclamation-triangle',
+            info: 'info-circle'
+        };
+        return icons[type] || 'info-circle';
+    }
+
+    // ===============================================================================
+    // GLOBAL FUNCTIONS (called from HTML)
+    // ===============================================================================
+
+    /**
+     * Test scanner connection
+     */
+    window.testScannerConnection = async function() {
+        showStatus('info', 'Testing scanner connection...');
+        const success = await initializeDigitalPersonaSDK();
+
+        if (success) {
+            showStatus('success', 'Scanner test successful!');
+        } else {
+            showStatus('danger', 'Scanner test failed. Please check connection and drivers.');
+        }
+    };
+
+    /**
+     * Refresh fingerprint list
+     */
+    window.refreshFingerprints = function() {
+        location.reload();
+    };
+
+    /**
+     * Delete fingerprint prompt
+     */
+    window.deleteFingerprintPrompt = function(fingerprintId, fingerName) {
+        document.getElementById('delete-finger-name').textContent = fingerName;
+
+        const confirmBtn = document.getElementById('confirm-delete-btn');
+        confirmBtn.onclick = () => deleteFingerprint(fingerprintId);
+
+        new bootstrap.Modal(document.getElementById('deleteFingerprintModal')).show();
+    };
+
+    /**
+     * Delete fingerprint
+     */
+    async function deleteFingerprint(fingerprintId) {
+        try {
+            const response = await fetch("{% url 'delete_fingerprint' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    fingerprint_id: fingerprintId
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('deleteFingerprintModal')).hide();
+                showStatus('success', 'Fingerprint deleted successfully');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                throw new Error(data.message);
+            }
+
+        } catch (error) {
+            showStatus('danger', `Error deleting fingerprint: ${error.message}`);
+        }
+    }
+
+    // ===============================================================================
+    // INITIALIZATION
+    // ===============================================================================
+
+    // Initialize SDK on page load
+    initializeDigitalPersonaSDK();
+
+});
+</script>
+
+{% endblock %}

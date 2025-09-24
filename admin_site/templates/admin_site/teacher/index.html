@@ -1,0 +1,168 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <a title="Actions" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Actions</h6>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                        <button title="Add Teacher" type="button" style="width:100%" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createTeacherModal">
+                            <i class="bi bi-person-plus"></i> Add Teacher
+                        </button>
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                         <button class="btn btn-sm btn-info text-white" style="width:100%" data-bs-toggle="modal" data-bs-target="#teacherHelperModal">
+                            <i class="bi bi-question-circle"></i> Helper
+                        </button>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">List of Teachers</h5>
+
+            {% include 'admin_site/partials/messages.html' %}
+
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Full Name</th>
+                    <th scope="col">Phone Number</th>
+                    <th scope="col">Gender</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for teacher in teacher_list %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ teacher.full_name|upper }}</td>
+                    <td>{{ teacher.phone_number }}</td>
+                    <td>{{ teacher.get_gender_display }}</td>
+                    <td class="text-center">
+                        <button title="Edit Teacher" type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editTeacherModal{{ forloop.counter }}">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                        <a title="Delete Teacher" href="{% url 'admin_site:teacher_delete' teacher.id %}" class="btn btn-danger btn-sm">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if not teacher_list %}
+                <div class="alert alert-warning text-center">
+                    <h5>No Teachers Found</h5>
+                    <p>You haven't added any teachers yet. Click the "Add Teacher" button to get started.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Teacher Helper Modal -->
+<div class="modal fade" id="teacherHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Teachers Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    This section is for managing all the teachers in your school. You can add new teachers, update their details, or remove them from the system.
+                </p>
+                <div class="alert alert-info">
+                    <strong>Tip:</strong> Teachers created here can be assigned as 'Form Teachers' to specific class sections from the Class Roster page.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Teacher Modal -->
+<div class="modal fade" id="createTeacherModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'admin_site:teacher_create' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Add New Teacher</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating mb-3">
+                        {{ form.full_name }}
+                        <label for="id_full_name">Full Name<span class="text-danger">*</span></label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        {{ form.phone_number }}
+                        <label for="id_phone_number">Phone Number<span class="text-danger">*</span></label>
+                    </div>
+                    <div class="form-floating">
+                        {{ form.gender }}
+                        <label for="id_gender">Gender<span class="text-danger">*</span></label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Teacher</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Teacher Modals -->
+{% for teacher in teacher_list %}
+<div class="modal fade" id="editTeacherModal{{ forloop.counter }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'admin_site:teacher_edit' teacher.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit Teacher: {{ teacher.full_name|truncatechars:20 }}</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating mb-3">
+                        <input type="text" name="full_name" value="{{ teacher.full_name }}" autocomplete="off" required class="form-control" id="id_full_name_{{ forloop.counter }}">
+                        <label for="id_full_name_{{ forloop.counter }}">Full Name<span class="text-danger">*</span></label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input type="text" name="phone_number" value="{{ teacher.phone_number }}" autocomplete="off" required class="form-control" id="id_phone_number_{{ forloop.counter }}">
+                        <label for="id_phone_number_{{ forloop.counter }}">Phone Number<span class="text-danger">*</span></label>
+                    </div>
+                    <div class="form-floating">
+                        <select name="gender" required class="form-select" id="id_gender_{{ forloop.counter }}">
+                            <option value="male" {% if teacher.gender == 'male' %}selected{% endif %}>MALE</option>
+                            <option value="female" {% if teacher.gender == 'female' %}selected{% endif %}>FEMALE</option>
+                        </select>
+                        <label for="id_gender_{{ forloop.counter }}">Gender<span class="text-danger">*</span></label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="pagetitle">
+  <h1>Bulk Fee Payment</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'finance_student_payment_search' %}">Fee Payments</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'finance_student_dashboard' student.pk %}">Dashboard</a></li>
+      <li class="breadcrumb-item active">Bulk Payment</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="row">
+    <!-- Left Column: Instructions & Outstanding Invoices -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Outstanding Invoices for {{ student.student_profile.user.get_full_name|title }}</h5>
+                <div class="alert alert-info">
+                    <p class="mb-0">A bulk payment will be automatically applied to these outstanding invoices, starting with the oldest one first, until the payment amount is fully allocated.</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>Invoice #</th>
+                                <th>Session/Term</th>
+                                <th class="text-end">Balance Due</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for invoice in outstanding_invoices %}
+                            <tr>
+                                <td>{{ invoice.invoice_number }}</td>
+                                <td>{{ invoice.session }} / {{ invoice.term.name|title }}</td>
+                                <td class="text-end text-danger">₦{{ invoice.balance|floatformat:2|intcomma }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center">This student has no outstanding invoices.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Payment Form -->
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Enter Payment Details</h5>
+                <form method="POST">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="{{ form.amount.id_for_label }}" class="form-label">{{ form.amount.label }}</label>
+                            {{ form.amount }}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.payment_mode.id_for_label }}" class="form-label">{{ form.payment_mode.label }}</label>
+                            {{ form.payment_mode }}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.date.id_for_label }}" class="form-label">{{ form.date.label }}</label>
+                            {{ form.date }}
+                        </div>
+                        <div class="col-12">
+                            <label for="{{ form.reference.id_for_label }}" class="form-label">{{ form.reference.label }}</label>
+                            {{ form.reference }}
+                        </div>
+                        <div class="col-12 mt-4">
+                            <button type="submit" class="btn btn-primary w-100" {% if not outstanding_invoices %}disabled{% endif %}>
+                                Allocate Payment
+                            </button>
+                            <a href="{% url 'finance_student_dashboard' student.pk %}" class="btn btn-secondary w-100 mt-2">Cancel</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

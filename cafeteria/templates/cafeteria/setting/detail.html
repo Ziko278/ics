@@ -1,0 +1,56 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Cafeteria Settings</h5>
+                <a href="{% url 'cafeteria_settings_update' %}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-pencil-square"></i> Update Settings
+                </a>
+            </div>
+
+            <p class="card-description mt-2">
+                This is the current global configuration for the cafeteria module.
+            </p>
+
+            <div class="row border-top pt-3 mt-3">
+                <div class="col-lg-5 col-md-5 label fw-bold">System Status</div>
+                <div class="col-lg-7 col-md-7">
+                    {% if setting.is_active %}
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Active</span>
+                    {% else %}
+                        <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i> Disabled</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="row mt-3 border-top pt-3">
+                <div class="col-lg-5 col-md-5 label fw-bold">Max Meals Per Day</div>
+                <div class="col-lg-7 col-md-7">{{ setting.max_meals_per_day }}</div>
+            </div>
+
+            <div class="row mt-3 border-top pt-3">
+                <div class="col-lg-5 col-md-5 label fw-bold">Required Fee for Access</div>
+                <div class="col-lg-7 col-md-7">
+                    {% if setting.cafeteria_fee %}
+                        {{ setting.cafeteria_fee.name|title }}
+                    {% else %}
+                        <span class="text-muted">None specified</span>
+                    {% endif %}
+                </div>
+            </div>
+
+             <div class="row mt-3 border-top pt-3">
+                <div class="col-lg-5 col-md-5 label text-muted">Last Updated By</div>
+                <div class="col-lg-7 col-md-7 text-muted">{{ setting.updated_by.staff_profile.staff.get_full_name|default:"N/A" }}</div>
+            </div>
+             <div class="row mt-2">
+                <div class="col-lg-5 col-md-5 label text-muted">Last Updated At</div>
+                <div class="col-lg-7 col-md-7 text-muted">{{ setting.updated_at|date:"d M, Y, h:i A" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

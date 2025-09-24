@@ -1,0 +1,77 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">School Settings</h5>
+                <a href="{% url 'school_setting_edit' school_setting.pk %}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-pencil-square"></i> Update Settings
+                </a>
+            </div>
+
+            <!-- Academic Settings Section -->
+            <h6 class="card-subtitle mt-4 mb-2 text-muted">Academic Settings</h6>
+            <div class="row border-top pt-3">
+                <div class="col-lg-3 col-md-4 label fw-bold">Current Session</div>
+                <div class="col-lg-9 col-md-8">{{ school_setting.session|default:"Not Set" }}</div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-lg-3 col-md-4 label fw-bold">Current Term</div>
+                <div class="col-lg-9 col-md-8">{{ school_setting.get_term_display|default:"Not Set" }}</div>
+            </div>
+
+            <!-- Financial Settings Section -->
+            <h6 class="card-subtitle mt-4 mb-2 text-muted">Financial Settings</h6>
+            <div class="row border-top pt-3">
+                <div class="col-lg-3 col-md-4 label fw-bold">Allow Student Debt</div>
+                <div class="col-lg-9 col-md-8">
+                    {% if school_setting.allow_student_debt %}
+                        <span class="badge bg-success">Yes</span>
+                    {% else %}
+                        <span class="badge bg-danger">No</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-lg-3 col-md-4 label fw-bold">Max Student Debt</div>
+                <div class="col-lg-9 col-md-8">₦{{ school_setting.max_student_debt|intcomma }}</div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-lg-3 col-md-4 label fw-bold">Low Balance Notification</div>
+                <div class="col-lg-9 col-md-8">
+                    {% if school_setting.auto_low_balance_notification %}
+                        <span class="badge bg-success">Yes</span>
+                    {% else %}
+                        <span class="badge bg-danger">No</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-lg-3 col-md-4 label fw-bold">Low Balance Threshold</div>
+                <div class="col-lg-9 col-md-8">₦{{ school_setting.low_balance|intcomma }}</div>
+            </div>
+
+
+            <!-- Bank Details Section -->
+            <h6 class="card-subtitle mt-4 mb-2 text-muted">Bank Account Details</h6>
+            <div class="row border-top pt-3">
+                <div class="col-lg-3 col-md-4 label fw-bold">Bank Name</div>
+                <div class="col-lg-9 col-md-8">{{ school_setting.bank|default:"Not Set" }}</div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-lg-3 col-md-4 label fw-bold">Account Name</div>
+                <div class="col-lg-9 col-md-8">{{ school_setting.account_name|default:"Not Set" }}</div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-lg-3 col-md-4 label fw-bold">Account Number</div>
+                <div class="col-lg-9 col-md-8">{{ school_setting.account_number|default:"Not Set" }}</div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+{% endblock %}

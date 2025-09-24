@@ -1,0 +1,171 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <a title="Actions" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Actions</h6>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                        <button title="Add Class" type="button" style="width:100%" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createClassModal">
+                            <i class="bi bi-plus-circle"></i> Add Class
+                        </button>
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                         <button class="btn btn-sm btn-info text-white" style="width:100%" data-bs-toggle="modal" data-bs-target="#classHelperModal">
+                            <i class="bi bi-question-circle"></i> Helper
+                        </button>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">List of Classes</h5>
+
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Class Name</th>
+                    <th class="text-center" scope="col">Assigned Sections</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for class in class_list %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ class.name|upper }}</td>
+                    <td class="text-center">
+                        {% for section in class.section.all %}
+                            <span class="badge bg-secondary">{{ section.name|upper }}</span>
+                        {% empty %}
+                            <span class="badge bg-light text-dark">None</span>
+                        {% endfor %}
+                    </td>
+                    <td class="text-center">
+                        <a title="View Class Detail" href="{% url 'class_detail' class.id %}" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i></a>
+                        <button title="Edit Class" type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editClassModal{{ forloop.counter }}"><i class="bi bi-pencil-square"></i></button>
+                        <a title="Delete Class" href="{% url 'class_delete' class.id %}" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if not class_list %}
+                <div class="alert alert-warning text-center">
+                    <h5>No Classes Found</h5>
+                    <p>You haven't added any classes yet. Create class sections first, then add a class here.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Class Helper Modal -->
+<div class="modal fade" id="classHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Classes Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    <strong>What are Classes?</strong><br>
+                    Classes are the main grade levels in your school (e.g., "Primary 1", "JSS 1", "SSS 3").
+                </p>
+                <p>
+                    Each class can be assigned one or more <strong>Sections</strong> (e.g., A, B, C), which you must create beforehand.
+                </p>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Class Modal -->
+<div class="modal fade" id="createClassModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'class_create' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Add New Class</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.name }}
+                                <label for="id_name">Class Name (e.g., JSS 1)<span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="id_sections" class="form-label">Assign Sections</label>
+                            {{ form.section }}
+                            <div class="form-text">Hold Ctrl/Cmd to select multiple sections.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Class</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Class Modals -->
+{% for class_obj in class_list %}
+<div class="modal fade" id="editClassModal{{ forloop.counter }}" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'class_edit' class_obj.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit Class: {{ class_obj.name|upper }}</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                <input type="text" name="name" value="{{ class_obj.name }}" autocomplete="off" required class="form-control" id="id_name_{{ forloop.counter }}">
+                                <label for="id_name_{{ forloop.counter }}">Class Name<span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Assign Sections</label>
+                            <ul style="list-style:none">
+                                {% for section in class_section_list %}
+                                <li><input type="checkbox" name="section" {% if section in class_obj.section.all %} checked {% endif %} value="{{section.id}}" /> {{section|upper}}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}

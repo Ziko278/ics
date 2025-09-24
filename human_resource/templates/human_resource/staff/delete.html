@@ -1,0 +1,30 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Confirm Deletion of Staff</h5>
+
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading">Are you sure you want to delete this staff member?</h4>
+                <p>
+                    You are about to permanently delete the record for: <strong>"{{ staff.first_name|title }} {{ staff.last_name|title }}"</strong>.
+                </p>
+                <hr>
+                <p class="mb-0">
+                    <strong>Warning:</strong> This action cannot be undone. It will permanently remove the staff member's record and their associated user login account.
+                </p>
+            </div>
+
+            <form method="post" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete Permanently</button>
+            </form>
+
+            <a class="btn btn-secondary" href="{% url 'staff_detail' staff.pk %}">Cancel</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

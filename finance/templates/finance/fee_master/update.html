@@ -1,0 +1,78 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-lg-10 offset-lg-1 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Update Fee Structure</h5>
+            <p class="card-description">
+                Use this form to change the core details of the fee structure. To change the prices per term, please use the "Manage Prices" page.
+            </p>
+
+            <form method="POST" class="row g-3">
+                {% csrf_token %}
+
+                <!-- Section 1: Fee & Group Selection -->
+                <div class="col-12 border-bottom pb-3">
+                    <h6 class="card-subtitle mb-3 text-muted">Fee Details</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.fee.id_for_label }}" class="form-label">Fee Type <span class="text-danger">*</span></label>
+                            {{ form.fee }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.group.id_for_label }}" class="form-label">Fee Group <span class="text-danger">*</span></label>
+                            {{ form.group }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Class Assignment -->
+                 <div class="col-12 border-bottom pt-3 pb-3">
+                    <h6 class="card-subtitle mb-2 text-muted">Applicable Classes <span class="text-danger">*</span></h6>
+                    <div class="row" style="max-height: 200px; overflow-y: auto;">
+                        {% for checkbox in form.student_classes %}
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    {{ checkbox.tag }}
+                                    <label for="{{ checkbox.id_for_label }}" class="form-check-label">
+                                        {{ checkbox.choice_label }}
+                                    </label>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                     {% if form.student_classes.errors %}
+                        <div class="invalid-feedback d-block">{{ form.student_classes.errors.0 }}</div>
+                     {% endif %}
+                </div>
+                
+                <!-- Section 3: Section Assignment (Optional) -->
+                <div class="col-12 pt-3">
+                     <h6 class="card-subtitle mb-2 text-muted">Applicable Sections (Optional)</h6>
+                     <p class="card-description small">Leave blank to apply to all sections, or select specific sections to narrow it down.</p>
+                     <div class="row" style="max-height: 200px; overflow-y: auto;">
+                        {% for checkbox in form.class_sections %}
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    {{ checkbox.tag }}
+                                    <label for="{{ checkbox.id_for_label }}" class="form-check-label">
+                                        {{ checkbox.choice_label }}
+                                    </label>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+
+                <div class="text-start mt-3">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="{% url 'finance_fee_master_detail' fee_structure.pk %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

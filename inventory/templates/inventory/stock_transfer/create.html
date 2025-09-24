@@ -1,0 +1,270 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-lg-12">
+    <form method="POST">
+        {% csrf_token %}
+        <div class="row">
+            <!-- Left Column: Batch Details & Item Cart -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">New Stock Transfer</h5>
+                        <p class="card-description">Use this form to move multiple items between the main store and the shop.</p>
+                        
+                        <!-- Step 1: Batch Details Form -->
+                        <div class="row g-3 border-bottom pb-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Direction of Transfer</label>
+                                {{ form.direction }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Date of Transfer</label>
+                                {{ form.transfer_date }}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Notes</label>
+                                {{ form.notes }}
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Add Items to this Batch -->
+                        <h6 class="card-subtitle mb-2 text-muted">Add Items to Transfer</h6>
+                         <div class="p-3 mb-3 bg-light rounded border">
+                            <div class="mb-2">
+                                <label class="form-label">Search Inventory (by Name or Barcode)</label>
+                                <input type="text" class="form-control" id="item-search-input" placeholder="Start typing to search or scan a barcode...">
+                                <div id="search-results" class="list-group mt-1 position-absolute" style="z-index: 1000; width: inherit;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Item Cart -->
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Item</th>
+                                        <th style="width: 20%;">Quantity to Transfer</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transfer-cart-body">
+                                    <!-- JS will populate this area -->
+                                </tbody>
+                            </table>
+                             <div id="cart-empty-msg" class="alert alert-secondary text-center">
+                                The transfer list is empty. Use the search box to find and add items.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Summary & Save -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Summary</h5>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between">
+                                <strong>Items in List:</strong>
+                                <span id="summary-item-count">0</span>
+                            </li>
+                        </ul>
+                         <div class="d-grid gap-2 mt-3">
+                            <button type="submit" class="btn btn-primary">Save Transfer</button>
+                            <a href="{% url 'inventory_stock_transfer_list' %}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Generic Error/Info Modal -->
+<div class="modal fade" id="infoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="infoModalTitle">Notification</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="infoModalMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('item-search-input');
+    const searchResults = document.getElementById('search-results');
+    const cartBody = document.getElementById('transfer-cart-body');
+    const cartEmptyMsg = document.getElementById('cart-empty-msg');
+    const summaryItemCount = document.getElementById('summary-item-count');
+    const directionSelect = document.querySelector('select[name="direction"]');
+    
+    const infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
+    const infoModalTitle = document.getElementById('infoModalTitle');
+    const infoModalMessage = document.getElementById('infoModalMessage');
+    
+    let debounceTimer;
+
+    function showModal(title, message) {
+        infoModalTitle.textContent = title;
+        infoModalMessage.textContent = message;
+        infoModal.show();
+    }
+
+    function updateSummary() {
+        const itemCount = cartBody.querySelectorAll('tr').length;
+        summaryItemCount.textContent = itemCount;
+        cartEmptyMsg.style.display = itemCount === 0 ? 'block' : 'none';
+    }
+
+    function validateQuantity(inputElement) {
+        const maxQty = parseFloat(inputElement.getAttribute('max'));
+        const currentQty = parseFloat(inputElement.value);
+        if (currentQty > maxQty) {
+            showModal('Validation Error', `The quantity cannot exceed the available stock of ${maxQty}.`);
+            inputElement.value = maxQty; // Correct the value
+        }
+    }
+
+    function addToCart(item) {
+        if (cartBody.querySelector(`input[name="item_id"][value="${item.id}"]`)) {
+            showModal('Info', `'${item.name}' is already in the transfer list.`);
+            return;
+        }
+
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+            <td>
+                ${item.name} (${item.unit})
+                <input type="hidden" name="item_id" value="${item.id}">
+                <small class="d-block text-muted" data-store-qty="${item.store_qty}" data-shop-qty="${item.shop_qty}">
+                    Store: ${item.store_qty} | Shop: ${item.shop_qty}
+                </small>
+            </td>
+            <td><input type="number" name="quantity" class="form-control form-control-sm transfer-quantity" value="1" min="0.01" step="0.01"></td>
+            <td class="text-center"><button type="button" class="btn btn-danger btn-sm remove-item"><i class="bi bi-trash"></i></button></td>
+        `;
+        cartBody.appendChild(newRow);
+        updateRowValidation(newRow);
+        updateSummary();
+    }
+
+    function updateRowValidation(row) {
+        const direction = directionSelect.value;
+        const qtyInput = row.querySelector('.transfer-quantity');
+        const storeQty = parseFloat(row.querySelector('small').getAttribute('data-store-qty'));
+        const shopQty = parseFloat(row.querySelector('small').getAttribute('data-shop-qty'));
+
+        if (direction === 'store_to_shop') {
+            qtyInput.setAttribute('max', storeQty);
+        } else { // shop_to_store
+            qtyInput.setAttribute('max', shopQty);
+        }
+        validateQuantity(qtyInput);
+    }
+    
+    directionSelect.addEventListener('change', function() {
+        cartBody.querySelectorAll('tr').forEach(row => updateRowValidation(row));
+    });
+    
+    cartBody.addEventListener('change', function(e) {
+        if(e.target.classList.contains('transfer-quantity')) {
+            validateQuantity(e.target);
+        }
+    });
+
+    searchInput.addEventListener('keyup', function () {
+        clearTimeout(debounceTimer);
+        const query = searchInput.value;
+        if (query.length < 2) { searchResults.innerHTML = ''; return; }
+        debounceTimer = setTimeout(() => {
+            fetch(`{% url 'inventory_transfer_ajax_search' %}?q=${query}`)
+                .then(response => response.json())
+                .then(data => {
+                    let resultsHtml = '';
+                    if (data.items.length > 0) {
+                        data.items.forEach(item => {
+                            resultsHtml += `<a href="#" class="list-group-item list-group-item-action search-result-item" data-item='${JSON.stringify(item)}'><strong>${item.name}</strong> <small class="text-muted">(${item.unit})</small></a>`;
+                        });
+                    } else {
+                        resultsHtml = `<div class="list-group-item">No items found.</div>`;
+                    }
+                    searchResults.innerHTML = resultsHtml;
+                });
+        }, 300);
+    });
+
+    searchResults.addEventListener('click', function (e) {
+        let target = e.target.closest('a.search-result-item');
+        if (target) {
+            e.preventDefault();
+            const itemData = JSON.parse(target.getAttribute('data-item'));
+            addToCart(itemData);
+            searchInput.value = '';
+            searchResults.innerHTML = '';
+        }
+    });
+
+    cartBody.addEventListener('click', function (e) {
+        let removeButton = e.target.closest('button.remove-item');
+        if (removeButton) {
+            removeButton.closest('tr').remove();
+            updateSummary();
+        }
+    });
+    
+    let barcodeScanInput = '';
+    let scanTimer;
+    document.addEventListener('keydown', function (e) {
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            if (document.activeElement.id !== 'item-search-input') return;
+        }
+        if (scanTimer) clearTimeout(scanTimer);
+        if (e.key === 'Enter') {
+            const codeToProcess = (document.activeElement.id === 'item-search-input') ? searchInput.value : barcodeScanInput;
+            if (codeToProcess.length > 3) findItemByBarcode(codeToProcess);
+            barcodeScanInput = ''; e.preventDefault(); return;
+        }
+        if (e.key.length === 1) {
+            if (document.activeElement.id !== 'item-search-input') barcodeScanInput += e.key;
+        }
+        scanTimer = setTimeout(() => {
+            if (barcodeScanInput.length > 3) findItemByBarcode(barcodeScanInput);
+            barcodeScanInput = '';
+        }, 150);
+    });
+
+    function findItemByBarcode(barcode) {
+        fetch(`{% url 'inventory_transfer_ajax_search' %}?q=${barcode}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.items.length === 1) {
+                    addToCart(data.items[0]);
+                    searchInput.value = '';
+                    searchResults.innerHTML = '';
+                } else {
+                    searchInput.value = barcode;
+                    searchInput.dispatchEvent(new Event('keyup'));
+                }
+            });
+    }
+
+    document.addEventListener('click', function(e) {
+        if (!searchResults.contains(e.target) && e.target !== searchInput) {
+            searchResults.innerHTML = '';
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,229 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+{% block 'main' %}
+<section class="section dashboard">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card info-card sales-card">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ academic_info.session }}
+                                <span>| {{ academic_info.term|upper }}</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                                    <i class="bi bi-calendar2-fill"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>{% now "" %}</h6>
+                                    <span class="text small pt-1 fw-bold">Today's Date</span> <span
+                                        class="text-muted small pt-2 ps-1"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card info-card revenue-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Students <span>| Active</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                                    <i class="bi bi-people"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>{{ active_students }}</h6>
+                                    <span class="text-grey small pt-1 fw-bold">No of Students</span> <span
+                                        class="text-muted small pt-2 ps-1"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Products -->
+                <div class="col-md-4">
+                    <div class="card info-card sales-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Products <span>| Total</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-primary text-white">
+                                    <i class="bi bi-box"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>{{ total_products }}</h6>
+                                    <span class="text small pt-1 fw-bold">Total Products</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Low Stock -->
+                <div class="col-md-4">
+                    <div class="card info-card revenue-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Stock Alert <span>| Low Stock</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-warning text-white">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>{{ low_stock }}</h6>
+                                    <span class="text small pt-1 fw-bold">Products Below Reorder Level</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Sales Today -->
+                <div class="col-md-4">
+                    <div class="card info-card customers-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Sales <span>| Today</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-success text-white">
+                                    <i class="bi bi-currency-dollar"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>₦{{ total_sales_today|floatformat:2 }}</h6>
+                                    <span class="text small pt-1 fw-bold">Today's Revenue</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profit Today -->
+                <div class="col-md-4">
+                    <div class="card info-card sales-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Profit <span>| Today</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-info text-white">
+                                    <i class="bi bi-graph-up-arrow"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>₦{{ total_profit_today|floatformat:2 }}</h6>
+                                    <span class="text small pt-1 fw-bold">Net Profit</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Staff Count -->
+                <div class="col-md-4">
+                    <div class="card info-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Staff <span>| Total</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-dark text-white">
+                                    <i class="bi bi-person-badge"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>{{ total_staff }}</h6>
+                                    <span class="text small pt-1 fw-bold">Registered Staff</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Return Count -->
+                <div class="col-md-4">
+                    <div class="card info-card revenue-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Returns <span>| All Time</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-danger text-white">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>{{ total_returns }}</h6>
+                                    <span class="text small pt-1 fw-bold">Total Returns</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Supplier Count -->
+                <div class="col-md-4">
+                    <div class="card info-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Suppliers <span>| Linked</span></h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-secondary text-white">
+                                    <i class="bi bi-truck"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>{{ total_suppliers }}</h6>
+                                    <span class="text small pt-1 fw-bold">Active Suppliers</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body pb-0">
+                            <h5 class="card-title">Student Distribution <span>| </span></h5>
+                            <div class="echart" id="trafficChart" style="min-height: 400px;"></div>
+                            <script>
+                                document.addEventListener("DOMContentLoaded", () => {
+                                  echarts.init(document.querySelector("#trafficChart")).setOption({
+                                    tooltip: {
+                                      trigger: 'item'
+                                    },
+                                    legend: {
+                                      top: '5%',
+                                      left: 'center'
+                                    },
+                                    series: [{
+                                      name: 'Number of Students',
+                                      type: 'pie',
+                                      radius: ['40%', '70%'],
+                                      avoidLabelOverlap: false,
+                                      label: {
+                                        show: false,
+                                        position: 'center'
+                                      },
+                                      emphasis: {
+                                        label: {
+                                          show: true,
+                                          fontSize: '18',
+                                          fontWeight: 'bold'
+                                        }
+                                      },
+                                      labelLine: {
+                                        show: false
+                                      },
+                                      data: [
+                                        {% for record in student_class_list %}
+                                        {
+                                          value: {{ record.number_of_students }},
+                                          name: '{{record|upper}}'
+                                        },
+                                        {% endfor %}
+                                      ]
+                                    }]
+                                  });
+                                });
+                            </script>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+
+    </div>
+</section>
+{% endblock %}

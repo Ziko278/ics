@@ -1,0 +1,106 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <a title="Actions" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Actions</h6>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'staff_create' %}">
+                        <button title="Add New Staff" type="button" style="width:100%" class="btn btn-sm btn-primary">
+                            <i class="bi bi-person-plus"></i> Add New Staff
+                        </button>
+                    </a>
+                </li>
+                 <li>
+                    <a class="dropdown-item" href="#">
+                         <button class="btn btn-sm btn-info text-white" style="width:100%" data-bs-toggle="modal" data-bs-target="#staffHelperModal">
+                            <i class="bi bi-question-circle"></i> Helper
+                        </button>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">Staff List</h5>
+
+            {% include 'admin_site/partials/messages.html' %}
+
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">Staff</th>
+                    <th scope="col">Staff ID</th>
+                    <th scope="col">Group / Role</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for staff in staff_list %}
+                <tr>
+                    <td>
+                        <img {% if staff.image %} src="{{ staff.image.url }}" {% else %} src="https://placehold.co/40x40/EFEFEF/AAAAAA?text={{ staff.first_name|first|upper }}" {% endif %} alt="{{ staff }}" class="rounded-circle me-2" width="40" height="40" style="object-fit: cover;">
+                        {{ staff.first_name|title }} {{ staff.last_name|title }}
+                    </td>
+                    <td>{{ staff.staff_id }}</td>
+                    <td>{{ staff.group.name|title|default:"N/A" }}</td>
+                    <td>
+                        {% if staff.status == 'active' %}
+                            <span class="badge bg-success">{{ staff.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ staff.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <a title="View Detail" href="{% url 'staff_detail' staff.id %}" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i></a>
+                        <a title="Edit Staff" href="{% url 'staff_edit' staff.id %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil-square"></i></a>
+                        <a title="Delete Staff" href="{% url 'staff_delete' staff.id %}" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if not staff_list %}
+                <div class="alert alert-warning text-center">
+                    <h5>No Staff Registered</h5>
+                    <p>There are no staff members in the system yet. Click the "Add New Staff" button to get started.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Staff Helper Modal -->
+<div class="modal fade" id="staffHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Staff Management Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    This page lists all staff members in the system. From here, you can view, edit, or delete their records.
+                </p>
+                <p>
+                    When you <strong>add a new staff member</strong>, a user account with login credentials will be automatically created and emailed to them, allowing them to access the staff portal.
+                </p>
+                 <div class="alert alert-info">
+                    <strong>Tip:</strong> Make sure you have created the necessary <strong>Permission Groups</strong> (like 'Teachers' or 'Admin') before adding staff so you can assign them the correct roles.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

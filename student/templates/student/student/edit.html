@@ -1,0 +1,137 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Edit Student: {{ student.first_name }} {{ student.last_name }}</h5>
+                <a href="{% url 'student_detail' student.pk %}" class="btn btn-secondary btn-sm" title="Back to Student Profile">
+                    <i class="bi bi-arrow-left"></i> Back to Profile
+                </a>
+            </div>
+
+            <!-- Parent Information Header (Read-Only) -->
+            <div class="alert alert-light mt-3">
+                <h6 class="alert-heading">Parent / Guardian:</h6>
+                <div class="d-flex align-items-center">
+                    <img {% if student.parent.image %} src="{{ student.parent.image.url }}" {% else %} src="https://placehold.co/50x50/EFEFEF/AAAAAA?text={{ student.parent.first_name|first|upper }}" {% endif %} alt="Parent" class="rounded-circle me-3" width="50" height="50" style="object-fit: cover;">
+                    <div>
+                        <strong>{{ student.parent.first_name|title }} {{ student.parent.last_name|title }}</strong>
+                        <div class="text-muted small">Parent ID: {{ student.parent.parent_id }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" class="mt-4">
+                {% csrf_token %}
+
+                <!-- Student's Personal Details -->
+                <h6 class="card-subtitle mb-2 text-muted">Student's Personal Details</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.first_name }}
+                            <label for="id_first_name">First Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.last_name }}
+                            <label for="id_last_name">Last Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_gender" class="form-label">Gender<span class="text-danger">*</span></label>
+                        {{ form.gender }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_image" class="form-label">Change Photograph</label>
+                        {{ form.image }}
+                        <div class="form-text">Optional. Upload a new image to replace the current one.</div>
+                        {% if student.image %}
+                           <div class="mt-2">
+                                <img src="{{ student.image.url }}" alt="Current Photo" class="img-thumbnail" style="max-height: 80px;">
+                           </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Academic Details -->
+                <h6 class="card-subtitle mb-2 text-muted">Academic Details</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <label for="id_student_class" class="form-label">Assign to Class<span class="text-danger">*</span></label>
+                        {{ form.student_class }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_class_section" class="form-label">Assign to Section<span class="text-danger">*</span></label>
+                        {{ form.class_section }}
+                    </div>
+                     <div class="col-md-6">
+                        <label for="id_status" class="form-label">Account Status<span class="text-danger">*</span></label>
+                        {{ form.status }}
+                    </div>
+                </div>
+
+                <div class="text-start mt-3">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="{% url 'student_detail' student.pk %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('id_student_class');
+    const sectionSelect = document.getElementById('id_class_section');
+    const currentSectionId = "{{ form.instance.class_section.pk|default:'' }}";
+
+    async function updateSections() {
+        const classId = classSelect.value;
+
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.disabled = true;
+
+        if (!classId) {
+            sectionSelect.innerHTML = '<option value="">-- Select a Class First --</option>';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/get-class-sections/?class_id=${classId}`);
+            if (!response.ok) throw new Error('Failed to fetch sections');
+            const sections = await response.json();
+
+            sectionSelect.innerHTML = '<option value="">-- Select a Section --</option>';
+
+            if (sections.length > 0) {
+                sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section.id;
+                    option.textContent = section.name.toUpperCase();
+                    if (section.id == currentSectionId) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+                sectionSelect.disabled = false;
+            } else {
+                sectionSelect.innerHTML = '<option value="">-- No Sections Available --</option>';
+            }
+        } catch (error) {
+            console.error('Error fetching sections:', error);
+            sectionSelect.innerHTML = '<option value="">-- Error Loading --</option>';
+        }
+    }
+
+    classSelect.addEventListener('change', updateSections);
+
+    // On page load, run the function to populate sections for the pre-selected class
+    updateSections();
+});
+</script>
+
+{% endblock %}

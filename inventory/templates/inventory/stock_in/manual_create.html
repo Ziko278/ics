@@ -1,0 +1,239 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-lg-12">
+    <form method="POST">
+        {% csrf_token %}
+        <div class="row">
+            <!-- Left Column: Batch Details & Item Cart -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">New Manual Stock In</h5>
+                        <p class="card-description">Use this form for non-PO stock additions like donations or adjustments.</p>
+                        
+                        <!-- Step 1: Batch Details Form -->
+                        <div class="row g-3 border-bottom pb-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Source</label>
+                                {{ form.source }}
+                            </div>
+                             <div class="col-md-6">
+                                <label class="form-label">Location to Stock In</label>
+                                {{ form.location }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Supplier (Optional)</label>
+                                {{ form.supplier }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Date Received</label>
+                                {{ form.date_received }}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Notes</label>
+                                {{ form.notes }}
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Add Items to this Batch -->
+                        <h6 class="card-subtitle mb-2 text-muted">Add Items</h6>
+                         <div class="p-3 mb-3 bg-light rounded border">
+                            <div class="mb-2">
+                                <label class="form-label">Search Inventory (by Name or Barcode)</label>
+                                <input type="text" class="form-control" id="item-search-input" placeholder="Start typing to search or scan a barcode...">
+                                <div id="search-results" class="list-group mt-1 position-absolute" style="z-index: 1000; width: inherit;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Item Cart -->
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Item</th>
+                                        <th style="width: 15%;">Quantity</th>
+                                        <th style="width: 20%;">Unit Cost (₦)</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stock-in-cart">
+                                    <!-- JS will populate this area -->
+                                </tbody>
+                            </table>
+                             <div id="cart-empty-msg" class="alert alert-secondary text-center">
+                                The item list is empty. Use the search box to find and add items.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Summary & Save -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Summary</h5>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between">
+                                <strong>Items in List:</strong>
+                                <span id="summary-item-count">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between">
+                                <strong>Total Cost:</strong>
+                                <h5 class="mb-0" id="summary-total-cost">₦0.00</h5>
+                            </li>
+                        </ul>
+                         <div class="d-grid gap-2 mt-3">
+                            <button type="submit" class="btn btn-primary">Save Stock In Batch</button>
+                            <a href="{% url 'inventory_stock_in_list' %}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('item-search-input');
+    const searchResults = document.getElementById('search-results');
+    const cartBody = document.getElementById('stock-in-cart');
+    const cartEmptyMsg = document.getElementById('cart-empty-msg');
+    const summaryItemCount = document.getElementById('summary-item-count');
+    const summaryTotalCost = document.getElementById('summary-total-cost');
+    
+    let debounceTimer;
+
+    // --- Core Functions ---
+    function updateSummary() {
+        let itemCount = 0;
+        let totalCost = 0;
+        const rows = cartBody.querySelectorAll('tr');
+        rows.forEach(row => {
+            itemCount++;
+            const quantity = parseFloat(row.querySelector('input[name="quantity"]').value) || 0;
+            const unitCost = parseFloat(row.querySelector('input[name="unit_cost"]').value) || 0;
+            totalCost += quantity * unitCost;
+        });
+        summaryItemCount.textContent = itemCount;
+        summaryTotalCost.textContent = `₦${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        cartEmptyMsg.style.display = itemCount === 0 ? 'block' : 'none';
+    }
+
+    function addToCart(item) {
+        // Prevent adding the same item twice
+        if (cartBody.querySelector(`input[name="item_id"][value="${item.id}"]`)) {
+            alert(`'${item.name}' is already in the list.`);
+            return;
+        }
+
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+            <td>
+                ${item.name}
+                <input type="hidden" name="item_id" value="${item.id}">
+            </td>
+            <td><input type="number" name="quantity" class="form-control form-control-sm" value="1" min="0.01" step="0.01"></td>
+            <td><input type="number" name="unit_cost" class="form-control form-control-sm" value="${item.last_cost}" min="0" step="0.01"></td>
+            <td class="text-center"><button type="button" class="btn btn-danger btn-sm remove-item"><i class="bi bi-trash"></i></button></td>
+        `;
+        cartBody.appendChild(newRow);
+        updateSummary();
+    }
+
+    // --- Event Listeners ---
+    searchInput.addEventListener('keyup', function () {
+        clearTimeout(debounceTimer);
+        const query = searchInput.value;
+        if (query.length < 2) { searchResults.innerHTML = ''; return; }
+        debounceTimer = setTimeout(() => {
+            fetch(`{% url 'inventory_po_ajax_search' %}?q=${query}`)
+                .then(response => response.json())
+                .then(data => {
+                    let resultsHtml = '';
+                    if (data.items.length > 0) {
+                        data.items.forEach(item => {
+                            resultsHtml += `<a href="#" class="list-group-item list-group-item-action search-result-item" data-item='${JSON.stringify(item)}'><strong>${item.name}</strong> <small class="text-muted">(${item.unit})</small></a>`;
+                        });
+                    } else {
+                        resultsHtml = `<div class="list-group-item">No items found.</div>`;
+                    }
+                    searchResults.innerHTML = resultsHtml;
+                });
+        }, 300);
+    });
+
+    searchResults.addEventListener('click', function (e) {
+        let target = e.target.closest('a.search-result-item');
+        if (target) {
+            e.preventDefault();
+            const itemData = JSON.parse(target.getAttribute('data-item'));
+            addToCart(itemData);
+            searchInput.value = '';
+            searchResults.innerHTML = '';
+        }
+    });
+
+    cartBody.addEventListener('click', function (e) {
+        let removeButton = e.target.closest('button.remove-item');
+        if (removeButton) {
+            removeButton.closest('tr').remove();
+            updateSummary();
+        }
+    });
+
+    cartBody.addEventListener('change', function(e) {
+        if(e.target.name === 'quantity' || e.target.name === 'unit_cost') {
+            updateSummary();
+        }
+    });
+
+    // --- Barcode Scanning ---
+    let barcodeScanInput = '';
+    let scanTimer;
+    document.addEventListener('keydown', function (e) {
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            if (document.activeElement.id !== 'item-search-input') return;
+        }
+        if (scanTimer) clearTimeout(scanTimer);
+        if (e.key === 'Enter') {
+            const codeToProcess = (document.activeElement.id === 'item-search-input') ? searchInput.value : barcodeScanInput;
+            if (codeToProcess.length > 3) findItemByBarcode(codeToProcess);
+            barcodeScanInput = ''; e.preventDefault(); return;
+        }
+        if (e.key.length === 1) {
+            if (document.activeElement.id !== 'item-search-input') barcodeScanInput += e.key;
+        }
+        scanTimer = setTimeout(() => {
+            if (barcodeScanInput.length > 3) findItemByBarcode(barcodeScanInput);
+            barcodeScanInput = '';
+        }, 150);
+    });
+
+    function findItemByBarcode(barcode) {
+        fetch(`{% url 'inventory_po_ajax_search' %}?q=${barcode}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.items.length === 1) {
+                    addToCart(data.items[0]);
+                    searchInput.value = '';
+                    searchResults.innerHTML = '';
+                } else {
+                    searchInput.value = barcode;
+                    searchInput.dispatchEvent(new Event('keyup'));
+                }
+            });
+    }
+
+    // Hide search results when clicking away
+    document.addEventListener('click', function(e) {
+        if (!searchResults.contains(e.target) && e.target !== searchInput) {
+            searchResults.innerHTML = '';
+        }
+    });
+});
+</script>
+{% endblock %}

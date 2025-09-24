@@ -1,0 +1,174 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="pagetitle">
+  <h1>Student Financial Dashboard</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'finance_student_payment_search' %}">Fee Payments</a></li>
+      <li class="breadcrumb-item active">{{ student.student_profile.user.get_full_name|title }}</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="col-lg-12">
+    <div class="card">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="card-title pb-0 mb-1">{{ student.student_profile.user.get_full_name|title }}</h5>
+                <p class="mb-0">
+                    <span class="me-3"><strong>Reg No:</strong> {{ student.registration_number|upper }}</span>
+                    <span><strong>Class:</strong> {{ student.student_class.name }} {{ student.class_section.name }}</span>
+                </p>
+            </div>
+            <div>
+                <a href="{% url 'finance_bulk_payment_create' student.pk %}" class="btn btn-primary">
+                    <i class="bi bi-cash-stack"></i> Make Bulk Payment
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Left Column: Current Invoice & Payment Form -->
+    <div class="col-lg-5">
+        {% if current_invoice %}
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Current Invoice: {{ current_invoice.invoice_number }}</h5>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between"><strong>Invoice Total:</strong> <span>₦{{ current_invoice.total_amount|floatformat:2|intcomma }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between text-success"><strong>Amount Paid:</strong> <span>₦{{ current_invoice.amount_paid|floatformat:2|intcomma }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between text-danger"><strong>Balance Due:</strong> <span class="fw-bold">₦{{ current_invoice.balance|floatformat:2|intcomma }}</span></li>
+                </ul>
+                
+                {% if current_invoice.balance > 0 %}
+                <hr>
+                <h6 class="card-subtitle mb-2 text-muted">Record Payment for this Invoice</h6>
+                <form method="POST" action="{% url 'finance_student_dashboard' student.pk %}" class="row g-3">
+                    {% csrf_token %}
+                    <div class="col-12"><label class="form-label">Amount (₦)</label>{{ form.amount }}<small class="form-text text-muted">{{ form.amount.help_text }}</small></div>
+                    <div class="col-md-6"><label class="form-label">Payment Mode</label>{{ form.payment_mode }}</div>
+                    <div class="col-md-6"><label class="form-label">Payment Date</label>{{ form.date }}</div>
+                    <div class="col-12"><label class="form-label">Reference</label>{{ form.reference }}</div>
+                    <div class="col-12"><button type="submit" class="btn btn-primary w-100">Save Payment</button></div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body">
+                 <div class="alert alert-warning text-center mt-3">
+                    <h6 class="alert-heading">No Invoice Found</h6>
+                    <p>There is no invoice generated for this student for the current academic term.</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: History Tabs -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-body">
+                <ul class="nav nav-tabs nav-tabs-bordered">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#invoice-history">Invoice History</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payment-history">Full Payment History</button></li>
+                </ul>
+                <div class="tab-content pt-2">
+                    <!-- Invoice History Tab -->
+                    <div class="tab-pane fade show active" id="invoice-history">
+                        <h5 class="card-title">All Previous Invoices</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-sm">
+                                <thead><tr><th>Invoice #</th><th>Session/Term</th><th class="text-end">Balance</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    {% for invoice in invoice_history %}
+                                    <tr>
+                                        <td><a href="{% url 'finance_invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></td>
+                                        <td>{{ invoice.session }} / {{ invoice.term.name|title }}</td>
+                                        <td class="text-end {% if invoice.balance > 0 %}text-danger{% endif %}">₦{{ invoice.balance|floatformat:2|intcomma }}</td>
+                                        <td><span class="badge {% if invoice.status == 'paid' %}bg-success{% elif invoice.status == 'partially_paid' %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ invoice.get_status_display }}</span></td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="4" class="text-center">No past invoices found.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Payment History Tab -->
+                    <div class="tab-pane fade" id="payment-history">
+                         <h5 class="card-title">Complete Payment Log</h5>
+                         <div class="table-responsive">
+                            <table class="table table-striped table-sm">
+                                <thead><tr><th>Date</th><th class="text-end">Amount</th><th>Invoice #</th><th>Status</th><th>Action</th></tr></thead>
+                                <tbody>
+                                    {% for payment in all_payments %}
+                                    <tr>
+                                        <td>{{ payment.date|date:"d M, Y" }}</td>
+                                        <td class="text-end">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                                        <td><a href="{% url 'finance_invoice_detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a></td>
+                                        <td>
+                                            {% if payment.status == 'confirmed' %}<span class="badge bg-success">{{ payment.get_status_display }}</span>
+                                            {% else %}<span class="badge bg-warning text-dark">{{ payment.get_status_display }}</span>{% endif %}
+                                        </td>
+                                        <td>
+                                            {% if payment.status == 'confirmed' %}
+                                            <a href="{% url 'finance_fee_payment_receipt' payment.pk %}" class="btn btn-outline-info btn-sm" target="_blank" title="Print Receipt"><i class="bi bi-printer"></i></a>
+                                            <button type="button" class="btn btn-outline-danger btn-sm confirm-action" 
+                                                    data-bs-toggle="modal" data-bs-target="#confirmationModal" 
+                                                    data-action="{% url 'finance_fee_payment_revert' payment.pk %}"
+                                                    data-message="Are you sure you want to revert this payment? This action cannot be undone."
+                                                    title="Revert Payment"><i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="5" class="text-center">No payments have been recorded for this student.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generic Confirmation Modal -->
+<div class="modal fade" id="confirmationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Confirm Action</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body"><p id="confirmationMessage">Are you sure?</p></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="confirmationForm" method="POST" action=""><{% csrf_token %}<button type="submit" class="btn btn-primary">Confirm</button></form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const confirmationModal = document.getElementById('confirmationModal');
+    if (confirmationModal) {
+        const form = document.getElementById('confirmationForm');
+        const message = document.getElementById('confirmationMessage');
+        confirmationModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            form.action = button.getAttribute('data-action');
+            message.textContent = button.getAttribute('data-message');
+        });
+    }
+});
+</script>
+{% endblock %}

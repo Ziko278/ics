@@ -1,0 +1,168 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <a title="Add Category" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Action</h6>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#">
+                        <button title="Add Category" type="button" style="width:100%" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createCategoryModal">
+                            Add Category
+                        </button>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <h5 class="card-title">Expense Categories</h5>
+            {% include 'admin_site/partials/error.html' %}
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Category Name</th>
+                    <th scope="col">Description</th>
+                    <th scope="col" class="text-center">Active</th>
+                    <th scope="col">Created At</th>
+                    <th scope="col">Created By</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for category in category_list %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ category.name|title }}</td>
+                    <td>{{ category.description|default:"-"|truncatechars:80 }}</td>
+                    <td class="text-center">
+                        {% if category.is_active %}
+                            <span class="badge bg-success">Yes</span>
+                        {% else %}
+                            <span class="badge bg-secondary">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ category.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>{{ category.created_by.get_full_name|default:category.created_by.username if category.created_by else "—" }}</td>
+                    <td class="text-center">
+                        <button title="Edit Category" type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#editCategoryModal{{ category.id }}">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                        <a title="Delete Category" href="{% url 'expense_category_delete' category.id %}" class="btn btn-danger">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if not category_list %}
+                 <h3 class="text-center py-5 text-muted">No Expense Categories Added Yet</h3>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Create Category Modal -->
+<form method="POST" action="{% url 'expense_category_create' %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="modal fade" id="createCategoryModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Add Expense Category</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Name -->
+                    <div class="mb-3 form-floating">
+                        {{ form.name }}
+                        <label for="{{ form.name.id_for_label }}">Category Name <span class="text-danger">*</span></label>
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.name.errors|striptags }}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Description -->
+                    <div class="mb-3 form-floating">
+                        {{ form.description }}
+                        <label for="{{ form.description.id_for_label }}">Description</label>
+                        {% if form.description.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.description.errors|striptags }}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Is Active -->
+                    <div class="form-check">
+                        {{ form.is_active }}
+                        <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+                        {% if form.is_active.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.is_active.errors|striptags }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Category</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Edit Category Modals -->
+{% for category in category_list %}
+<form method="POST" action="{% url 'expense_category_update' category.id %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="modal fade" id="editCategoryModal{{ category.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit Expense Category</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Name -->
+                    <div class="mb-3 form-floating">
+                        <input type="text" name="name" value="{{ category.name }}" autocomplete="off" required class="form-control" id="id_name_{{ category.id }}">
+                        <label for="id_name_{{ category.id }}">Category Name <span class="text-danger">*</span></label>
+                    </div>
+
+                    <!-- Description -->
+                    <div class="mb-3 form-floating">
+                        <textarea name="description" class="form-control" id="id_description_{{ category.id }}" rows="3">{{ category.description }}</textarea>
+                        <label for="id_description_{{ category.id }}">Description</label>
+                    </div>
+
+                    <!-- Is Active -->
+                    <div class="form-check">
+                        <input type="checkbox" name="is_active" class="form-check-input" id="id_is_active_{{ category.id }}" {% if category.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="id_is_active_{{ category.id }}">Active</label>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endfor %}
+
+{% endblock %}

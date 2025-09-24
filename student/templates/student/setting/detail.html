@@ -1,0 +1,72 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Student & Parent Settings</h5>
+                {% if student_setting %}
+                    <a href="{% url 'setting_edit' %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-pencil-square"></i> Update Settings
+                    </a>
+                {% endif %}
+            </div>
+
+            {% if student_setting %}
+                <p class="card-description mt-2">
+                    This is the current configuration for generating Student and Parent IDs.
+                </p>
+
+                <!-- Student ID Settings -->
+                <h6 class="card-subtitle mt-4 mb-2 text-muted">Student ID Settings</h6>
+                <div class="row border-top pt-3">
+                    <div class="col-lg-4 col-md-5 label fw-bold">Auto-generate Student ID</div>
+                    <div class="col-lg-8 col-md-7">
+                        {% if student_setting.auto_generate_student_id %}
+                            <span class="badge bg-success">Yes, Enabled</span>
+                        {% else %}
+                            <span class="badge bg-danger">No, Disabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-lg-4 col-md-5 label fw-bold">Student ID Prefix</div>
+                    <div class="col-lg-8 col-md-7">{{ student_setting.student_prefix|default:"Not Set" }}</div>
+                </div>
+
+                <!-- Parent ID Settings -->
+                <h6 class="card-subtitle mt-4 mb-2 text-muted">Parent ID Settings</h6>
+                <div class="row border-top pt-3">
+                    <div class="col-lg-4 col-md-5 label fw-bold">Auto-generate Parent ID</div>
+                    <div class="col-lg-8 col-md-7">
+                        {% if student_setting.auto_generate_parent_id %}
+                            <span class="badge bg-success">Yes, Enabled</span>
+                        {% else %}
+                            <span class="badge bg-danger">No, Disabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-lg-4 col-md-5 label fw-bold">Parent ID Prefix</div>
+                    <div class="col-lg-8 col-md-7">{{ student_setting.parent_prefix|default:"Not Set" }}</div>
+                </div>
+
+            {% else %}
+                <div class="alert alert-warning text-center mt-4">
+                    <h4 class="alert-heading">Student Settings Not Found!</h4>
+                    <p>
+                        The Student and Parent settings have not been configured yet. These settings are required before you can register new students or parents.
+                    </p>
+                    <hr>
+                    <a href="{% url 'setting_create' %}" class="btn btn-primary">
+                        Configure Settings Now
+                    </a>
+                </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+{% endblock %}

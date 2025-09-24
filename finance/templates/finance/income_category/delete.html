@@ -1,0 +1,43 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Delete Income Category</h4>
+
+            <p>
+                Are you sure you want to permanently delete the category:
+                <strong>{{ category.name|title }}</strong>?
+            </p>
+
+            {% if category.description %}
+            <p><strong>Description:</strong> {{ category.description|default:"—" }}</p>
+            {% endif %}
+
+            <p>
+                <small class="text-muted">
+                    Created at: {{ category.created_at|date:"Y-m-d H:i" }}
+                    {% if category.created_by %}
+                        — by {{ category.created_by.get_full_name|default:category.created_by.username }}
+                    {% endif %}
+                </small>
+            </p>
+
+            <div class="alert alert-warning">
+                <strong>Warning:</strong>
+                This action cannot be undone. Deleting this category may affect historical income records associated with it.
+            </div>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Proceed with Deletion</button>
+            </form>
+
+            <a class="btn btn-secondary" href="{% url 'income_category_index' %}">Cancel</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

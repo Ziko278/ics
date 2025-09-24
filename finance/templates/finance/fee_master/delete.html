@@ -1,0 +1,39 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Fee Structure</h4>
+            
+            <p>You are about to permanently delete the following fee structure:</p>
+            <h5 class="text-center my-3"><em>"{{ object }}"</em></h5>
+
+            {% if object.items.exists %}
+                 <div class="alert alert-danger">
+                    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Deletion Not Allowed</h6>
+                    <p>
+                        This fee structure cannot be deleted because it has already been used to generate invoices for students.
+                    </p>
+                    <hr>
+                    <p class="mb-0">
+                        Deleting it would corrupt your historical financial records. If this fee structure is no longer in use, you should create a new one for the upcoming session instead of deleting this one.
+                    </p>
+                </div>
+            {% else %}
+                <div class="alert alert-warning">
+                    <strong>Warning:</strong> This action is permanent and cannot be undone. It will delete this fee structure and all of its associated termly price settings.
+                </div>
+            {% endif %}
+            
+            <p>Are you sure you want to proceed?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger" {% if object.items.exists %}disabled{% endif %}>Yes, Delete</button>
+                <a class="btn btn-secondary" href="{% url 'finance_fee_master_list' %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

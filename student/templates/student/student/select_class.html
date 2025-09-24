@@ -1,0 +1,93 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">View Students by Class</h5>
+            <p class="card-description">
+                Please select a class and a section to view the list of enrolled students.
+            </p>
+
+            <form method="GET" action="{% url 'student_index' %}" class="mt-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="id_student_class" class="form-label">Select a Class <span class="text-danger">*</span></label>
+                        <select class="form-select" id="id_student_class" name="class" required>
+                            <option value="">---------</option>
+                            {% for class in class_list %}
+                                <option value="{{ class.id }}">
+                                    {{ class.name|upper }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="id_class_section" class="form-label">Select Section <span class="text-danger">*</span></label>
+                        <select class="form-select" id="id_class_section" name="section" required disabled>
+                            <option value="">-- Select a Class First --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="text-start mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-people-fill"></i> View Student List
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('id_student_class');
+    const sectionSelect = document.getElementById('id_class_section');
+
+    classSelect.addEventListener('change', async function() {
+        const classId = this.value;
+
+        // Reset and disable the section dropdown
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.disabled = true;
+
+        if (!classId) {
+            sectionSelect.innerHTML = '<option value="">-- Select a Class First --</option>';
+            return;
+        }
+
+        try {
+            // Fetch the sections for the selected class from our API endpoint
+            const response = await fetch(`/admin/student/api/get-class-sections/?class_id=${classId}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch sections');
+            }
+            const sections = await response.json();
+
+            // Clear the dropdown again before populating
+            sectionSelect.innerHTML = '<option value="">-- Select a Section --</option>';
+
+            if (sections.length > 0) {
+                sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section.id;
+                    option.textContent = section.name.toUpperCase();
+                    sectionSelect.appendChild(option);
+                });
+                // Enable the dropdown only if there are sections
+                sectionSelect.disabled = false;
+            } else {
+                sectionSelect.innerHTML = '<option value="">-- No Sections Available --</option>';
+            }
+        } catch (error) {
+            console.error('Error fetching sections:', error);
+            sectionSelect.innerHTML = '<option value="">-- Error Loading Sections --</option>';
+        }
+    });
+});
+</script>
+
+{% endblock %}
+

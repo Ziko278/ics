@@ -1,0 +1,27 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+<style>
+    a {
+        color:white;
+    }
+</style>
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="card-body">
+            <h5 class="card-title">Activity Log for {{ session }} Session {{ term }}</h5>
+
+                {% for activity in activity_log_list %}
+            <div class="p-1 mb-2">
+                    {{ activity.log|safe }}
+                 </div>
+                {% empty %}
+                    <p class="card-description text-center">No Recorded Activity Yet</p>
+                {% endfor %}
+        </div>
+    </div>
+</div>
+
+
+
+{% endblock %}

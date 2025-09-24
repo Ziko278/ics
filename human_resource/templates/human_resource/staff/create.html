@@ -1,0 +1,83 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">New Staff Registration</h5>
+                <a href="{% url 'staff_index' %}" class="btn btn-secondary btn-sm" title="Back to List">
+                    <i class="bi bi-arrow-left"></i> Back to Staff List
+                </a>
+            </div>
+
+            <p class="card-description mt-2">
+                Fill out the form below to register a new staff member. An account with login credentials will be automatically created and emailed to them.
+            </p>
+
+
+            <form method="POST" enctype="multipart/form-data" class="mt-4">
+                {% csrf_token %}
+
+                <!-- Personal Details Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Personal Details</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.first_name }}
+                            <label for="id_first_name">First Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.last_name }}
+                            <label for="id_last_name">Last Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_gender" class="form-label">Gender<span class="text-danger">*</span></label>
+                        {{ form.gender }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_image" class="form-label">Profile Image</label>
+                        {{ form.image }}
+                        <div class="form-text">Optional. Max file size: 2MB (JPEG, PNG).</div>
+                    </div>
+                </div>
+
+                <!-- Contact & Account Details Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Contact & Account Details</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.email }}
+                            <label for="id_email">Email Address<span class="text-danger">*</span></label>
+                        </div>
+                        <div class="form-text">Login credentials will be sent to this email.</div>
+                    </div>
+                     <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.mobile }}
+                            <label for="id_mobile">Mobile Number<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_group" class="form-label">Permission Group / Role<span class="text-danger">*</span></label>
+                        {{ form.group }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_status" class="form-label">Initial Status<span class="text-danger">*</span></label>
+                        {{ form.status }}
+                    </div>
+                </div>
+
+                <div class="text-start mt-3">
+                    <button type="submit" class="btn btn-primary">Register Staff</button>
+                    <a href="{% url 'staff_index' %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

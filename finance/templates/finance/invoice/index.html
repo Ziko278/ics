@@ -1,0 +1,133 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-12">
+    <div class="card overflow-auto">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title">Student Invoices</h5>
+                <a href="{% url 'finance_invoice_generate' %}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-receipt-cutoff"></i> Generate New Invoices
+                </a>
+            </div>
+            <p class="card-description">
+                View and manage all student invoices for the selected period.
+            </p>
+
+            <!-- Filter and Search Form -->
+            <form method="GET" action="{% url 'finance_invoice_list' %}">
+                <div class="row g-3 align-items-center mb-3 p-3 border rounded bg-light">
+                    <div class="col-xl-3 col-md-6">
+                        <label class="form-label">Search Student/Invoice #</label>
+                        <input type="text" class="form-control form-control-sm" name="q" value="{{ search_query }}">
+                    </div>
+                    <div class="col-xl-3 col-md-6">
+                        <label class="form-label">Session</label>
+                        <select name="session" class="form-select form-select-sm" onchange="this.form.submit()">
+                            {% for session in sessions %}
+                            <option value="{{ session.pk }}" {% if selected_session.pk == session.pk %}selected{% endif %}>
+                                {{ session }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-xl-2 col-md-6">
+                        <label class="form-label">Term</label>
+                        <select name="term" class="form-select form-select-sm" onchange="this.form.submit()">
+                            {% for term in terms %}
+                            <option value="{{ term.pk }}" {% if selected_term.pk == term.pk %}selected{% endif %}>
+                                {{ term.name|title }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-xl-2 col-md-6">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="">All Statuses</option>
+                             {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-xl-2 col-md-12 d-flex align-items-end">
+                        <button class="btn btn-sm btn-secondary w-100" type="submit">Filter</button>
+                    </div>
+                </div>
+            </form>
+
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Student</th>
+                    <th>Class</th>
+                    <th>Total Amount</th>
+                    <th>Amount Paid</th>
+                    <th>Balance Due</th>
+                    <th>Status</th>
+                    <th class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <th scope="row"><a href="{% url 'finance_invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></th>
+                    <td>{{ invoice.student.student_profile.user.get_full_name|title }}</td>
+                    <td>{{ invoice.student.student_class.name }}</td>
+                    <td>₦{{ invoice.total_amount|floatformat:2|intcomma }}</td>
+                    <td>₦{{ invoice.amount_paid|floatformat:2|intcomma }}</td>
+                    <td>
+                        {% if invoice.balance > 0 %}
+                            <strong class="text-danger">₦{{ invoice.balance|floatformat:2|intcomma }}</strong>
+                        {% else %}
+                            <strong class="text-success">₦0.00</strong>
+                        {% endif %}
+                    </td>
+                    <td>
+                         <span class="badge 
+                            {% if invoice.status == 'paid' %}bg-success
+                            {% elif invoice.status == 'partially_paid' %}bg-warning text-dark
+                            {% else %}bg-danger{% endif %}">
+                            {{ invoice.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <a title="Manage Payments" href="{% url 'finance_invoice_detail' invoice.pk %}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-wallet2"></i> Manage
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="alert alert-secondary text-center" role="alert">
+                           No invoices found for the selected criteria.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Pagination Controls -->
+            {% if is_paginated %}
+            <nav aria-label="Page navigation">
+              <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                  <li class="page-item"><a class="page-link" href="?page=1&q={{ search_query }}&session={{ selected_session.pk }}&term={{ selected_term.pk }}&status={{ selected_status }}">&laquo;</a></li>
+                {% endif %}
+                <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+                {% if page_obj.has_next %}
+                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&session={{ selected_session.pk }}&term={{ selected_term.pk }}&status={{ selected_status }}">&raquo;</a></li>
+                {% endif %}
+              </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

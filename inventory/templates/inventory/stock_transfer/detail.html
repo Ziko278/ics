@@ -1,0 +1,62 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="pagetitle">
+  <h1>Stock Transfer Details</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'inventory_stock_transfer_list' %}">Stock Transfers</a></li>
+      <li class="breadcrumb-item active">{{ batch.receipt_number }}</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="col-lg-10 offset-lg-1 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                 <h5 class="card-title">Details for Transfer #{{ batch.receipt_number }}</h5>
+                 <a href="{% url 'inventory_stock_transfer_list' %}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back to List</a>
+            </div>
+
+            <!-- Batch Header Information -->
+            <div class="row border-top pt-3 mb-3">
+                <div class="col-md-6">
+                    <p class="mb-2"><strong>Date of Transfer:</strong> {{ batch.transfer_date|date:"d M, Y" }}</p>
+                    <p class="mb-2"><strong>Direction:</strong> {{ batch.get_direction_display }}</p>
+                </div>
+                <div class="col-md-6">
+                     <p class="mb-2"><strong>Session/Term:</strong> {{ batch.session }} / {{ batch.term|title }}</p>
+                     <p class="mb-2"><strong>Recorded By:</strong> {{ batch.created_by.staff_profile.staff|title|default:"---" }}</p>
+                </div>
+                 <div class="col-12 mt-2">
+                    <p class="mb-2"><strong>Notes:</strong> {{ batch.notes|default:"---" }}</p>
+                </div>
+            </div>
+
+            <!-- Items in this Batch -->
+            <h6 class="card-subtitle mb-2 text-muted">Items in this Transfer</h6>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Item Name</th>
+                            <th class="text-end">Quantity Transferred</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in batch.items.all %}
+                        <tr>
+                            <td><a href="{% url 'inventory_item_detail' item.item.pk %}">{{ item.item.name|title }}</a></td>
+                            <td class="text-end">{{ item.quantity|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

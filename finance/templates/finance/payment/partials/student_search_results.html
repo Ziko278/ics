@@ -1,0 +1,7 @@
+{% for student in students %}
+<li class="list-group-item list-group-item-action select-student" style="cursor: pointer;" data-student-id="{{ student.pk }}">
+    {{ student.student_profile.user.get_full_name|title }} ({{ student.registration_number }})
+</li>
+{% empty %}
+<li class="list-group-item list-group-item-danger">No students found.</li>
+{% endfor %}

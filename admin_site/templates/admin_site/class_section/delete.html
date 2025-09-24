@@ -1,0 +1,30 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Confirm Deletion</h5>
+
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading">Are you sure you want to delete this class section?</h4>
+                <p>
+                    You are about to permanently delete the class section: <strong>"{{ object.name|upper }}"</strong>.
+                </p>
+                <hr>
+                <p class="mb-0">
+                    <strong>Warning:</strong> This action cannot be undone. Deleting this section may affect existing class rosters and student records associated with it. Please be certain before proceeding.
+                </p>
+            </div>
+
+            <form method="post" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete Permanently</button>
+            </form>
+
+            <a class="btn btn-secondary" href="{% url 'class_section_index' %}">Cancel</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

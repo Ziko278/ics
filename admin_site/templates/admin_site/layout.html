@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+    <title>{{site_info.title|title}}</title>
+    <meta content="" name="description">
+    <meta content="" name="keywords">
+
+    <!-- Favicons -->
+    <link href="{{ school_info.logo.url }}" rel="icon">
+    <link href="{{ school_info.logo.url }}" rel="apple-touch-icon">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i"
+          rel="stylesheet">
+
+    <!-- Vendor CSS Files -->
+    <link href="{% static 'admin_site/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+    <link href="{% static 'admin_site/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+    <link href="{% static 'admin_site/vendor/boxicons/css/boxicons.min.css' %}" rel="stylesheet">
+    <link href="{% static 'admin_site/vendor/quill/quill.snow.css' %}" rel="stylesheet">
+    <link href="{% static 'admin_site/vendor/quill/quill.bubble.css' %}" rel="stylesheet">
+    <link href="{% static 'admin_site/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
+    <link href="{% static 'admin_site/vendor/simple-datatables/style.css' %}" rel="stylesheet">
+
+    <!-- Template Main CSS File -->
+    <link href="{% static 'admin_site/styles/style.css' %}" rel="stylesheet">
+
+    <!-- =======================================================
+    * Template Name: NiceAdmin - v2.2.2
+    * Template URL: https://bootstrapmade.com/nice-admin-bootstrap-admin-html-template/
+    * Author: BootstrapMade.com
+    * License: https://bootstrapmade.com/license/
+    ======================================================== -->
+    <style>
+        @media print {
+          .non-printable {
+            display: none !important;
+          }
+        }
+    </style>
+</head>
+
+<body>
+<style>
+    .nav-link {
+      height:35px
+    }
+
+
+</style>
+<!-- ======= Header ======= -->
+<header class="header non-printable fixed-top d-flex align-items-center" id="header">
+
+    <div class="d-flex align-items-center justify-content-between">
+        <a class="logo d-flex align-items-center" href="% url 'admin_dashboard' %}">
+            <!--        <img src="/media/{{ site_info.logo }}" alt="" style="width:100px;height:100px">-->
+            <span class="d-none d-lg-block">{{ school_info|upper }}</span>
+        </a>
+        <i class="bi bi-list toggle-sidebar-btn"></i>
+    </div><!-- End Logo -->
+
+    <nav class="header-nav ms-auto">
+        <ul class="d-flex align-items-center">
+            <li class="nav-item dropdown">
+
+          <a class="nav-link nav-icon" href="#" data-bs-toggle="dropdown">
+            <i class="bi bi-bell"></i>
+            <span class="badge bg-primary badge-number">{{ low_stock }}</span>
+          </a><!-- End Notification Icon -->
+
+          <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow notifications">
+            <li class="dropdown-header">
+              {% if low_stock %}
+                {{ low_stock }} Product{{low_stock|pluralize}} {% if low_stock == 1 %} is {% else %} are {% endif %} running low
+                {% else %}
+                No Product is running low
+                {% endif %}
+                {% if 'inventory.add_stockinmodel' in perms  %}
+              <a href="% url 'product_stock_in' %}"><span class="badge rounded-pill bg-primary p-2 ms-2">Stock Now</span></a>
+                {% endif %}
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+              {% for low_stock in low_stock_list %}
+            <li class="notification-item">
+              <i class="bi bi-exclamation-circle text-warning"></i>
+              <div>
+                <h4>{{low_stock|title}}</h4>
+                <p>Only {{low_stock.quantity}} unit{{low_stock.quantity|pluralize}} left</p>
+              </div>
+            </li>
+
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+              {% endfor %}
+
+          </ul><!-- End Notification Dropdown Items -->
+
+        </li><!-- End Notification Nav -->
+
+            <li class="nav-item dropdown pe-3">
+
+                <a class="nav-link nav-profile d-flex align-items-center pe-0" data-bs-toggle="dropdown" href="#">
+                    {% if user.is_superuser %}
+                    <img alt="Profile" class="rounded-circle" src="{{ school_info.logo.url }}">
+                    {% else %}
+                    {% if user.profile.staff.image %}
+                    <img alt="Profile" class="rounded-circle" src="{{user.profile.staff.image.url}}">
+                    {% else %}
+                    <img alt="Profile" class="rounded-circle" src="{% static 'admin_site/images/default_image.jpg' %}">
+                    {% endif %}
+                    {% endif %}
+
+                </a><!-- End Profile Image Icon -->
+
+                <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
+                    <li class="dropdown-header">
+                        <h6 class="card-title">{{ user.username|upper}}</h6>
+                        <span>{% if user.is_superuser %} SuperAdmin {% else %} {{ user.profile.staff|title }} {% endif %}</span>
+                    </li>
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center" href="#">
+                            <i class="bi bi-gear"></i>
+                            <span>Change Password</span>
+                        </a>
+                    </li>
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center" href="% url 'logout' %}">
+                            <i class="bi bi-box-arrow-right"></i>
+                            <span>Sign Out</span>
+                        </a>
+                    </li>
+
+                </ul><!-- End Profile Dropdown Items -->
+            </li><!-- End Profile Nav -->
+
+        </ul>
+    </nav><!-- End Icons Navigation -->
+
+</header><!-- End Header -->
+
+<!-- ======= Sidebar ======= -->
+<aside class="sidebar non-printable" id="sidebar" style="">
+
+    <ul class="sidebar-nav" id="sidebar-nav">
+
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin_dashboard' %}">
+                <i class="bi bi-grid"></i>
+                <span>Dashboard</span>
+            </a>
+        </li>
+        {% if 'inventory.add_salemodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'place_order' %}">
+                <i class="bi bi-cart-plus"></i>
+                <span>Place Order</span>
+            </a>
+        </li>
+        {% endif %}
+
+        {% if 'inventory.add_salemodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'cafeteria_collection_live' %}">
+                <i class="bi bi-cart-plus"></i>
+                <span>Cafeteria Order</span>
+            </a>
+        </li>
+        {% endif %}
+
+        {% if 'inventory.view_salemodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'view_orders' %}">
+                <i class="bi bi-card-list"></i>
+                <span>View Order</span>
+            </a>
+        </li>
+        {% endif %}
+
+
+        {% if 'student.add_studentmodel' in perms or 'student.view_studentmodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#stud" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-journal-bookmark-fill"></i><span>STUDENT</span><i
+                    class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="stud">
+                {% if 'student.add_studentmodel' in perms  %}
+                <li>
+                    <a href="{% url 'select_parent' %}">
+                        <i class="bi bi-circle"></i><span>Register Student</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'student.view_studentmodel' in perms  %}
+                <li>
+                    <a href="{% url 'student_index' %}">
+                        <i class="bi bi-circle"></i><span>View Students</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'student_select_class' %}">
+                        <i class="bi bi-circle"></i><span>Class Students</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'parent_create' %}">
+                        <i class="bi bi-circle"></i><span>Add Parent</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'parent_index' %}">
+                        <i class="bi bi-circle"></i><span>View Parents</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'setting_detail' %}">
+                        <i class="bi bi-circle"></i><span>Setting</span>
+                    </a>
+                </li>
+                {% endif %}
+
+            </ul>
+        </li>
+        {% endif %}
+
+        {% if 'inventory.add_stockinmodel' in perms or 'inventory.view_productmodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#acad" data-bs-toggle="collapse" href="#">
+                <i class="ri-book-mark-fill"></i><span>INVENTORY</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="acad">
+
+                {% if 'inventory.add_stockinmodel' in perms  %}
+                <li>
+                    <a href="{% url 'inventory_manual_stock_in_create' %}">
+                        <i class="bi bi-circle"></i><span>Stock In</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'inventory_stock_transfer_list' %}">
+                        <i class="bi bi-circle"></i><span>Stock Transfers</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'inventory.view_stockinmodel' in perms  %}
+                <li>
+                    <a href="{% url 'inventory_stock_in_list' %}">
+                        <i class="bi bi-circle"></i><span>View Stock In</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'inventory_stock_out_list' %}">
+                        <i class="bi bi-circle"></i><span>View Stock Outs</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'inventory.view_productmodel' in perms  %}
+                <li>
+                    <a href="{% url 'inventory_po_list' %}">
+                        <i class="bi bi-circle"></i><span>Purchase Orders</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'inventory_advance_list' %}">
+                        <i class="bi bi-circle"></i><span>Purchase Advances</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'inventory_item_list' %}">
+                        <i class="bi bi-circle"></i><span>Product</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'inventory_category_list' %}">
+                        <i class="bi bi-circle"></i><span>Category</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'inventory_supplier_list' %}">
+                        <i class="bi bi-circle"></i><span>Suppliers</span>
+                    </a>
+                </li>
+                {% endif %}
+
+
+            </ul>
+        </li>
+        {% endif %}
+
+
+        {% if 'admin_site.add_classesmodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#sb_att" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-alarm"></i><span>SETUP</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="sb_att">
+                <li>
+                    <a href="{% url 'class_index' %}">
+                        <i class="bi bi-circle"></i><span>Classes</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'class_section_index' %}">
+                        <i class="bi bi-circle"></i><span>Class Sections</span>
+                    </a>
+                </li>
+
+            </ul>
+        </li>
+        {% endif %}
+
+        {% if 'inventory.change_salemodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#result" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-bar-chart"></i><span>STATISTICS</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="result">
+                <li>
+                    <a href="% url 'activity_log' %}">
+                        <i class="bi bi-circle"></i><span>Activity Log</span>
+                    </a>
+                </li>
+
+            </ul>
+        </li>
+        {% endif %}
+
+        {% if 'student.add_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms or 'student.change_studentfundingmodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#fee" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-cash-stack"></i><span>FINANCE</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="fee">
+                {% if 'student.add_studentfundingmodel' in perms  %}
+                <li>
+                    <a href="% url 'deposit_select_student' %}">
+                        <i class="bi bi-circle"></i><span>Student Deposit</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'student.view_studentfundingmodel' in perms  %}
+                <li>
+                    <a href="% url 'deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
+                        <i class="bi bi-circle"></i><span>Payment History</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'student.change_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms  %}
+                <li>
+                    <a href="{% url 'finance_accounts_payable_list' %}">
+                        <i class="bi bi-circle"></i><span>Supplier Orders</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_advance_accounts_list' %}">
+                        <i class="bi bi-circle"></i><span>Advance Payments</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_all_payments_list' %}">
+                        <i class="bi bi-circle"></i><span>Supplier Payments Log</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if 'student.change_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms  %}
+                <li>
+                    <a href="{% url 'finance_setting_detail' %}">
+                        <i class="bi bi-circle"></i><span>Settings</span>
+                    </a>
+                </li>
+                {% endif %}
+
+            </ul>
+        </li>
+        {% endif %}
+
+        {% if 'human_resource.add_staffmodel' in perms or 'human_resource.view_staffmodel' in perms or 'auth.add_group' in perms %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#hr" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-people"></i><span>HUMAN RESOURCE</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="hr">
+                {% if 'human_resource.add_staffmodel' in perms  %}
+                <li>
+                    <a href="{% url 'staff_create' %}">
+                        <i class="bi bi-circle"></i><span>Register Staff</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if 'human_resource.view_staffmodel' in perms  %}
+                <li>
+                    <a href="{% url 'staff_index' %}">
+                        <i class="bi bi-circle"></i><span>View Staff</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'auth.add_group' in perms  %}
+                <li>
+                    <a href="{% url 'group_index' %}">
+                        <i class="bi bi-circle"></i><span>Roles</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if 'auth.add_group' in perms  %}
+                <li>
+                    <a href="{% url 'hr_setting_detail' %}">
+                        <i class="bi bi-circle"></i><span>HR Settings</span>
+                    </a>
+                </li>
+                {% endif %}
+
+            </ul>
+        </li>
+        {% endif %}
+
+
+        {% if 'admin_site.change_schoolinfomodel' in perms or 'admin_site.change_schoolsettingmodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#tables-nav" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-gear-fill"></i><span>SETTING</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="tables-nav">
+                {% if 'admin_site.change_schoolinfomodel' in perms  %}
+                <li>
+                    <a href="{% url 'school_info_detail' %}">
+                        <i class="bi bi-circle"></i><span>School Info</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'admin_site.change_schoolsettingmodel' in perms  %}
+                <li>
+                    <a href="{% url 'school_setting_detail' %}">
+                        <i class="bi bi-circle"></i><span>School Setting</span>
+                    </a>
+                </li>
+                {% endif %}
+
+            </ul>
+        </li>
+        {% endif %}
+
+        <li class="nav-heading">Account</li>
+
+
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="% url 'logout' %}">
+                <i class="bi bi-box-arrow-in-right"></i>
+                <span>Logout</span>
+            </a>
+        </li><!-- End Login Page Nav -->
+
+
+    </ul>
+
+</aside><!-- End Sidebar-->
+
+
+<main class="main" id="main">
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{message.tags}} {% if message.tags == 'error' %} alert-danger {% endif %} alert-dismissible fade show non-printable"
+         role="alert">
+        <i class="bi bi-exclamation-octagon me-1"></i>
+        {{message}}
+        <button aria-label="Close" class="btn-close" data-bs-dismiss="alert" type="button"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if form.errors %}
+        {% for error in form.non_field_errors %}
+
+            <div class="alert  alert-danger alert-dismissible fade show non-printable"
+                 role="alert">
+                <i class="bi bi-exclamation-octagon me-1"></i>
+                {{ error|escape }}
+                <button aria-label="Close" class="btn-close" data-bs-dismiss="alert" type="button"></button>
+            </div>
+        {% endfor %}
+
+        {% for field in form %}
+            {% if field.errors %}
+                {% for error in field.errors %}
+                    <div class="alert  alert-danger alert-dismissible fade show non-printable"
+                         role="alert">
+                        <i class="bi bi-exclamation-octagon me-1"></i>
+                        {{ field.label }}: {{ error|escape }}
+                        <button aria-label="Close" class="btn-close" data-bs-dismiss="alert" type="button"></button>
+                    </div>
+
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+
+    {% endif %}
+
+    {% if 0 %}
+    <div class="pagetitle non-printable">
+        <h1>{% block 'page' %} {%endblock %}</h1>
+        <nav>
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="% url 'dashboard' %}">Home</a></li>
+                <li class="breadcrumb-item active">{% block 'subpage' %} {% endblock %}</li>
+            </ol>
+        </nav>
+    </div><!-- End Page Title -->
+    {% endif %}
+
+    <section class="section dashboard">
+        {% block 'main' %} {% endblock %}
+    </section>
+
+</main><!-- End #main -->
+
+<a class="back-to-top non-printable d-flex align-items-center justify-content-center" href="#"><i
+        class="bi bi-arrow-up-short"></i></a>
+
+<!-- Vendor JS Files -->
+<script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+<script src="{% static 'admin_site/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'admin_site/vendor/quill/quill.min.js' %}"></script>
+
+<!-- Template Main JS File -->
+<script src="{% static 'admin_site/scripts/main.js' %}"></script>
+
+</body>
+
+</html>

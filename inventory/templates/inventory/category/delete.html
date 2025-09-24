@@ -1,0 +1,32 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Category</h4>
+            
+            <p>You are about to permanently delete the following inventory category:</p>
+            <h5 class="text-center my-3"><em>"{{ category.name|title }}"</em></h5>
+
+            {% with item_count=category.itemmodel_set.all.count %}
+                {% if item_count > 0 %}
+                    <div class="alert alert-danger">
+                        <strong>Warning:</strong> There {{ item_count|pluralize:"is,are" }} currently <strong>{{ item_count }}</strong> item{{ item_count|pluralize }} linked to this category. Deleting the category will prevent these items from being properly categorized. It is recommended to re-assign these items to another category before deleting this one.
+                    </div>
+                {% else %}
+                    <p>There are no inventory items currently linked to this category.</p>
+                {% endif %}
+            {% endwith %}
+            
+            <p>Are you sure you want to proceed?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                <a class="btn btn-secondary" href="{% url 'inventory_category_list' %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">
+                {% if object %}
+                    Update HR Settings
+                {% else %}
+                    Configure HR Settings
+                {% endif %}
+            </h5>
+
+            <!-- Include partial for displaying flashed error/success messages -->
+
+            <form method="POST">
+                {% csrf_token %}
+
+                <p class="card-description">
+                    These settings control how the Human Resources module operates. Configure them carefully.
+                </p>
+
+                <div class="border p-3 rounded">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch mt-2">
+                                {{ form.auto_generate_staff_id }}
+                                <label class="form-check-label" for="id_auto_generate_staff_id">
+                                    <strong>Auto-generate Staff ID?</strong>
+                                </label>
+                                <div class="form-text">If enabled, a unique, sequential ID (e.g., STF-0001) will be created for each new staff member.</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.staff_prefix }}
+                                <label for="id_staff_prefix">Staff ID Prefix</label>
+                            </div>
+                             <div class="form-text">The prefix used for auto-generated IDs (e.g., STF).</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-start mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        {% if object %}
+                            Save Changes
+                        {% else %}
+                            Save Settings
+                        {% endif %}
+                    </button>
+                    {% if object %}
+                        <a href="{% url 'hr_setting_detail' %}" class="btn btn-secondary">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

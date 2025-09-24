@@ -1,0 +1,124 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="row">
+    <!-- Left Column: Main Class Details -->
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title">Class Details</h5>
+                    <div>
+                        <a href="{% url 'class_index' %}" class="btn btn-secondary btn-sm" title="Back to List">
+                            <i class="bi bi-arrow-left"></i> Back to List
+                        </a>
+                        <button type="button" title="Edit Class" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editClassModal">
+                            <i class="bi bi-pencil-square"></i> Edit
+                        </button>
+                        <a type="button" title="Delete Class" href="{% url 'class_delete' class.id %}" class="btn btn-danger btn-sm">
+                            <i class="bi bi-trash"></i> Delete
+                        </a>
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="card info-card sales-card shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">Class Name</span></h5>
+                                <div class="d-flex align-items-center">
+                                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-person-badge"></i>
+                                    </div>
+                                    <div class="ps-3">
+                                        <h6>{{ class.name|upper }}</h6>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card info-card revenue-card shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">Students</span></h5>
+                                <div class="d-flex align-items-center">
+                                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-people"></i>
+                                    </div>
+                                    <div class="ps-3">
+                                        <h6>{{ class.number_of_students }}</h6>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Assigned Sections -->
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Assigned Sections</h5>
+
+                {% if class.section.all %}
+                    <ul class="list-group">
+                        {% for section in class.section.all %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                {{ class.name|upper }} {{ section.name|upper }}
+                                <a title="View Section Roster" href="{% url 'class_section_info_detail' class.id section.id %}" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="alert alert-warning text-center">
+                        No sections have been assigned to this class.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Class Modal -->
+<div class="modal fade" id="editClassModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'class_edit' class.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit Class: {{ class.name|upper }}</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                <input type="text" name="name" value="{{ class.name }}" autocomplete="off" required class="form-control" id="id_name_edit">
+                                <label for="id_name_edit">Class Name<span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Assign Sections</label>
+                            <ul style="list-style:none">
+                                {% for section in class_section_list %}
+                                <li><input type="checkbox" name="section" {% if section in class.section.all %} checked {% endif %} value="{{section.id}}" /> {{section|upper}}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

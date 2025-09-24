@@ -1,0 +1,22 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Meal Type</h4>
+            <p>You are about to permanently delete the following meal type:</p>
+            <h5 class="text-center my-3"><em>"{{ object.name|title }}"</em></h5>
+            <div class="alert alert-danger">
+                <strong>Warning:</strong> This action cannot be undone. Deleting this may affect historical meal collection records.
+            </div>
+            <p>Are you sure you want to proceed?</p>
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                <a class="btn btn-secondary" href="{% url 'cafeteria_meal_list' %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

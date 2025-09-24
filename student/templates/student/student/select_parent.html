@@ -1,0 +1,160 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Student Registration: Step 1 of 2</h5>
+                <div>
+                    <a href="{% url 'parent_index' %}" class="btn btn-secondary btn-sm" title="View Full List">
+                        <i class="bi bi-card-list"></i> View Full List
+                    </a>
+                     <a href="{% url 'parent_create' %}" class="btn btn-primary btn-sm" title="Register New Parent">
+                        <i class="bi bi-person-plus"></i> Register New Parent
+                    </a>
+                </div>
+            </div>
+            
+            <p class="card-description mt-2">
+                Search for an existing parent/guardian below. If they are not found, use the "Register New Parent" button.
+            </p>
+            
+            <div class="row mt-4">
+                <div class="col-md-5">
+                    <div class="form-floating">
+                        <input type="text" class="form-control" id="parent-search-input" placeholder="Start typing a name, ID, or phone number...">
+                        <label for="parent-search-input">Search for a Parent</label>
+                    </div>
+                    <ul class="list-group mt-2" id="parent-results-list" style="max-height: 400px; overflow-y: auto;">
+                        </ul>
+                </div>
+
+                <div class="col-md-7">
+                    <div id="parent-details-panel" class="border p-3 rounded" style="display: none;">
+                        <h6 class="card-subtitle mb-3 text-muted">Selected Parent / Guardian</h6>
+                        <div class="d-flex align-items-center">
+                            <div>
+                                <img id="parent-image" src="" alt="Parent Image" class="rounded-circle" width="100" height="100" style="object-fit: cover;">
+                            </div>
+                            <div class="ms-3">
+                                <h5 id="parent-name" class="mb-1"></h5>
+                                <p id="parent-id" class="text-muted mb-1"></p>
+                                <p id="parent-contact" class="mb-2"></p>
+                                <a id="proceed-button" href="#" class="btn btn-success">
+                                    <i class="bi bi-arrow-right-circle"></i> Proceed to Register Ward
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                     <div id="no-parent-selected" class="border p-3 rounded text-center bg-light">
+                        <i class="bi bi-search" style="font-size: 2rem;"></i>
+                        <p class="mt-2">Parent details will be shown here once selected.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('parent-search-input');
+    const resultsList = document.getElementById('parent-results-list');
+    const detailsPanel = document.getElementById('parent-details-panel');
+    const noParentSelectedPanel = document.getElementById('no-parent-selected');
+
+    let debounceTimer;
+    let currentResults = []; // Store the results of the last search
+
+    // --- Debounce function to prevent API calls on every keystroke ---
+    function debounce(func, delay) {
+        return function(...args) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                func.apply(this, args);
+            }, delay);
+        };
+    }
+
+    // --- Function to perform the search via API ---
+    async function performSearch() {
+        const query = searchInput.value.trim();
+        resultsList.innerHTML = '';
+        currentResults = []; // Clear stored results
+
+        if (query.length < 2) {
+            return;
+        }
+
+        resultsList.innerHTML = `<li class="list-group-item disabled">Searching...</li>`;
+
+        try {
+            const response = await fetch(`/admin/student/api/parent/search/?q=${encodeURIComponent(query)}`);
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            const parents = await response.json();
+            currentResults = parents; // Store the new results
+            displayResults(parents);
+        } catch (error) {
+            console.error('Search failed:', error);
+            resultsList.innerHTML = `<li class="list-group-item list-group-item-danger">Error loading results.</li>`;
+        }
+    }
+
+    // --- Function to display the search results ---
+    function displayResults(parents) {
+        resultsList.innerHTML = '';
+        if (parents.length > 0) {
+            parents.forEach(parent => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action';
+                li.style.cursor = 'pointer';
+                li.textContent = `${parent.full_name} (${parent.parent_id})`;
+                li.dataset.parentId = parent.pk;
+                resultsList.appendChild(li);
+            });
+        } else {
+            resultsList.innerHTML = `<li class="list-group-item disabled">No parent found.</li>`;
+        }
+    }
+
+    // --- Event Listeners ---
+    searchInput.addEventListener('keyup', debounce(performSearch, 300));
+
+    resultsList.addEventListener('click', function (e) {
+        if (e.target && e.target.nodeName === 'LI' && e.target.dataset.parentId) {
+            const parentId = parseInt(e.target.dataset.parentId, 10);
+            const selectedParent = currentResults.find(p => p.pk === parentId);
+
+            if (selectedParent) {
+                // Populate details panel
+                document.getElementById('parent-name').textContent = selectedParent.full_name;
+                document.getElementById('parent-id').textContent = `ID: ${selectedParent.parent_id}`;
+                document.getElementById('parent-contact').textContent = `${selectedParent.mobile || ''} | ${selectedParent.email || ''}`;
+
+                const imageElement = document.getElementById('parent-image');
+                if (selectedParent.image_url) {
+                    imageElement.src = selectedParent.image_url;
+                } else {
+                    const placeholder = `https://placehold.co/100x100/EFEFEF/AAAAAA?text=${selectedParent.full_name.charAt(0).toUpperCase()}`;
+                    imageElement.src = placeholder;
+                }
+
+                // Set the URL for the "Proceed" button
+                document.getElementById('proceed-button').href = `/admin/student/create/for-parent/${selectedParent.pk}/`;
+
+                // Show the details panel
+                detailsPanel.style.display = 'block';
+                noParentSelectedPanel.style.display = 'none';
+                resultsList.innerHTML = '';
+                searchInput.value = '';
+            }
+        }
+    });
+});
+</script>
+
+{% endblock %}

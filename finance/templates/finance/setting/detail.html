@@ -1,0 +1,70 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Finance Settings</h5>
+                {% if finance_setting %}
+                    <a href="{% url 'settings_update' %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-pencil-square"></i> Update Settings
+                    </a>
+                {% endif %}
+            </div>
+
+
+            {% if finance_setting %}
+                <p class="card-description mt-2">
+                    This is the current configuration for the Finance module.
+                </p>
+
+                <div class="row border-top pt-3 mt-3">
+                    <div class="col-lg-5 col-md-5 label fw-bold">Allow Partial Fee Payments</div>
+                    <div class="col-lg-7 col-md-7">
+                        {% if finance_setting.allow_partial_payments %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Yes, Enabled</span>
+                        {% else %}
+                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i> No, Disabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="row mt-3 border-top pt-3">
+                    <div class="col-lg-5 col-md-5 label fw-bold">Send Email Receipts</div>
+                    <div class="col-lg-7 col-md-7">
+                        {% if finance_setting.send_payment_receipt_email %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Yes, Enabled</span>
+                        {% else %}
+                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i> No, Disabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                 <div class="row mt-3 border-top pt-3">
+                    <div class="col-lg-5 col-md-5 label text-muted">Last Updated By</div>
+                    <div class="col-lg-7 col-md-7 text-muted">{{ finance_setting.updated_by.staff_profile.staff|default:"N/A" }}</div>
+                </div>
+                 <div class="row mt-2">
+                    <div class="col-lg-5 col-md-5 label text-muted">Last Updated At</div>
+                    <div class="col-lg-7 col-md-7 text-muted">{{ finance_setting.updated_at|date:"d M, Y, h:i A" }}</div>
+                </div>
+
+            {% else %}
+                <div class="alert alert-warning text-center mt-4">
+                    <h4 class="alert-heading">Finance Settings Not Found!</h4>
+                    <p>
+                        The core finance settings have not been configured yet. These settings are required before you can manage school fees and other financial operations.
+                    </p>
+                    <hr>
+                    <a href="{% url 'settings_create' %}" class="btn btn-primary">
+                        Configure Settings Now
+                    </a>
+                </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}

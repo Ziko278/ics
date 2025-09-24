@@ -1,0 +1,77 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Edit Parent: {{ parent.first_name }} {{ parent.last_name }}</h5>
+                <a href="{% url 'parent_detail' parent.pk %}" class="btn btn-secondary btn-sm" title="Back to Detail">
+                    <i class="bi bi-arrow-left"></i> Back to Detail Page
+                </a>
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" class="mt-4">
+                {% csrf_token %}
+                <!-- Personal Details Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Personal Details</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.first_name }}
+                            <label for="id_first_name">First Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.last_name }}
+                            <label for="id_last_name">Last Name<span class="text-danger">*</span></label>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Contact & Address Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Contact & Address</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.email }}
+                            <label for="id_email">Email Address<span class="text-danger"></span></label>
+                        </div>
+                    </div>
+                     <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.mobile }}
+                            <label for="id_mobile">Mobile Number<span class="text-danger"></span></label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating">
+                            {{ form.residential_address }}
+                            <label for="id_residential_address">Residential Address</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Other Details Section -->
+                <h6 class="card-subtitle mb-2 text-muted">Other Details</h6>
+                <div class="row g-3 border p-3 rounded mb-4">
+                     <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.occupation }}
+                            <label for="id_occupation">Occupation</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-start mt-3">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="{% url 'parent_detail' parent.pk %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

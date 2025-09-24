@@ -1,0 +1,109 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-lg-10 offset-lg-1 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Receive Items from Purchase Order</h5>
+            <div class="alert alert-info">
+                <p>Select the items from <strong>{{ po.order_number }}</strong> that you are receiving in this shipment. All pending items are selected by default.</p>
+            </div>
+
+            <form method="POST">
+                {% csrf_token %}
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center" style="width: 5%;">
+                                    <input class="form-check-input" type="checkbox" id="select-all-items" checked>
+                                </th>
+                                <th>Item Description</th>
+                                <th class="text-center">Quantity Ordered</th>
+                                <th class="text-center">Unit Cost</th>
+                                <th class="text-center">Line Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for po_item in pending_items %}
+                            <tr>
+                                <td class="text-center align-middle">
+                                    <input class="form-check-input" type="checkbox" 
+                                           name="items_to_receive" 
+                                           value="{{ po_item.pk }}" 
+                                           id="item_{{ po_item.pk }}"
+                                           checked>
+                                </td>
+                                <td>
+                                    <label for="item_{{ po_item.pk }}" class="form-check-label d-block p-2">
+                                        {% if po_item.item %}
+                                            <strong>{{ po_item.item.name|title }}</strong><br>
+                                            <small class="text-muted">{{ po_item.item.get_unit_display }}</small>
+                                        {% else %}
+                                            <strong>{{ po_item.item_description|title }}</strong>
+                                        {% endif %}
+                                    </label>
+                                </td>
+                                <td class="text-center align-middle">
+                                    {{ po_item.quantity|floatformat:2 }}
+                                </td>
+                                <td class="text-center align-middle">
+                                    ₦{{ po_item.unit_cost|intcomma }}
+                                </td>
+                                <td class="text-center align-middle">
+                                    ₦{{ po_item.line_total|floatformat:2|intcomma }}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center p-3">
+                                    All inventoried items on this Purchase Order have already been received.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="text-start mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-box-arrow-in-down"></i> Receive Selected Items
+                    </button>
+                    <a href="{{ po.get_absolute_url }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const selectAllCheckbox = document.getElementById('select-all-items');
+    const itemCheckboxes = document.querySelectorAll('input[name="items_to_receive"]');
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function () {
+            itemCheckboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+        });
+    }
+
+    itemCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function () {
+            if (!checkbox.checked) {
+                selectAllCheckbox.checked = false;
+            }
+            let allChecked = true;
+            itemCheckboxes.forEach(cb => {
+                if (!cb.checked) {
+                    allChecked = false;
+                }
+            });
+            selectAllCheckbox.checked = allChecked;
+        });
+    });
+});
+</script>
+{% endblock %}

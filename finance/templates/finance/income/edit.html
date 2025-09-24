@@ -1,0 +1,182 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+{% comment %} Income edit (same layout as create) {% endcomment %}
+
+<div class="col-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="card-title mb-0">Edit Income Record</h4>
+                <div>
+                    <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#incomeHelperModal"><b>Helper</b></button>
+                    <a href="{% url 'income_index' %}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to List
+                    </a>
+                </div>
+            </div>
+
+            {% include 'admin_site/partials/error.html' %}
+
+            <form method="POST" action="" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="row">
+                    <!-- Left column: form fields -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header"><h5 class="mb-0">Income Details</h5></div>
+                            <div class="card-body">
+                                <div class="row">
+
+                                    <!-- Category -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.category.id_for_label }}" class="form-label">
+                                            Category <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.category }}
+                                        {% if form.category.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.category.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Amount -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.amount.id_for_label }}" class="form-label">
+                                            Amount (₦) <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.amount }}
+                                        {% if form.amount.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.amount.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Income Date -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.income_date.id_for_label }}" class="form-label">
+                                            Date <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.income_date }}
+                                        {% if form.income_date.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.income_date.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Source -->
+                                    <div class="col-md-12 mb-3">
+                                        <label for="{{ form.source.id_for_label }}" class="form-label">Source of Income</label>
+                                        {{ form.source }}
+                                        <small class="form-text text-muted">e.g., "Donation from XYZ Foundation".</small>
+                                        {% if form.source.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.source.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Reference -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.reference.id_for_label }}" class="form-label">Reference</label>
+                                        {{ form.reference }}
+                                        {% if form.reference.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.reference.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Receipt (existing + upload) -->
+                                    <div class="col-md-12 mb-3">
+                                        <label class="form-label">Receipt (optional)</label>
+                                        {% if income.receipt %}
+                                            <div class="mb-2">
+                                                <a href="{{ income.receipt.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-file-earmark-text"></i> View Current Receipt
+                                                </a>
+                                                <label class="ms-2 form-check-label">
+                                                    <input type="checkbox" name="remove_receipt" value="1"> Remove current receipt
+                                                </label>
+                                            </div>
+                                        {% endif %}
+                                        {{ form.receipt }}
+                                        <small class="form-text text-muted">Max file size: 5 MB. Allowed: PDF, JPG, PNG.</small>
+                                        {% if form.receipt.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.receipt.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Description / Notes -->
+                                    <div class="col-md-12">
+                                        <label for="{{ form.description.id_for_label }}" class="form-label">
+                                            Notes / Description
+                                        </label>
+                                        {{ form.description }}
+                                        {% if form.description.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.description.errors|striptags }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right column: actions -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header"><h5 class="mb-0">Actions</h5></div>
+                            <div class="card-body">
+                                <p class="text-muted">Update fields as needed and click Save.</p>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Recorded by</label>
+                                    <input type="text" class="form-control" value="{{ income.created_by.get_full_name|default:income.created_by.username }}" disabled>
+                                </div>
+
+                                <div class="d-grid gap-2">
+                                    <button type="submit" name="save" class="btn btn-primary">
+                                        <i class="bi bi-check-circle"></i> Save Changes
+                                    </button>
+                                    <a href="{% url 'income_detail' income.pk %}" class="btn btn-outline-secondary">Cancel</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- small card: meta -->
+                        <div class="card mt-3">
+                            <div class="card-body">
+                                <h6 class="mb-2">Record Info</h6>
+                                <p class="mb-1"><strong>Recorded At:</strong> {{ income.created_at|date:"d M Y, P" }}</p>
+                                <p class="mb-0"><strong>Record ID:</strong> {{ income.pk }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<!-- Income Helper Modal (same content as create) -->
+<div class="modal fade" id="incomeHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Income Record Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>This form edits a recorded income (non-fee). Use source and reference to clarify origin.</p>
+                <hr>
+                <ul>
+                    <li><strong>Source:</strong> Where the money came from (donor, asset sale, etc.).</li>
+                    <li><strong>Reference:</strong> External receipt/transaction id.</li>
+                    <li><strong>Receipt:</strong> Upload supporting document (optional).</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<style>
+    .summary-box { padding: 1.5rem; border-radius: 0.5rem; color: white; margin-bottom: 1rem; }
+    .summary-box .icon i { font-size: 2.5rem; opacity: 0.3; }
+    .summary-box .value { font-size: 1.75rem; font-weight: 600; }
+    .bg-gross { background: linear-gradient(135deg, #0d6efd, #0b5ed7); }
+    .bg-deductions { background: linear-gradient(135deg, #dc3545, #b02a37); }
+    .bg-net { background: linear-gradient(135deg, #198754, #146c43); }
+</style>
+
+<div class="col-lg-12">
+    <div class="card">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div><h5 class="card-title mb-0 pb-0">Salary Structure: {{ salary_structure.staff.staff_profile.user.get_full_name|title }}</h5></div>
+            <div>
+                <a href="{% url 'finance_salary_structure_update' salary_structure.pk %}" class="btn btn-warning"><i class="bi bi-pencil-square"></i> Edit</a>
+                <a href="{% url 'finance_salary_structure_delete' salary_structure.pk %}" class="btn btn-danger"><i class="bi bi-trash"></i> Delete</a>
+                <a href="{% url 'finance_salary_structure_list' %}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back to List</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body pt-3">
+            <div class="row">
+                <div class="col-md-4"><div class="summary-box bg-gross"><div class="d-flex justify-content-between align-items-center"><div><div class="value">₦{{ salary_structure.gross_salary|intcomma }}</div><span>Gross Salary</span></div><div class="icon"><i class="bi bi-graph-up"></i></div></div></div></div>
+                <div class="col-md-4"><div class="summary-box bg-deductions"><div class="d-flex justify-content-between align-items-center"><div><div class="value">₦{{ salary_structure.total_deductions|floatformat:2|intcomma }}</div><span>Total Deductions</span></div><div class="icon"><i class="bi bi-graph-down"></i></div></div></div></div>
+                <div class="col-md-4"><div class="summary-box bg-net"><div class="d-flex justify-content-between align-items-center"><div><div class="value">₦{{ salary_structure.net_salary|floatformat:2|intcomma }}</div><span>Net Salary</span></div><div class="icon"><i class="bi bi-wallet2"></i></div></div></div></div>
+            </div>
+
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <div class="card"><div class="card-header"><h6 class="mb-0 text-success">Earnings Breakdown</h6></div><ul class="list-group list-group-flush"><li class="list-group-item d-flex justify-content-between"><span>Basic Salary</span> <strong>₦{{ salary_structure.basic_salary|intcomma }}</strong></li><li class="list-group-item d-flex justify-content-between"><span>Housing Allowance</span> <strong>₦{{ salary_structure.housing_allowance|intcomma }}</strong></li><li class="list-group-item d-flex justify-content-between"><span>Transport Allowance</span> <strong>₦{{ salary_structure.transport_allowance|intcomma }}</strong></li><li class="list-group-item d-flex justify-content-between"><span>Medical Allowance</span> <strong>₦{{ salary_structure.medical_allowance|intcomma }}</strong></li><li class="list-group-item d-flex justify-content-between"><span>Other Allowances</span> <strong>₦{{ salary_structure.other_allowances|intcomma }}</strong></li></ul></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card"><div class="card-header"><h6 class="mb-0 text-danger">Deductions Breakdown</h6></div><ul class="list-group list-group-flush"><li class="list-group-item d-flex justify-content-between"><span>Tax (PAYE) <small class="text-muted">({{ salary_structure.tax_rate }}%)</small></span><strong>₦{{ salary_structure.tax_amount|floatformat:2|intcomma }}</strong></li><li class="list-group-item d-flex justify-content-between"><span>Pension <small class="text-muted">({{ salary_structure.pension_rate }}%)</small></span><strong>₦{{ salary_structure.pension_amount|floatformat:2|intcomma }}</strong></li></ul></div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <small><strong>Effective From:</strong> {{ salary_structure.effective_from|date:"F d, Y" }}</small>
+            {% if salary_structure.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
