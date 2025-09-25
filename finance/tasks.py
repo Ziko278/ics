@@ -24,7 +24,7 @@ def generate_invoices_task(job_id):
         # 2. Find all students in the classes selected for this job
         students_to_invoice = StudentModel.objects.filter(
             student_class__in=job.classes_to_invoice.all(),
-            is_active=True  # Only invoice active students
+            status='active'  # Only invoice active students
         )
         job.total_students = students_to_invoice.count()
         job.save(update_fields=['total_students'])

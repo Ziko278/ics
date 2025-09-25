@@ -25,7 +25,18 @@ SECRET_KEY = 'django-insecure-8qdehqdy!e7)v(-n8bz^+4#n%49+le7#eukfb@e@x$t1-j5@0_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'icsportal.com.ng',
+    'www.icsportal.com.ng',
+    'your-server-ip',  # Keep your IP if you have it
+    'localhost',       # Keep for local development
+]
+
+# Add CSRF trusted origins for HTTPS
+CSRF_TRUSTED_ORIGINS = [
+    'https://icsportal.com.ng',
+    'https://www.icsportal.com.ng',
+]
 
 
 # Application definition
