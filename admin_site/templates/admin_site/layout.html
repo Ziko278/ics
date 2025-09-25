@@ -314,45 +314,56 @@
         </li>
         {% endif %}
 
-
-        {% if 'admin_site.add_classesmodel' in perms  %}
+         {% if 'student.add_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms or 'student.change_studentfundingmodel' in perms  %}
         <li class="nav-item">
-            <a class="nav-link collapsed" data-bs-target="#sb_att" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-alarm"></i><span>SETUP</span><i class="bi bi-chevron-down ms-auto"></i>
+            <a class="nav-link collapsed" data-bs-target="#fees" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-cash-stack"></i><span>FEES</span><i class="bi bi-chevron-down ms-auto"></i>
             </a>
-            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="sb_att">
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="fees">
+                {% if 'student.add_studentfundingmodel' in perms  %}
                 <li>
-                    <a href="{% url 'class_index' %}">
-                        <i class="bi bi-circle"></i><span>Classes</span>
+                    <a href="% url 'deposit_select_student' %}">
+                        <i class="bi bi-circle"></i><span>Student Deposit</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'student.view_studentfundingmodel' in perms  %}
+                <li>
+                    <a href="% url 'deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
+                        <i class="bi bi-circle"></i><span>Payment History</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'student.change_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms  %}
+                <li>
+                    <a href="{% url 'finance_invoice_list' %}">
+                        <i class="bi bi-circle"></i><span>Fee Invoices</span>
                     </a>
                 </li>
                 <li>
-                    <a href="{% url 'class_section_index' %}">
-                        <i class="bi bi-circle"></i><span>Class Sections</span>
+                    <a href="{% url 'finance_fee_master_list' %}">
+                        <i class="bi bi-circle"></i><span>Fee Structure</span>
                     </a>
                 </li>
+                <li>
+                    <a href="{% url 'finance_fee_group_list' %}">
+                        <i class="bi bi-circle"></i><span>Fee Groups</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_fee_list' %}">
+                        <i class="bi bi-circle"></i><span>Fees</span>
+                    </a>
+                </li>
+                {% endif %}
 
             </ul>
         </li>
         {% endif %}
 
-        {% if 'inventory.change_salemodel' in perms  %}
-        <li class="nav-item">
-            <a class="nav-link collapsed" data-bs-target="#result" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-bar-chart"></i><span>STATISTICS</span><i class="bi bi-chevron-down ms-auto"></i>
-            </a>
-            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="result">
-                <li>
-                    <a href="% url 'activity_log' %}">
-                        <i class="bi bi-circle"></i><span>Activity Log</span>
-                    </a>
-                </li>
-
-            </ul>
-        </li>
-        {% endif %}
-
-        {% if 'student.add_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms or 'student.change_studentfundingmodel' in perms  %}
+         {% if 'student.add_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms or 'student.change_studentfundingmodel' in perms  %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#fee" data-bs-toggle="collapse" href="#">
                 <i class="bi bi-cash-stack"></i><span>FINANCE</span><i class="bi bi-chevron-down ms-auto"></i>
@@ -398,6 +409,44 @@
                     </a>
                 </li>
                 {% endif %}
+
+            </ul>
+        </li>
+        {% endif %}
+
+
+        {% if 'admin_site.add_classesmodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#sb_att" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-alarm"></i><span>SETUP</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="sb_att">
+                <li>
+                    <a href="{% url 'class_index' %}">
+                        <i class="bi bi-circle"></i><span>Classes</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'class_section_index' %}">
+                        <i class="bi bi-circle"></i><span>Class Sections</span>
+                    </a>
+                </li>
+
+            </ul>
+        </li>
+        {% endif %}
+
+        {% if 'inventory.change_salemodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#result" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-bar-chart"></i><span>STATISTICS</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="result">
+                <li>
+                    <a href="% url 'activity_log' %}">
+                        <i class="bi bi-circle"></i><span>Activity Log</span>
+                    </a>
+                </li>
 
             </ul>
         </li>

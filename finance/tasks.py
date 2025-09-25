@@ -50,11 +50,15 @@ def generate_invoices_task(job_id):
                     for fee_master in applicable_fees:
                         # Final check to ensure this specific fee applies to this student's specific class
                         if student.student_class in fee_master.student_classes.all():
+
+                            # With this:
+                            termly_amount = fee_master.termly_amounts.filter(term=job.term).first()
+                            amount = termly_amount.amount if termly_amount else Decimal('0.00')
                             InvoiceItemModel.objects.create(
                                 invoice=invoice,
                                 fee_master=fee_master,
                                 description=f"{fee_master.fee.name} - {fee_master.group.name}",
-                                amount=fee_master.amount
+                                amount=amount
                             )
 
             # 5. Update the progress after each student is processed

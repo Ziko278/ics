@@ -191,15 +191,32 @@ class FeeMasterCreateForm(forms.ModelForm):
 
 
 # This FormSet is the key to managing multiple termly amounts on the detail page.
+# Alternative approach - Custom FormSet (if the above doesn't work)
+class TermlyFeeAmountFormSet(forms.BaseInlineFormSet):
+    def __init__(self, *args, **kwargs):
+        self.relevant_terms = kwargs.pop('relevant_terms', None)
+        super().__init__(*args, **kwargs)
+
+    def get_queryset(self):
+        if not hasattr(self, '_queryset'):
+            qs = super().get_queryset()
+            if self.relevant_terms:
+                qs = qs.filter(term__in=self.relevant_terms)
+            self._queryset = qs
+        return self._queryset
+
+
+# Updated FormSet factory
 TermlyFeeAmountFormSet = inlineformset_factory(
-    FeeMasterModel,         # The parent model
-    TermlyFeeAmountModel,   # The child model
+    FeeMasterModel,
+    TermlyFeeAmountModel,
     fields=('term', 'amount'),
-    extra=0,                # Don't show any empty extra forms by default
+    extra=0,
     can_delete=False,
+    formset=TermlyFeeAmountFormSet,  # Use custom formset class
     widgets={
-        'amount': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
-        'term': forms.HiddenInput(), # The term will be displayed as text, not a dropdown
+        'amount': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.01'}),
+        'term': forms.HiddenInput(),
     }
 )
 

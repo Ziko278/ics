@@ -368,7 +368,9 @@ class FeeCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrors
     model = FeeModel
     permission_required = 'finance.add_feemodel'
     form_class = FeeForm
-    success_url = reverse_lazy('finance_fee_list')
+
+    def get_success_url(self):
+        return reverse('finance_fee_list')
 
     def form_valid(self, form):
         messages.success(self.request, "Fee Type created successfully.")
@@ -384,7 +386,9 @@ class FeeUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrors
     model = FeeModel
     permission_required = 'finance.change_feemodel'
     form_class = FeeForm
-    success_url = reverse_lazy('finance_fee_list')
+
+    def get_success_url(self):
+        return reverse('finance_fee_list')
 
     def form_valid(self, form):
         messages.success(self.request, "Fee Type updated successfully.")
@@ -427,7 +431,9 @@ class FeeGroupCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
     model = FeeGroupModel
     permission_required = 'finance.add_feegroupmodel'
     form_class = FeeGroupForm
-    success_url = reverse_lazy('finance_fee_group_list')
+
+    def get_success_url(self):
+        return reverse('finance_fee_group_list')
 
     def form_valid(self, form):
         messages.success(self.request, "Fee Group created successfully.")
@@ -443,7 +449,9 @@ class FeeGroupUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
     model = FeeGroupModel
     permission_required = 'finance.change_feegroupmodel'
     form_class = FeeGroupForm
-    success_url = reverse_lazy('finance_fee_group_list')
+
+    def get_success_url(self):
+        return reverse('finance_fee_group_list')
 
     def form_valid(self, form):
         messages.success(self.request, "Fee Group updated successfully.")
@@ -460,6 +468,7 @@ class FeeGroupDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView
     permission_required = 'finance.delete_feegroupmodel'
     template_name = 'finance/fee_group/delete.html'
     success_url = reverse_lazy('finance_fee_group_list')
+    context_object_name = 'fee_group'
 
     def form_valid(self, form):
         messages.success(self.request, f"Fee Group '{self.object.name}' deleted successfully.")
@@ -468,8 +477,9 @@ class FeeGroupDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView
 
 
 # ===================================================================
-# Fee Master (Structure) Views (Corrected)
+# Fee Master (Structure)
 # ===================================================================
+
 
 class FeeMasterListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     """Displays a list of all created fee structures."""
@@ -497,48 +507,67 @@ class FeeMasterCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateVie
         return reverse('finance_fee_master_detail', kwargs={'pk': self.object.pk})
 
 
+# Updated view
 class FeeMasterDetailView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """
-    The main view for managing a fee structure. It displays details and handles
-    the formset for setting/updating termly prices.
-    """
     permission_required = 'finance.change_feemastermodel'
     template_name = 'finance/fee_master/detail.html'
 
     def get(self, request, *args, **kwargs):
         fee_structure = get_object_or_404(FeeMasterModel, pk=self.kwargs.get('pk'))
-        all_terms = TermModel.objects.all().order_by('order')
 
-        initial_data = []
-        for term in all_terms:
-            amount_instance = fee_structure.termly_amounts.filter(term=term).first()
-            initial_data.append({
+        # Determine which terms to show
+        if fee_structure.fee.occurrence == FeeModel.FeeOccurrence.TERMLY:
+            terms = TermModel.objects.all().order_by('order')
+        else:
+            if fee_structure.fee.payment_term:
+                terms = [fee_structure.fee.payment_term]
+            else:
+                terms = []
+
+        # Get existing amounts
+        term_amounts = {}
+        for amount in fee_structure.termly_amounts.filter(term__in=terms):
+            term_amounts[amount.term.id] = amount.amount
+
+        # Prepare display data
+        display_terms = []
+        for term in terms:
+            display_terms.append({
                 'term': term,
-                'amount': amount_instance.amount if amount_instance else Decimal('0.00')
+                'amount': term_amounts.get(term.id, Decimal('0.00'))
             })
 
-        formset = TermlyFeeAmountFormSet(initial=initial_data)
-        context = {'fee_structure': fee_structure, 'formset': formset}
+        context = {
+            'fee_structure': fee_structure,
+            'display_terms': display_terms,
+        }
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
         fee_structure = get_object_or_404(FeeMasterModel, pk=self.kwargs.get('pk'))
-        formset = TermlyFeeAmountFormSet(request.POST)
 
-        if formset.is_valid():
-            for form in formset:
-                term = form.cleaned_data.get('term')
-                amount = form.cleaned_data.get('amount')
-                if term and amount is not None:
-                    TermlyFeeAmountModel.objects.update_or_create(
-                        fee_structure=fee_structure, term=term, defaults={'amount': amount}
-                    )
-            messages.success(request, "Termly fee amounts saved successfully.")
-            return redirect('finance_fee_master_detail', pk=fee_structure.pk)
+        # Determine which terms to process
+        if fee_structure.fee.occurrence == FeeModel.FeeOccurrence.TERMLY:
+            terms = TermModel.objects.all().order_by('order')
+        else:
+            if fee_structure.fee.payment_term:
+                terms = [fee_structure.fee.payment_term]
+            else:
+                terms = []
 
-        context = {'fee_structure': fee_structure, 'formset': formset}
-        return render(request, self.template_name, context)
+        # Save amounts
+        for term in terms:
+            field_name = f'term_{term.id}_amount'
+            if field_name in request.POST:
+                amount = Decimal(request.POST[field_name] or '0')
+                TermlyFeeAmountModel.objects.update_or_create(
+                    fee_structure=fee_structure,
+                    term=term,
+                    defaults={'amount': amount}
+                )
 
+        messages.success(request, "Fee amounts saved successfully!")
+        return redirect('finance_fee_master_detail', pk=fee_structure.pk)
 
 class FeeMasterUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
     """
@@ -549,6 +578,7 @@ class FeeMasterUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateVie
     permission_required = 'finance.change_feemastermodel'
     form_class = FeeMasterCreateForm  # We can reuse the create form for updating
     template_name = 'finance/fee_master/update.html'
+    context_object_name = 'fee_structure'
 
     def form_valid(self, form):
         messages.success(self.request, "Fee structure details updated successfully.")

@@ -29,6 +29,15 @@
                         {{ fee_structure.group.name|title }}
                     </li>
                     <li class="list-group-item">
+                        <strong>Payment Frequency:</strong><br>
+                        <span class="badge {% if fee_structure.fee.occurrence == 'termly' %}bg-primary{% elif fee_structure.fee.occurrence == 'annually' %}bg-success{% else %}bg-warning{% endif %}">
+                            {{ fee_structure.fee.get_occurrence_display }}
+                        </span>
+                        {% if fee_structure.fee.occurrence != 'termly' and fee_structure.fee.payment_term %}
+                            <br><small class="text-muted">Due in: {{ fee_structure.fee.payment_term.name }}</small>
+                        {% endif %}
+                    </li>
+                    <li class="list-group-item">
                         <strong>Applicable Classes:</strong><br>
                         {% for class in fee_structure.student_classes.all %}
                             <span class="badge bg-secondary">{{ class.name }}</span>
@@ -55,53 +64,156 @@
         </div>
     </div>
 
-    <!-- Right Column: Price Management Form -->
+    <!-- Right Column: Fee Display (Read-only) -->
     <div class="col-lg-8">
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title">Set Price Per Term</h5>
-                <p class="card-description">
-                    Enter the amount for this fee for each academic term. You can leave an amount as 0 if the fee does not apply in a particular term.
-                </p>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">
+                        {% if fee_structure.fee.occurrence == 'termly' %}
+                            Fee Amounts Per Term
+                        {% else %}
+                            {{ fee_structure.fee.get_occurrence_display }} Fee Amount
+                        {% endif %}
+                    </h5>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#updateFeeModal">
+                        <i class="bi bi-pencil"></i> Update Fees
+                    </button>
+                </div>
 
-                <form method="POST">
-                    {% csrf_token %}
-                    {{ formset.management_form }}
-
+                {% if display_terms %}
                     <div class="table-responsive">
                         <table class="table table-bordered">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Term</th>
+                                    <th>
+                                        {% if fee_structure.fee.occurrence == 'termly' %}
+                                            Term
+                                        {% else %}
+                                            Payment Period
+                                        {% endif %}
+                                    </th>
                                     <th style="width: 40%;">Amount (₦)</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for form in formset %}
+                                {% for term_data in display_terms %}
                                 <tr>
                                     <td class="align-middle">
-                                        <!-- The term is pre-filled and hidden -->
-                                        {{ form.term }}
-                                        <strong>{{ form.initial.term.name|title }}</strong>
+                                        <strong>{{ term_data.term.name|title }}</strong>
+                                        {% if fee_structure.fee.occurrence == 'one_time' %}
+                                            <br><small class="text-muted">One-time payment</small>
+                                        {% elif fee_structure.fee.occurrence == 'annually' %}
+                                            <br><small class="text-muted">Annual payment</small>
+                                        {% endif %}
                                     </td>
-                                    <td>
-                                        {{ form.amount }}
-                                        {% for error in form.amount.errors %}
-                                            <div class="invalid-feedback d-block">{{ error }}</div>
-                                        {% endfor %}
+                                    <td class="align-middle">
+                                        <strong class="text-success">
+                                            ₦{{ term_data.amount|floatformat:2|intcomma }}
+                                        </strong>
                                     </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
-
-                    <div class="text-start mt-3">
-                        <button type="submit" class="btn btn-primary">Save Prices</button>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>No payment terms available!</strong><br>
+                        {% if fee_structure.fee.occurrence == 'termly' %}
+                            Please ensure academic terms are set up in the system.
+                        {% else %}
+                            This {{ fee_structure.fee.get_occurrence_display|lower }} fee needs a payment term to be configured.
+                            <br>
+                            <a href="{% url 'finance_fee_master_update' fee_structure.pk %}" class="btn btn-sm btn-warning mt-2">
+                                <i class="bi bi-gear"></i> Configure Payment Term
+                            </a>
+                        {% endif %}
                     </div>
-                </form>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
+
+<!-- Update Fee Modal -->
+<div class="modal fade" id="updateFeeModal" tabindex="-1" aria-labelledby="updateFeeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="updateFeeModalLabel">
+                    Update Fee Amounts - {{ fee_structure.fee.name|title }}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST">
+                <div class="modal-body">
+                    {% csrf_token %}
+
+                    <p class="text-muted mb-3">
+                        {% if fee_structure.fee.occurrence == 'termly' %}
+                            Enter the amount for this fee for each academic term. You can set amount as 0 if the fee does not apply in a particular term.
+                        {% else %}
+                            Enter the amount for this {{ fee_structure.fee.get_occurrence_display|lower }} fee.
+                        {% endif %}
+                    </p>
+
+                    {% if display_terms %}
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>
+                                            {% if fee_structure.fee.occurrence == 'termly' %}
+                                                Term
+                                            {% else %}
+                                                Payment Period
+                                            {% endif %}
+                                        </th>
+                                        <th style="width: 50%;">Amount (₦)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for term_data in display_terms %}
+                                    <tr>
+                                        <td class="align-middle">
+                                            <strong>{{ term_data.term.name|title }}</strong>
+                                            {% if fee_structure.fee.occurrence == 'one_time' %}
+                                                <br><small class="text-muted">One-time payment</small>
+                                            {% elif fee_structure.fee.occurrence == 'annually' %}
+                                                <br><small class="text-muted">Annual payment</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <input
+                                                type="number"
+                                                name="term_{{ term_data.term.id }}_amount"
+                                                value="{{ term_data.amount }}"
+                                                step="0.01"
+                                                min="0"
+                                                class="form-control"
+                                                placeholder="0.00"
+                                            >
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-lg"></i> Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

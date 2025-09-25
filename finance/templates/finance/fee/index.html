@@ -1,5 +1,6 @@
 {% extends 'admin_site/layout.html' %}
 {% block 'main' %}
+{% load static %}
 {% load humanize %}
 
 <div class="col-12">
@@ -25,6 +26,7 @@
                     <th>Name</th>
                     <th>Code</th>
                     <th>Occurrence</th>
+                    <th>Term</th>
                     <th class="text-center">Action</th>
                 </tr>
                 </thead>
@@ -35,6 +37,7 @@
                     <td>{{ fee.name|title }}</td>
                     <td>{{ fee.code|upper }}</td>
                     <td>{{ fee.get_occurrence_display }}</td>
+                    <td>{% if fee.occurrence == 'termly' %} All {% else %} {{ fee.payment_term }} {% endif %}</td>
                     <td class="text-center">
                         <button title="Edit Fee" type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editFeeModal{{ fee.pk }}"><i class="bi bi-pencil-square"></i></button>
                         <a title="Delete Fee" href="{% url 'finance_fee_delete' fee.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
@@ -52,27 +55,53 @@
     </div>
 </div>
 
-<!-- Fee Helper Modal -->
 <div class="modal fade" id="feeHelperModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><b>Fee Types Helper</b></h5>
+                <h5 class="modal-title"><b><i class="bi bi-info-circle me-2"></i>Fee Types Helper</b></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <p><strong>Fee Types</strong> are the building blocks of your school's billing system. Each one represents a specific charge that can be assigned to students.</p>
-                <ul>
-                    <li><strong>Name:</strong> The descriptive name (e.g., "First Term Tuition Fee").</li>
-                    <li><strong>Code:</strong> A short, unique code for easy reference (e.g., "TUI-01").</li>
-                    <li><strong>Occurrence:</strong> How often the fee is charged (Termly, Annually, or a One Time fee).</li>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex align-items-center">
+                        <i class="bi bi-fonts fs-4 text-primary me-3"></i>
+                        <div>
+                            <strong>Name:</strong>
+                            <p class="mb-0 text-muted small">The descriptive name (e.g., "First Term Tuition Fee").</p>
+                        </div>
+                    </li>
+                    <li class="list-group-item d-flex align-items-center">
+                        <i class="bi bi-journal-code fs-4 text-primary me-3"></i>
+                        <div>
+                            <strong>Code:</strong>
+                            <p class="mb-0 text-muted small">A short, unique code for easy reference (e.g., "TUI-01").</p>
+                        </div>
+                    </li>
+                    <li class="list-group-item d-flex align-items-center">
+                        <i class="bi bi-arrow-repeat fs-4 text-primary me-3"></i>
+                        <div>
+                            <strong>Occurrence:</strong>
+                            <p class="mb-0 text-muted small">How often the fee is charged: Termly, Annually, or One Time.</p>
+                        </div>
+                    </li>
+                    <li class="list-group-item d-flex align-items-center">
+                         <i class="bi bi-calendar-check fs-4 text-primary me-3"></i>
+                         <div>
+                            <strong>Payment Term:</strong>
+                            <p class="mb-0 text-muted small">For <strong>Annually</strong> or <strong>One Time</strong> fees, specifies which term the fee should be billed in.</p>
+                         </div>
+                    </li>
                 </ul>
+            </div>
+             <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Add New Fee Modal -->
 <form method="POST" action="{% url 'finance_fee_create' %}">
     {% csrf_token %}
     <div class="modal fade" id="addFeeModal" tabindex="-1">
@@ -84,7 +113,13 @@
                         <div class="col-md-8"><label class="form-label">Name</label>{{ form.name }}</div>
                         <div class="col-md-4"><label class="form-label">Code</label>{{ form.code }}</div>
                         <div class="col-md-6"><label class="form-label">Occurrence</label>{{ form.occurrence }}</div>
-                        <div class="col-md-6"><label class="form-label">Payment Term (for One Time fees)</label>{{ form.payment_term }}</div>
+
+                        <div class="col-md-6 d-none" id="add_payment_term_div">
+                            <label class="form-label">Payment Term</label>
+                            {{ form.payment_term }}
+                            <div class="form-text">Required for Annually or One Time fees.</div>
+                        </div>
+
                         <div class="col-12"><label class="form-label">Description</label>{{ form.description }}</div>
                     </div>
                 </div>
@@ -97,7 +132,6 @@
     </div>
 </form>
 
-<!-- Edit Fee Modals -->
 {% for fee in fees %}
 <form method="POST" action="{% url 'finance_fee_update' fee.pk %}">
     {% csrf_token %}
@@ -110,20 +144,24 @@
                         <div class="col-md-8"><label class="form-label">Name</label><input type="text" name="name" value="{{ fee.name }}" class="form-control" required></div>
                         <div class="col-md-4"><label class="form-label">Code</label><input type="text" name="code" value="{{ fee.code }}" class="form-control" required></div>
                         <div class="col-md-6"><label class="form-label">Occurrence</label>
-                            <select name="occurrence" class="form-select">
+                            <select name="occurrence" class="form-select occurrence-select">
                                 {% for value, label in form.fields.occurrence.choices %}
                                 <option value="{{ value }}" {% if fee.occurrence == value %}selected{% endif %}>{{ label }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-6"><label class="form-label">Payment Term</label>
-                             <select name="payment_term" class="form-select">
+
+                        <div class="col-md-6 payment-term-div">
+                             <label class="form-label">Payment Term</label>
+                             <select name="payment_term" class="form-select payment-term-select">
                                  <option value="">---------</option>
                                 {% for term in form.fields.payment_term.queryset %}
                                 <option value="{{ term.pk }}" {% if fee.payment_term.pk == term.pk %}selected{% endif %}>{{ term.name|title }}</option>
                                 {% endfor %}
                             </select>
+                            <div class="form-text">Required for Annually or One Time fees.</div>
                         </div>
+
                         <div class="col-12"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="3">{{ fee.description|default:"" }}</textarea></div>
                     </div>
                 </div>
@@ -136,4 +174,65 @@
     </div>
 </form>
 {% endfor %}
+<script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+<script>
+$(document).ready(function(){
+
+    // --- Logic for ADD FEE modal ---
+    function toggleAddPaymentTerm() {
+        // Django's default form field ID is "id_<field_name>"
+        // Assuming your model values are 'annually' and 'one_time'
+        const occurrence = $('#id_occurrence').val();
+        const paymentTermDiv = $('#add_payment_term_div');
+        const paymentTermSelect = $('#id_payment_term');
+
+        if (occurrence === 'annually' || occurrence === 'one_time') {
+            paymentTermDiv.removeClass('d-none');
+            paymentTermSelect.prop('required', true);
+        } else {
+            paymentTermDiv.addClass('d-none');
+            paymentTermSelect.prop('required', false);
+            paymentTermSelect.val(''); // Clear the selection when hiding
+        }
+    }
+
+    // Attach event listener for the "Add Fee" modal's occurrence dropdown
+    $('#id_occurrence').on('change', toggleAddPaymentTerm);
+
+
+    // --- Logic for EDIT FEE modals ---
+    function toggleEditPaymentTerm(occurrenceSelectElement) {
+        const occurrence = $(occurrenceSelectElement).val();
+        // Find the related elements within the same modal form
+        const modalBody = $(occurrenceSelectElement).closest('.modal-body');
+        const paymentTermDiv = modalBody.find('.payment-term-div');
+        const paymentTermSelect = modalBody.find('.payment-term-select');
+
+        if (occurrence === 'annually' || occurrence === 'one_time') {
+            paymentTermDiv.removeClass('d-none');
+            paymentTermSelect.prop('required', true);
+        } else {
+            paymentTermDiv.addClass('d-none');
+            paymentTermSelect.prop('required', false);
+            paymentTermSelect.val(''); // Clear the selection when hiding
+        }
+    }
+
+    // Attach event listener for all "Edit Fee" modals' occurrence dropdowns
+    $('.occurrence-select').on('change', function() {
+        toggleEditPaymentTerm(this);
+    });
+
+    // --- Set Initial State on Page Load ---
+    // Run the function for each "Edit Fee" modal to set the correct initial visibility
+    $('.occurrence-select').each(function() {
+        toggleEditPaymentTerm(this);
+    });
+
+    // Set initial state for the "Add Fee" modal (it should be hidden by default)
+    toggleAddPaymentTerm();
+
+});
+</script>
+
 {% endblock %}

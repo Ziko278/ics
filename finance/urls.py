@@ -58,6 +58,7 @@ urlpatterns = [
     path('finance/fee-structures/create/', FeeMasterCreateView.as_view(), name='finance_fee_master_create'),
     # This single URL handles both viewing the details and updating the termly prices
     path('finance/fee-structures/<int:pk>/', FeeMasterDetailView.as_view(), name='finance_fee_master_detail'),
+    path('finance/fee-structures/<int:pk>/update/', FeeMasterUpdateView.as_view(), name='finance_fee_master_update'),
     path('finance/fee-structures/<int:pk>/delete/', FeeMasterDeleteView.as_view(), name='finance_fee_master_delete'),
 
     # --- Invoicing & Payment ---
