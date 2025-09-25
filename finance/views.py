@@ -699,7 +699,7 @@ class StudentFeeSearchView(LoginRequiredMixin, PermissionRequiredMixin, Template
         context = super().get_context_data(**kwargs)
         context['class_list'] = ClassesModel.objects.prefetch_related('section').all().order_by('name')
         # Pre-load all students for the client-side name search
-        all_students = StudentModel.objects.select_related('student_class', 'class_section').filter(is_active=True)
+        all_students = StudentModel.objects.select_related('student_class', 'class_section').filter(status='active')
         context['student_list_json'] = serializers.serialize("json", all_students)
         return context
 
@@ -708,14 +708,14 @@ def get_students_by_class_ajax(request):
     """AJAX endpoint to fetch students for a given class and section."""
     class_pk = request.GET.get('class_pk')
     section_pk = request.GET.get('section_pk')
-    students = StudentModel.objects.filter(student_class_id=class_pk, class_section_id=section_pk, is_active=True)
+    students = StudentModel.objects.filter(student_class_id=class_pk, class_section_id=section_pk, status='active')
     return render(request, 'finance/payment/partials/student_search_results.html', {'students': students})
 
 
 def get_students_by_reg_no_ajax(request):
     """AJAX endpoint to fetch students by registration number."""
     reg_no = request.GET.get('reg_no', '').strip()
-    students = StudentModel.objects.filter(registration_number__icontains=reg_no, is_active=True)
+    students = StudentModel.objects.filter(registration_number__icontains=reg_no, status='active')
     return render(request, 'finance/payment/partials/student_search_results.html', {'students': students})
 
 
