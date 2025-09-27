@@ -13,9 +13,11 @@
         <div class="card-body">
             <h5 class="card-title">Live Meal Collection</h5>
             <p class="card-description">Search for a student by name, registration number, or by scanning their ID card barcode.</p>
-            <div class="input-group mb-3">
-                <input type="text" id="student-search-input" class="form-control form-control-lg" placeholder="Search or Scan..." autofocus>
-                <button class="btn btn-primary" type="button" id="search-btn"><i class="bi bi-search"></i> Search</button>
+            <div class="position-relative mb-3">
+                <div class="input-group">
+                    <input type="text" id="student-search-input" class="form-control form-control-lg" placeholder="Search or Scan..." autofocus>
+                    </div>
+                <div id="suggestion-list" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
             </div>
         </div>
     </div>
@@ -29,7 +31,7 @@
 
             <div class="row align-items-center" id="student-details" style="display: none;">
                 <div class="col-md-3 text-center">
-                    <img id="student-image" src="{% static 'admin_site/img/default-avatar.png' %}" class="my-3">
+                    <img id="student-image" src="{% static 'admin_site/images/default_image.jpg' %}" class="my-3">
                 </div>
                 <div class="col-md-9">
                     <h3 id="student-name"></h3>
@@ -67,12 +69,13 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('student-search-input');
-    const searchBtn = document.getElementById('search-btn');
+    const suggestionList = document.getElementById('suggestion-list');
     const studentCard = document.getElementById('student-card');
     const loadingSpinner = document.getElementById('loading-spinner');
     const studentDetails = document.getElementById('student-details');
     const errorMessage = document.getElementById('error-message');
-    
+
+    // Student card elements
     const studentImage = document.getElementById('student-image');
     const studentName = document.getElementById('student-name');
     const studentClass = document.getElementById('student-class');
@@ -81,28 +84,68 @@ document.addEventListener('DOMContentLoaded', function() {
     const mealButtons = document.getElementById('meal-buttons');
     let currentStudentId = null;
 
+    // Modal elements
     const infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
     const infoModalTitle = document.getElementById('infoModalTitle');
     const infoModalMessage = document.getElementById('infoModalMessage');
 
-    function showInfoModal(title, message) {
-        infoModalTitle.textContent = title;
-        infoModalMessage.textContent = message;
-        infoModal.show();
+    // --- NEW: Debounce function to prevent too many API calls ---
+    function debounce(func, delay) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), delay);
+        };
     }
 
-    function searchStudent() {
+    // --- NEW: Search for students as the user types ---
+    searchInput.addEventListener('input', debounce(function() {
         const query = searchInput.value.trim();
-        if (!query) return;
+        if (query.length < 2) {
+            suggestionList.innerHTML = '';
+            return;
+        }
 
+        fetch(`{% url 'cafeteria_ajax_search_student' %}?q=${query}`)
+            .then(response => response.json())
+            .then(data => {
+                displaySuggestions(data);
+            });
+    }, 300));
+
+    // --- NEW: Display the list of suggestions ---
+    function displaySuggestions(students) {
+        if (!students.length) {
+            suggestionList.innerHTML = '<div class="list-group-item list-group-item-danger">No students found.</div>';
+            return;
+        }
+
+        suggestionList.innerHTML = students.map(student => `
+            <a href="#" class="list-group-item list-group-item-action" data-student-id="${student.id}">
+                <strong>${student.name}</strong> - ${student.class}
+            </a>
+        `).join('');
+    }
+
+    // --- NEW: Handle clicks on a suggestion ---
+    suggestionList.addEventListener('click', function(e) {
+        if (e.target.matches('a.list-group-item-action')) {
+            e.preventDefault();
+            const studentId = e.target.dataset.studentId;
+            suggestionList.innerHTML = ''; // Hide suggestions
+            searchInput.value = ''; // Clear search bar
+            fetchStudentDetails(studentId);
+        }
+    });
+
+    // --- NEW: Fetch full details for the selected student ---
+    function fetchStudentDetails(studentId) {
         studentCard.style.display = 'block';
         loadingSpinner.style.display = 'block';
         studentDetails.style.display = 'none';
         errorMessage.style.display = 'none';
-        searchInput.disabled = true;
-        searchBtn.disabled = true;
 
-        fetch(`{% url 'cafeteria_ajax_search_student' %}?q=${query}`)
+        fetch(`{% url 'cafeteria_ajax_search_student' %}?student_id=${studentId}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -112,23 +155,19 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(err => {
                 displayError(err.message);
-            })
-            .finally(() => {
-                searchInput.disabled = false;
-                searchBtn.disabled = false;
-                searchInput.focus();
             });
     }
 
+    // This function remains mostly the same
     function displayStudent(data) {
         currentStudentId = data.student.id;
         studentName.textContent = data.student.name;
         studentClass.textContent = data.student.class;
-        studentImage.src = data.student.image_url || "{% static 'admin_site/img/default-avatar.png' %}";
+        studentImage.src = data.student.image_url || "{% static 'admin_site/images/default_image.jpg' %}";
         eligibilityStatus.textContent = data.eligibility_message;
         eligibilityStatus.className = data.is_eligible ? 'status-eligible' : 'status-ineligible';
         mealsToday.textContent = data.meals_today_count;
-        
+
         mealButtons.innerHTML = '';
         if (data.is_eligible) {
             data.available_meals.forEach(meal => {
@@ -140,12 +179,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 mealButtons.appendChild(button);
             });
         } else {
-             showInfoModal('Student Ineligible', data.eligibility_message);
+            showInfoModal('Student Ineligible', data.eligibility_message);
         }
 
         loadingSpinner.style.display = 'none';
         studentDetails.style.display = 'flex';
-        searchInput.value = '';
     }
 
     function displayError(message) {
@@ -155,10 +193,16 @@ document.addEventListener('DOMContentLoaded', function() {
         studentDetails.style.display = 'none';
     }
 
+    function showInfoModal(title, message) {
+        infoModalTitle.textContent = title;
+        infoModalMessage.textContent = message;
+        infoModal.show();
+    }
+
     function recordMeal(event) {
         const mealId = event.target.dataset.mealId;
         const csrfToken = '{{ csrf_token }}';
-        
+
         const formData = new FormData();
         formData.append('student_id', currentStudentId);
         formData.append('meal_id', mealId);
@@ -172,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.status === 'success') {
                 showInfoModal('Success', data.message);
-                studentCard.style.display = 'none'; // Hide card to be ready for next scan
+                studentCard.style.display = 'none'; // Hide card for next scan
             } else {
                 showInfoModal('Error', data.message);
             }
@@ -182,10 +226,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    searchBtn.addEventListener('click', searchStudent);
-    searchInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            searchStudent();
+    // Hide suggestions when clicking away
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.position-relative')) {
+            suggestionList.innerHTML = '';
         }
     });
 });

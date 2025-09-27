@@ -8,7 +8,7 @@
     <ol class="breadcrumb">
       <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
       <li class="breadcrumb-item"><a href="{% url 'finance_salary_advance_list' %}">Salary Advances</a></li>
-      <li class="breadcrumb-item active">Request from {{ advance.staff.staff_profile.user.get_full_name|title }}</li>
+      <li class="breadcrumb-item active">Request from {{ advance.staff|title }}</li>
     </ol>
   </nav>
 </div>
@@ -22,7 +22,7 @@
 
                 <div class="row mb-2 border-bottom pb-2">
                     <div class="col-lg-4 col-md-5 fw-bold">Staff Member:</div>
-                    <div class="col-lg-8 col-md-7">{{ advance.staff.staff_profile.user.get_full_name|title }}</div>
+                    <div class="col-lg-8 col-md-7">{{ advance.staff|title }}</div>
                 </div>
                 <div class="row mb-2 border-bottom pb-2">
                     <div class="col-lg-4 col-md-5 fw-bold">Request Date:</div>

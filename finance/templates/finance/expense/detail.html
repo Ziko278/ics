@@ -18,7 +18,6 @@
         <div class="card-body d-flex justify-content-between align-items-center">
             <div>
                 <h5 class="card-title mb-0">Expense Record</h5>
-                <small class="text-muted">#{{ expense.pk }}</small>
             </div>
             <div>
                 <a title="Edit Expense Record" href="{% url 'expense_update' expense.pk %}" class="btn btn-warning">
@@ -91,72 +90,24 @@
                             <span>{% if expense.term %}{{ expense.term }}{% else %}—{% endif %}</span>
                         </li>
 
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span class="meta-label">Recorded By</span>
-                            <span>{% if expense.created_by %}{{ expense.created_by.get_full_name|default:expense.created_by.username }}{% else %}—{% endif %}</span>
-                        </li>
+<!--                        <li class="list-group-item d-flex justify-content-between align-items-center">-->
+<!--                            <span class="meta-label">Recorded By</span>-->
+<!--                            <span>{% if expense.created_by %}{{ expense.created_by|default:expense.created_by.username }}{% else %}—{% endif %}</span>-->
+<!--                        </li>-->
 
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             <span class="meta-label">Recorded At</span>
                             <span class="text-muted">{{ expense.created_at|date:"d M Y, P" }}</span>
                         </li>
 
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span class="meta-label">Record ID</span>
-                            <span class="text-muted">{{ expense.pk }}</span>
-                        </li>
                     </ul>
                 </div>
             </div>
 
-            <div class="card mt-3">
-                <div class="card-body text-center">
-                    <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmDeleteModal">
-                        <i class="bi bi-trash"></i> Delete
-                    </button>
-                    <a class="btn btn-outline-secondary btn-sm ms-2" href="{% url 'expense_index' %}">Close</a>
-                </div>
-            </div>
+
         </div>
     </div>
 </div>
 
-<!-- Central Confirmation Modal (Delete) -->
-<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-danger">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title">Confirm Deletion</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-
-            <div class="modal-body">
-                <p>Are you sure you want to permanently delete this expense record?</p>
-                <dl class="row">
-                    <dt class="col-sm-4">Record ID:</dt>
-                    <dd class="col-sm-8">#{{ expense.pk }}</dd>
-
-                    <dt class="col-sm-4">Amount:</dt>
-                    <dd class="col-sm-8">₦{{ expense.amount|intcomma }}</dd>
-
-                    <dt class="col-sm-4">Category:</dt>
-                    <dd class="col-sm-8">{{ expense.category.name|title }}</dd>
-                </dl>
-
-                <div class="alert alert-warning mt-2">
-                    <strong>Warning:</strong> This action cannot be undone. Deleting this record may affect historical reports.
-                </div>
-            </div>
-
-            <div class="modal-footer">
-                <form method="post" action="{% url 'expense_delete' expense.pk %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-danger">Yes, Delete</button>
-                </form>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            </div>
-        </div>
-    </div>
-</div>
 
 {% endblock %}

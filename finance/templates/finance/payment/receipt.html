@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load humanize %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -43,9 +44,9 @@
             <div class="card mb-4">
                 <div class="card-header"><strong>Received From</strong></div>
                 <div class="card-body py-2">
-                    <h5 class="card-title my-2">{{ payment.invoice.student.student_profile.user.get_full_name|title }}</h5>
+                    <h5 class="card-title my-2">{{ payment.invoice.student|title }}</h5>
                     <p class="card-text mb-0"><strong>Reg No:</strong> {{ payment.invoice.student.registration_number }}</p>
-                    <p class="card-text"><strong>Class:</strong> {{ payment.invoice.student.student_class.name }} {{ payment.invoice.student.class_section.name }}</p>
+                    <p class="card-text"><strong>Class:</strong> {{ payment.invoice.student.student_class.name|title }} {{ payment.invoice.student.class_section.name|title }}</p>
                 </div>
             </div>
 

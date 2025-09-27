@@ -5,11 +5,13 @@ from django.contrib import messages
 from django.contrib.auth import logout, authenticate, login
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
+from django.utils import timezone
 from django.views.generic import View, TemplateView, ListView, DetailView, CreateView, UpdateView, DeleteView
-from django.db.models import Sum, F
+from django.db.models import Sum, F, Count
 from django.db import OperationalError
 from django.utils.timezone import now
 
+from inventory.models import ItemModel, SaleItemModel, SaleModel, SupplierModel
 from .models import (
     ActivityLogModel, SchoolInfoModel, SchoolSettingModel, ClassSectionModel,
     ClassesModel, ClassSectionInfoModel
@@ -44,27 +46,61 @@ class FlashFormErrorsMixin:
 
 class AdminDashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'admin_site/dashboard.html'
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         try:
-            today = now().date()
-            # context['total_products'] = ProductModel.objects.count()
-            # context['low_stock'] = ProductModel.objects.filter(quantity__lte=F('reorder_level')).count()
-            # context['total_sales_today'] = SaleModel.objects.filter(sale_date__date=today).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-            # context['total_profit_today'] = SaleItemModel.objects.filter(sale__sale_date__date=today).aggregate(Sum('profit'))['profit__sum'] or 0
-            # context['total_staff'] = StaffModel.objects.count()
-            # context['total_returns'] = ReturnModel.objects.count()
-            # context['total_suppliers'] = SupplierModel.objects.count()
+            today = timezone.now().date()
+
+            # --- Academic & General Info ---
+            context['academic_info'] = SchoolSettingModel.objects.select_related('session', 'term').first()
             context['active_students'] = StudentModel.objects.filter(status='active').count()
+            context['total_staff'] = StaffModel.objects.count()
+
+            # --- Inventory & Sales Info ---
+            context['total_products'] = ItemModel.objects.count()
+
+            # Use the efficient low-stock query we created
+            low_stock_query = ItemModel.objects.annotate(
+                total_quantity=F('shop_quantity') + F('store_quantity')
+            ).filter(total_quantity__lte=F('reorder_level'))
+            context['low_stock'] = low_stock_query.count()
+
+            # Calculate today's sales and profit
+            sales_items_today = SaleItemModel.objects.filter(sale__created_at__date=today)
+            total_sales_data = sales_items_today.aggregate(
+                total_revenue=Sum(F('quantity') * F('unit_price'))
+            )
+            total_discounts_today = SaleModel.objects.filter(created_at__date=today).aggregate(
+                total_discount=Sum('discount')
+            )['total_discount'] or 0
+
+            context['total_sales_today'] = (total_sales_data['total_revenue'] or 0) - total_discounts_today
+
+            profit_data = sales_items_today.aggregate(
+                total_profit=Sum((F('unit_price') - F('unit_cost')) * F('quantity'))
+            )
+            context['total_profit_today'] = profit_data['total_profit'] or 0
+
+            context['total_suppliers'] = SupplierModel.objects.filter(is_active=True).count()
+
+            # --- Data for Student Distribution Pie Chart ---
+            context['student_class_list'] = StudentModel.objects.filter(
+                status='active'
+            ).values(
+                'student_class__name'  # Group by the class name
+            ).annotate(
+                number_of_students=Count('id')  # Count students in each group
+            ).order_by('student_class__name')
+
         except OperationalError as e:
             logger.error(f"DATABASE ERROR in AdminDashboardView: {e}")
             messages.error(self.request, "A database error occurred. Some dashboard data may be unavailable.")
         except Exception as e:
             logger.error(f"UNEXPECTED ERROR in AdminDashboardView: {e}", exc_info=True)
             messages.warning(self.request, "An unexpected error occurred while loading dashboard data.")
-        return context
 
+        return context
 
 class ActivityLogView(LoginRequiredMixin, ListView):
     model = ActivityLogModel
@@ -362,5 +398,5 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     messages.info(request, "You have been successfully signed out.")
-    return redirect('admin_login')
+    return redirect('login')
 

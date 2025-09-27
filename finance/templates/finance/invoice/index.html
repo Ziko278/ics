@@ -76,8 +76,8 @@
                 {% for invoice in invoices %}
                 <tr>
                     <th scope="row"><a href="{% url 'finance_invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></th>
-                    <td>{{ invoice.student.student_profile.user.get_full_name|title }}</td>
-                    <td>{{ invoice.student.student_class.name }}</td>
+                    <td>{{ invoice.student|title }}</td>
+                    <td>{{ invoice.student.student_class.name|title }} {{ invoice.student.class_section.name|title }}</td>
                     <td>₦{{ invoice.total_amount|floatformat:2|intcomma }}</td>
                     <td>₦{{ invoice.amount_paid|floatformat:2|intcomma }}</td>
                     <td>
@@ -88,7 +88,7 @@
                         {% endif %}
                     </td>
                     <td>
-                         <span class="badge 
+                         <span class="badge
                             {% if invoice.status == 'paid' %}bg-success
                             {% elif invoice.status == 'partially_paid' %}bg-warning text-dark
                             {% else %}bg-danger{% endif %}">

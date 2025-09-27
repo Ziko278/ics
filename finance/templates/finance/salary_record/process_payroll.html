@@ -65,7 +65,7 @@
                                 {{ form.id }}
                                 <td class="text-center"><input type="checkbox" name="mark_as_paid" value="{{ form.instance.id }}" class="pay-checkbox" {% if form.instance.is_paid %}disabled{% endif %}></td>
                                 <td>
-                                    {{ form.instance.staff.staff_profile.user.get_full_name|title }}
+                                    {{ form.instance.staff|title }}
                                     <small class="d-block text-muted">{{ form.instance.staff.staff_id }}</small>
                                 </td>
                                 <td>{{ form.bonus }}</td>

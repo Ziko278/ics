@@ -46,7 +46,7 @@ class StudentFundingModel(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     proof_of_payment = models.FileField(blank=True, null=True, upload_to='images/funding')
     method = models.CharField(max_length=100, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
-    mode = models.CharField(max_length=100, choices=PaymentMode.choices, default=PaymentMode.OFFLINE)
+    mode = models.CharField(max_length=100, choices=PaymentMode.choices, blank=True, default=PaymentMode.OFFLINE)
     status = models.CharField(max_length=30, choices=PaymentStatus.choices, default=PaymentStatus.CONFIRMED)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(StaffModel, on_delete=models.SET_NULL, null=True, blank=True,
@@ -63,7 +63,6 @@ class StudentFundingModel(models.Model):
         verbose_name_plural = "Student Funding Records"
         ordering = ['-created_at']
 
-    # ✔️ BUG FIX: Corrected the __str__ representation.
     def __str__(self):
         return f"Funding for {self.student} - {self.amount}"
 
@@ -83,13 +82,7 @@ class StudentFundingModel(models.Model):
         is_new = self.pk is None
         super().save(*args, **kwargs)
 
-        if is_new and self.status == self.PaymentStatus.CONFIRMED:
-            try:
-                wallet = StudentWalletModel.objects.get(student=self.student)
-                wallet.balance += self.amount
-                wallet.save()
-            except StudentWalletModel.DoesNotExist:
-                logger.error(f"Could not find wallet for student {self.student.id} to apply funding.")
+
 
 
 # ===================================================================
@@ -237,6 +230,11 @@ class InvoiceItemModel(models.Model):
     fee_master = models.ForeignKey(FeeMasterModel, on_delete=models.PROTECT)
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    @property
+    def balance(self):
+        return self.amount - self.amount_paid
 
     def __str__(self):
         return self.description
@@ -259,7 +257,7 @@ class FeePaymentModel(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_mode = models.CharField(max_length=20, choices=PaymentMode.choices)
     date = models.DateField(default=timezone.now)
-    reference = models.CharField(max_length=100, unique=True)
+    reference = models.CharField(max_length=100, blank=True, default='')
     status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
     notes = models.TextField(blank=True, null=True)
     confirmed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -367,7 +365,6 @@ class ExpenseModel(models.Model):
     category = models.ForeignKey(
         ExpenseCategoryModel, on_delete=models.PROTECT, related_name="expenses"
     )
-    description = models.CharField(max_length=255)
     amount = models.DecimalField(
         max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
     )
@@ -418,14 +415,14 @@ class ExpenseModel(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.description} ({self.amount})"
+        return f"{self.category.__str__()} ({self.amount})"
 
 
 class IncomeModel(models.Model):
     category = models.ForeignKey(
         IncomeCategoryModel, on_delete=models.PROTECT, related_name="incomes"
     )
-    description = models.CharField(max_length=255)
+    description = models.CharField(max_length=255, blank=True, default='')
     amount = models.DecimalField(
         max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
     )
@@ -557,8 +554,8 @@ class SalaryAdvance(models.Model):
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
         APPROVED = 'approved', 'Approved'
-        DISBURSED = 'disbursed', 'Disbursed'
-        COMPLETED = 'completed', 'Completed'
+        DISBURSED = 'disbursed', 'Disbursed (Owing)'  # Now indicates an active debt
+        COMPLETED = 'completed', 'Completed (Paid Off)'  # New status for paid debts
         REJECTED = 'rejected', 'Rejected'
 
     staff = models.ForeignKey(StaffModel, on_delete=models.CASCADE, related_name='salary_advances')
@@ -567,18 +564,22 @@ class SalaryAdvance(models.Model):
     request_date = models.DateField(default=timezone.now)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
 
-    # NEW: Added Session and Term fields for auditing
+    # NEW: Field to track repayments against this specific advance
+    repaid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
     session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL, null=True, blank=True)
     term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True)
-
-    # Auditing
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
                                     related_name='approved_salary_advances')
     approved_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def balance(self):
+        """Calculates the outstanding balance for this advance."""
+        return self.amount - self.repaid_amount
+
     def save(self, *args, **kwargs):
-        # Auto-populate session and term if not set
         if self.session is None or self.term is None:
             setting = SchoolSettingModel.objects.first()
             if setting:
@@ -587,7 +588,32 @@ class SalaryAdvance(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Salary Advance for {self.staff.staff_profile.user.get_full_name()}"
+        return f"Salary Advance for {self.staff}"
+
+
+# NEW: Model to record every single repayment transaction
+class SalaryAdvanceRepayment(models.Model):
+    """Logs each individual repayment made by a staff member."""
+    staff = models.ForeignKey(StaffModel, on_delete=models.CASCADE, related_name='salary_repayments')
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_date = models.DateField(default=timezone.now)
+
+    # Auditing
+    session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL, null=True, blank=True)
+    term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.session is None or self.term is None:
+            setting = SchoolSettingModel.objects.first()
+            if setting:
+                if self.session is None: self.session = setting.session
+                if self.term is None: self.term = setting.term
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Repayment of {self.amount_paid} for {self.staff}"
 
 
 class SalaryRecord(models.Model):

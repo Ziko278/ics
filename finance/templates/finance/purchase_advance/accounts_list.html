@@ -48,10 +48,8 @@
             <table class="table table-hover">
                 <thead>
                 <tr>
-                    <th scope="col">Advance #</th>
                     <th scope="col">Staff</th>
                     <th scope="col">Date</th>
-                    <th scope="col">Session/Term</th>
                     <th scope="col">Approved Amount</th>
                     <th scope="col">Disbursed</th>
                     <th scope="col">Balance</th>
@@ -64,10 +62,8 @@
 <tbody>
 {% for advance in purchase_advances %}
 <tr>
-    <th scope="row"><a href="{% url 'inventory_advance_detail' advance.pk %}">{{ advance.advance_number }}</a></th>
-    <td>{{ advance.staff.get_full_name|title }}</td>
+    <td>{{ advance.staff|title }}</td>
     <td>{{ advance.request_date|date:"d M, Y" }}</td>
-    <td>{{ advance.session }} / {{ advance.term.name|title }}</td>
     <td>₦{{ advance.approved_amount|floatformat:2|intcomma }}</td>
     <td>₦{{ advance.disbursed_amount|floatformat:2|intcomma }}</td>
     <td>

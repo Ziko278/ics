@@ -1,680 +1,446 @@
 {% extends 'admin_site/layout.html' %}
-{% load static %}
+{% load static humanize %}
+
 {% block 'main' %}
 <style>
-  #student-suggestions {
-    position: absolute; z-index: 9999;
-    border-radius: 4px; background: #fff;
-    max-height: 250px; overflow-y: auto;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  }
-  .student-option { padding:10px 15px; cursor:pointer; border-bottom:1px solid #f1f1f1; transition:background .2s; }
-  .student-option:hover { background:#f5f5f5; }
-  .no-result { background:#dc3545; color:#fff; padding:10px 15px; font-weight:bold; text-align:center; }
+    /* Suggestions dropdown styles */
+    .suggestions-container { position: relative; }
+    .suggestions-list {
+        position: absolute; z-index: 1050; width: 100%;
+        max-height: 250px; overflow-y: auto;
+        background: #fff; border: 1px solid #ddd;
+        border-radius: 0 0 0.25rem 0.25rem;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .suggestion-item { cursor: pointer; }
+    .suggestion-item:hover { background-color: #f8f9fa; }
 
-  #error-modal { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
-    background:#fff; border:1px solid #ccc; padding:20px; z-index:99999;
-    box-shadow:0 0 15px rgba(0,0,0,.3); border-radius:8px; max-width:400px; width:90%; }
-  #close-error-modal { position:absolute; top:5px; right:10px; border:none; background:none;
-    font-size:16px; font-weight:bold; cursor:pointer; }
-  #error-message { margin-top:20px; }
-
-  .barcode-scanner-active {
-    background: linear-gradient(45deg, #28a745, #20c997);
-    color: white !important;
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-  }
+    /* Make the top items list look like clickable tags */
+    .top-item-badge {
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+    }
+    .top-item-badge:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
 </style>
 
 <div class="card">
-  <div class="card-body">
-    <h3 class="card-title text-center">ORDER PLACEMENT</h3>
-    <div class="alert alert-info d-flex align-items-center" style="padding:8px;">
-      <i class="fas fa-info-circle me-2"></i>
-      <div class="flex-grow-1">
-        <strong>Tip:</strong> Scan Student Barcode, use Fingerprint, or scan Product Barcode for faster processing.
-      </div>
+    <div class="card-body">
+        <h3 class="card-title text-center">POINT OF SALE</h3>
 
-    </div>
-  </div>
+        <form id="order-form" method="POST" action="{% url 'place_order' %}">
+            {% csrf_token %}
 
-  <form id="order-form" class="px-4" method="POST" style="margin-top:-10px;">
-    {% csrf_token %}
-
-    <!-- Student Selection Section -->
-    <div class="row mb-3">
-      <div class="col-md-3">
-        <label for="student-search" class="form-label">Student</label>
-        <input autocomplete="off" class="form-control" id="student-search"
-               name="student_search" placeholder="Name or Reg Number" type="search">
-        <input id="student-id" name="student_id" type="hidden">
-        <div class="list-group" id="student-suggestions"></div>
-      </div>
-      <div class="col-md-6">
-        <div class="student-info">
-          <p><strong>Student: <span id="student_name">—</span></strong>
-             <small class="text-muted">(<span id="student_reg_no">—</span>)</small></p>
-          <p class="mb-1"><strong>Class: <span id="student_class">—</span></strong></p>
-          <p class="mb-1">
-            <strong>Wallet: ₦<span id="wallet_balance">0.00</span></strong>
-            <span class="text-danger ms-2">Debt: ₦<span id="wallet_debt">0.00</span></span>
-          </p>
-        </div>
-      </div>
-      <div class="col-md-3 text-center">
-        <img id="student_image" class="img-fluid rounded border"
-             src="{% static 'admin_site/images/default_image.jpg' %}"
-             style="max-height:80px; width: 80px; object-fit: cover;" alt="Student Image">
-      </div>
-    </div>
-
-    <!-- Items Section -->
-    <div class="card mb-3">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Order Items</h5>
-        <button type="button" class="btn btn-sm btn-success" id="add-item-row">
-          <i class="fas fa-plus"></i> Add Item
-        </button>
-      </div>
-      <div class="card-body px-0">
-        <div class="table-responsive">
-          <table class="table table-striped" id="order-table">
-            <thead class="table-dark">
-              <tr>
-                <th class="text-center" style="width: 60px;">Action</th>
-                <th>Item</th>
-                <th class="text-center" style="width: 100px;">Available</th>
-                <th class="text-center" style="width: 120px;">Unit Price (₦)</th>
-                <th class="text-center" style="width: 100px;">Quantity</th>
-                <th class="text-center" style="width: 120px;">Total (₦)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="order-row">
-                <td class="text-center">
-                  <button type="button" class="btn btn-sm btn-outline-danger remove-row">
-                    <i class="bi bi-x"></i>
-                  </button>
-                </td>
-                <td>
-                  <input class="form-control item-search" placeholder="Search item or scan barcode" type="text">
-                  <input class="item-id" name="items[0][item_id]" type="hidden">
-                  <div class="item-suggestions"></div>
-                </td>
-                <td class="text-center">
-                  <span class="qty-available badge bg-info">—</span>
-                </td>
-                <td class="text-center">
-                  <span class="unit-price">—</span>
-                </td>
-                <td class="text-center">
-                  <input class="form-control quantity-input text-center" min="0.01" step="0.01"
-                         name="items[0][quantity]" type="number" value="1">
-                </td>
-                <td class="text-center">
-                  <strong class="total-price">—</strong>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Order Summary -->
-        <div class="row mt-3">
-          <div class="col-md-6">
-            <div class="row">
-              <div class="col-md-6">
-                <label for="subtotal" class="form-label">Subtotal (₦)</label>
-                <input class="form-control" id="subtotal" readonly type="text" value="0.00">
-              </div>
-              <div class="col-md-6">
-                <label for="discount" class="form-label">Discount (₦)</label>
-                <input class="form-control" id="discount" name="discount" type="number"
-                       min="0" step="0.01" value="0.00">
-              </div>
+            <div class="row mb-3 p-3 border rounded bg-light">
+                <div class="col-md-4 suggestions-container">
+                    <label for="student-search" class="form-label">Search Student (Optional)</label>
+                    <input autocomplete="off" class="form-control" id="student-search" placeholder="Name or Reg Number..." type="search">
+                    <input id="student-id" name="student_id" type="hidden">
+                    <div id="student-suggestions" class="suggestions-list list-group"></div>
+                </div>
+                <div class="col-md-5">
+                    <div class="student-info">
+                        <p class="mb-1"><strong>Student:</strong> <span id="student-name">—</span> <small id="student-reg" class="text-muted"></small></p>
+                        <p class="mb-0">
+                            <strong>Wallet:</strong> <span id="wallet-balance" class="text-success fw-bold">₦0.00</span>
+                            <strong class="ms-3">Debt:</strong> <span id="wallet-debt" class="text-danger fw-bold">₦0.00</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-3 text-end">
+                    <img id="student-image" class="img-fluid rounded border" src="{% static 'admin_site/images/default_image.jpg' %}" style="max-height:80px; width: 80px; object-fit: cover;" alt="Student Image">
+                </div>
             </div>
-          </div>
-          <div class="col-md-3">
-            <label for="grand_total" class="form-label">Grand Total (₦)</label>
-            <input class="form-control fw-bold" id="grand_total" name="grand_total" readonly type="text" value="0.00">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Payment Method</label>
-            <select name="payment_method" class="form-select" required>
-              <option value="student_wallet">Student Wallet</option>
-              <option value="cash">Cash</option>
-              <option value="pos">POS</option>
-            </select>
-          </div>
-        </div>
 
-        <div class="text-center mt-4">
-          <button class="btn btn-primary btn-lg px-5" type="submit">
-            <i class="fas fa-shopping-cart"></i> Place Order
-          </button>
-          <button type="button" class="btn btn-outline-secondary btn-lg px-4 ms-2" onclick="clearForm()">
-            <i class="fas fa-broom"></i> Clear
-          </button>
-        </div>
-      </div>
+            <div class="mb-3">
+                <h6 class="text-muted"><i class="bi bi-star-fill text-warning"></i> Top Selling Items</h6>
+                <div id="top-items-container">
+                    {% for item in top_items %}
+                        <span class="badge bg-secondary top-item-badge m-1 p-2"
+                              data-item-id="{{ item.item__id }}"
+                              data-item-name="{{ item.item__name }}"
+                              data-item-price="{{ item.item__current_selling_price }}"
+                              data-item-qty="{{ item.item__shop_quantity }}">
+                            {{ item.item__name }}
+                        </span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered" id="order-table">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 5%;">Action</th>
+                            <th style="width: 40%;">Item</th>
+                            <th style="width: 10%;">Available</th>
+                            <th style="width: 15%;">Unit Price (₦)</th>
+                            <th style="width: 15%;">Quantity</th>
+                            <th style="width: 15%;">Total (₦)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        </tbody>
+                </table>
+            </div>
+
+            <div class="d-flex justify-content-end mb-3">
+                <button type="button" class="btn btn-sm btn-success" id="add-item-row">
+                    <i class="bi bi-plus-circle"></i> Add Item Row
+                </button>
+            </div>
+
+            <div class="row mt-3 justify-content-end">
+                <div class="col-md-6">
+                    <div class="row g-3">
+                        <div class="col-6"><label class="form-label">Subtotal</label><input class="form-control" id="subtotal" readonly></div>
+                        <div class="col-6"><label class="form-label">Discount</label><input class="form-control" id="discount" name="discount" type="number" min="0" step="0.01" value="0.00"></div>
+                        <div class="col-6"><label class="form-label">Payment Method</label><select name="payment_method" id="payment-method" class="form-select" required><option value="cash">Cash</option><option value="pos">POS</option><option value="student_wallet" disabled>Student Wallet</option></select></div>
+                        <div class="col-6"><label class="form-label">Grand Total</label><input class="form-control fs-5 fw-bold" id="grand-total" readonly></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <button class="btn btn-primary btn-lg px-5" type="submit"><i class="bi bi-cart-check"></i> Place Order</button>
+                <button type="button" class="btn btn-outline-secondary btn-lg px-4 ms-2" id="clear-form-btn"><i class="bi bi-arrow-clockwise"></i> Clear Form</button>
+            </div>
+        </form>
     </div>
-  </form>
 </div>
 
-<!-- Error Modal -->
-<div id="error-modal">
-  <button id="close-error-modal" class="text-dark">×</button>
-  <div id="error-message" class="text-dark"></div>
-</div>
-
-<script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+<template id="order-row-template">
+    <tr class="order-row">
+        <td class="text-center align-middle"><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-x-lg"></i></button></td>
+        <td class="suggestions-container">
+            <input class="form-control item-search" placeholder="Search item or scan barcode..." type="text">
+            <input class="item-id" name="items[__INDEX__][item_id]" type="hidden">
+            <div class="suggestions-list item-suggestions list-group"></div>
+        </td>
+        <td class="text-center align-middle"><span class="qty-available badge bg-info">—</span></td>
+        <td class="text-center align-middle"><span class="unit-price">—</span></td>
+        <td><input class="form-control quantity-input text-center" min="0.01" step="0.01" name="items[__INDEX__][quantity]" type="number" value="1" disabled></td>
+        <td class="text-center align-middle"><strong class="total-price">—</strong></td>
+    </tr>
+</template>
 
 <script>
-$(function(){
-  // Configuration
-  const studentSearchUrl = "{% url 'api_student_search' %}";
-  const itemSearchUrl = "{% url 'api_item_search' %}";
-  const barcodeLookupUrl = "{% url 'api_barcode_lookup' %}";
-  const identifyByFingerprintUrl = "{% url 'identify_student_by_fingerprint' %}";
-  const maxDebt = {{ settings.max_student_debt|default:0 }};
-  const defaultImage = "{% static 'admin_site/images/default_image.jpg' %}";
+document.addEventListener('DOMContentLoaded', function () {
+    // --- CONFIGURATION ---
+    const studentSearchUrl = "{% url 'api_student_search' %}";
+    const itemSearchUrl = "{% url 'api_item_search' %}";
+    const barcodeLookupUrl = "{% url 'api_barcode_lookup' %}";
+    const maxDebt = {{ settings.max_student_debt|default:0 }};
+    const defaultImage = "{% static 'admin_site/images/default_image.jpg' %}";
 
-  // Global variables for barcode scanning
-  let barcodeMode = false;
-  let barcodeScanInput = '';
-  let scanTimer;
+    // --- DOM ELEMENTS ---
+    const orderForm = document.getElementById('order-form');
+    const studentSearchInput = document.getElementById('student-search');
+    const studentSuggestions = document.getElementById('student-suggestions');
+    const studentIdInput = document.getElementById('student-id');
+    const paymentMethodSelect = document.getElementById('payment-method');
+    const orderTableBody = document.querySelector('#order-table tbody');
+    const rowTemplate = document.getElementById('order-row-template');
 
-  // ---------------- Barcode Scanner ----------------
-  $('#barcode-mode-toggle').click(function(){
-    barcodeMode = !barcodeMode;
-    $(this).toggleClass('barcode-scanner-active', barcodeMode)
-           .html(barcodeMode ?
-                 '<i class="fas fa-barcode"></i> Barcode Mode: ON' :
-                 '<i class="fas fa-barcode"></i> Barcode Mode: OFF');
+    let rowIndex = 0;
 
-    if (barcodeMode) {
-      showAlert('Barcode scanning mode activated. Scan any barcode now.', 'success');
-      barcodeScanInput = '';
-    }
-  });
+    // --- STUDENT LOGIC ---
+    studentSearchInput.addEventListener('input', debounce(function() {
+        const query = this.value;
+        if (query.length < 2) { studentSuggestions.innerHTML = ''; return; }
 
-  // Barcode detection - adapted from the working stock transfer page
-  $(document).on('keydown', function(e) {
-    if (!barcodeMode) return;
+        fetch(`${studentSearchUrl}?q=${query}`)
+            .then(res => res.json())
+            .then(data => {
+                let html = '';
+                if (data.length) {
+                    data.forEach(s => {
+                        html += `<a href="#" class="list-group-item list-group-item-action suggestion-item student-option" data-student='${JSON.stringify(s)}'>${s.name} (${s.reg_number})</a>`;
+                    });
+                } else {
+                    html = '<div class="list-group-item">No students found.</div>';
+                }
+                studentSuggestions.innerHTML = html;
+            });
+    }, 300));
 
-    // Don't interfere if user is typing in input fields (except our search fields)
-    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
-      if (!$(document.activeElement).hasClass('item-search') && document.activeElement.id !== 'student-search') {
-        return;
-      }
-    }
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('student-option')) {
+            e.preventDefault();
+            const studentData = JSON.parse(e.target.dataset.student);
+            populateStudent(studentData);
+        }
+        if (!e.target.closest('.suggestions-container')) {
+            document.querySelectorAll('.suggestions-list').forEach(el => el.innerHTML = '');
+        }
+    });
 
-    // Clear existing timer
-    if (scanTimer) clearTimeout(scanTimer);
+    function populateStudent(student) {
+        studentIdInput.value = student.id;
+        document.getElementById('student-name').textContent = student.name;
+        document.getElementById('student-reg').textContent = `(${student.reg_number})`;
+        document.getElementById('student-class').textContent = student.student_class;
+        document.getElementById('wallet-balance').textContent = parseFloat(student.wallet_balance || 0).toFixed(2);
+        document.getElementById('wallet-debt').textContent = parseFloat(student.wallet_debt || 0).toFixed(2);
+        document.getElementById('student-image').src = student.image_url || defaultImage;
+        studentSearchInput.value = student.name;
+        studentSuggestions.innerHTML = '';
 
-    // Handle Enter key (end of barcode scan)
-    if (e.key === 'Enter') {
-      let codeToProcess = '';
-
-      // If focused on student search, use its value, otherwise use barcode buffer
-      if (document.activeElement.id === 'student-search') {
-        codeToProcess = $('#student-search').val();
-      } else if ($(document.activeElement).hasClass('item-search')) {
-        codeToProcess = $(document.activeElement).val();
-      } else {
-        codeToProcess = barcodeScanInput;
-      }
-
-      if (codeToProcess.length > 3) {
-        handleBarcodeScanned(codeToProcess);
-        e.preventDefault();
-      }
-      barcodeScanInput = '';
-      return;
-    }
-
-    // Collect characters for barcode (only if not focused on search fields)
-    if (e.key.length === 1) {
-      if (document.activeElement.id !== 'student-search' && !$(document.activeElement).hasClass('item-search')) {
-        barcodeScanInput += e.key;
-        e.preventDefault(); // Prevent typing into other fields
-      }
+        // Requirement #2: Set payment method
+        paymentMethodSelect.value = 'student_wallet';
+        paymentMethodSelect.querySelector('option[value="student_wallet"]').disabled = false;
     }
 
-    // Set timeout to process barcode if no more characters come
-    scanTimer = setTimeout(() => {
-      if (barcodeScanInput.length > 3) {
-        handleBarcodeScanned(barcodeScanInput);
-      }
-      barcodeScanInput = '';
-    }, 150);
-  });
+    function clearStudent() {
+        studentIdInput.value = '';
+        document.getElementById('student-name').textContent = '—';
+        document.getElementById('student-reg').textContent = '';
+        document.getElementById('student-class').textContent = '—';
+        document.getElementById('wallet-balance').textContent = '0.00';
+        document.getElementById('wallet-debt').textContent = '0.00';
+        document.getElementById('student-image').src = defaultImage;
+        studentSearchInput.value = '';
 
-  function handleBarcodeScanned(barcode) {
-    console.log('Processing barcode:', barcode);
+        // Requirement #2: Set payment method
+        paymentMethodSelect.value = 'cash';
+        paymentMethodSelect.querySelector('option[value="student_wallet"]').disabled = true;
+    }
 
-    $.post(barcodeLookupUrl, {
-      barcode: barcode,
-      csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
-    }).done(function(resp) {
-      if (resp.student) {
-        populateStudent(resp.student);
-        showAlert('Student found via barcode: ' + resp.student.name, 'success');
-        clearSearchFields();
-      } else if (resp.item) {
-        // Check if item already exists in the order
-        const existingItem = $('#order-table .item-id').filter(function() {
-          return $(this).val() === String(resp.item.id);
+    // --- ITEM & ROW LOGIC ---
+    function addNewRow() {
+        const newRow = rowTemplate.content.cloneNode(true);
+        const rowElement = newRow.querySelector('tr');
+
+        // Update name attributes with unique index
+        rowElement.innerHTML = rowElement.innerHTML.replace(/__INDEX__/g, rowIndex);
+
+        orderTableBody.appendChild(newRow);
+        rowIndex++;
+        bindRowEvents(orderTableBody.lastElementChild);
+        return orderTableBody.lastElementChild;
+    }
+
+    function bindRowEvents(row) {
+        row.querySelector('.remove-row').addEventListener('click', () => {
+            if (orderTableBody.querySelectorAll('tr').length > 1) {
+                row.remove();
+                updateTotals();
+            }
         });
 
-        if (existingItem.length > 0) {
-          showAlert('Item "' + resp.item.name + '" is already in the order');
-          return;
-        }
+        row.querySelector('.item-search').addEventListener('input', debounce(function() {
+            const input = this;
+            const query = input.value;
+            const suggestionsEl = row.querySelector('.item-suggestions');
+            if (query.length < 2) { suggestionsEl.innerHTML = ''; return; }
 
-        fillItemRowDirectly(resp.item);
-        showAlert('Item added: ' + resp.item.name, 'success');
-        clearSearchFields();
-      } else {
-        showAlert('Barcode "' + barcode + '" not found in system');
-      }
-    }).fail(function(xhr) {
-      console.error('Barcode lookup error:', xhr);
-      showAlert('Error looking up barcode. Please try again.');
-    });
-  }
+            fetch(`${itemSearchUrl}?q=${query}`)
+                .then(res => res.json())
+                .then(data => {
+                    let html = '';
+                    if(data.length) {
+                        data.forEach(i => {
+                            html += `<a href="#" class="list-group-item list-group-item-action suggestion-item item-option" data-item='${JSON.stringify(i)}'>${i.name} (Av: ${i.qty_remaining})</a>`;
+                        });
+                    } else {
+                        html = '<div class="list-group-item">No items found.</div>';
+                    }
+                    suggestionsEl.innerHTML = html;
+                });
+        }, 300));
 
-  function clearSearchFields() {
-    $('#student-search').val('');
-    $('.item-search').val('');
-    $('#student-suggestions').empty();
-    $('.item-suggestions').remove();
-  }
-
-  // --------------- Fingerprint Integration ---------------
-  let fpSocket;
-  try {
-    fpSocket = new WebSocket("ws://localhost:8181/");
-    fpSocket.onmessage = function(e) {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.fingerprint_template) {
-          identifyFingerprint(msg.fingerprint_template);
-        }
-      } catch(err) {
-        console.log('Fingerprint data parsing error:', err);
-      }
-    };
-    fpSocket.onerror = function() {
-      console.log('Fingerprint scanner not connected');
-    };
-  } catch(e) {
-    console.log('Fingerprint scanner not available');
-  }
-
-  function identifyFingerprint(template) {
-    $.ajax({
-      url: identifyByFingerprintUrl,
-      method: 'POST',
-      contentType: 'application/json',
-      headers: { 'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() },
-      data: JSON.stringify({ fingerprint_data: template })
-    }).done(function(data) {
-      if (data.success) {
-        populateStudent(data.student);
-        showAlert('Student identified via fingerprint: ' + data.student.name, 'success');
-      } else {
-        showAlert('Fingerprint not recognized');
-      }
-    }).fail(function() {
-      showAlert('Fingerprint identification error');
-    });
-  }
-
-  // --------------- Student Search & Selection ---------------
-  $('#student-search').on('input', function() {
-    const query = $(this).val();
-    if (query.length < 2) {
-      $('#student-suggestions').empty();
-      return;
+        row.querySelector('.quantity-input').addEventListener('input', () => updateTotals());
     }
 
-    $.getJSON(studentSearchUrl, { q: query }, function(data) {
-      $('#student-suggestions').empty();
-      if (!data.length) {
-        $('#student-suggestions').append('<div class="list-group-item no-result">No results</div>');
-        return;
-      }
-
-      data.forEach(function(student) {
-        const img = student.image_url || defaultImage;
-        $('#student-suggestions').append(`
-          <a href="#" class="list-group-item student-option"
-             data-id="${student.id}" data-name="${student.name}"
-             data-reg="${student.reg_number}" data-class="${student.student_class}"
-             data-balance="${student.wallet_balance}" data-debt="${student.wallet_debt}"
-             data-image="${img}">
-            <div class="d-flex align-items-center">
-              <img src="${img}" class="rounded me-2" style="width:30px;height:30px;object-fit:cover;" alt="">
-              <div>
-                <strong>${student.name}</strong><br>
-                <small class="text-muted">${student.reg_number}</small>
-              </div>
-            </div>
-          </a>
-        `);
-      });
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('item-option')) {
+            e.preventDefault();
+            const itemData = JSON.parse(e.target.dataset.item);
+            const row = e.target.closest('tr');
+            fillRowWithItem(row, itemData);
+        }
     });
-  });
 
-  $(document).on('click', '.student-option', function(e) {
-    e.preventDefault();
-    const el = $(this);
-    populateStudent({
-      id: el.data('id'),
-      name: el.data('name'),
-      reg_number: el.data('reg'),
-      student_class: el.data('class'),
-      wallet_balance: el.data('balance'),
-      wallet_debt: el.data('debt'),
-      image_url: el.data('image')
-    });
-    $('#student-suggestions').empty();
-  });
+    function fillRowWithItem(row, item) {
+        if (!row) return;
 
-  function populateStudent(student) {
-    $('#student-id').val(student.id);
-    $('#student_name').text(student.name);
-    $('#student_reg_no').text(student.reg_number);
-    $('#student_class').text(student.student_class);
-    $('#wallet_balance').text(parseFloat(student.wallet_balance || 0).toFixed(2));
-    $('#wallet_debt').text(parseFloat(student.wallet_debt || 0).toFixed(2));
-    $('#student_image').attr('src', student.image_url || defaultImage);
-    $('#student-search').val(student.name);
-  }
-
-  // --------------- Item Search & Selection ---------------
-  function bindItemSearchEvents(row) {
-    row.find('.item-search').on('input', function() {
-      const input = $(this);
-      const query = input.val();
-      const container = input.closest('td');
-
-      // Remove existing suggestions
-      container.find('.item-suggestions').remove();
-
-      if (!query || query.length < 2) return;
-
-      $.getJSON(itemSearchUrl, { q: query }, function(data) {
-        const suggestions = $('<div class="item-suggestions list-group position-absolute" style="z-index:9999; width:100%; max-height:200px; overflow-y:auto; background:#fff; border:1px solid #ddd; border-radius:4px;"></div>');
-
-        if (!data.length) {
-          suggestions.append('<div class="list-group-item no-result">No results found</div>');
-        } else {
-          data.forEach(function(item) {
-            suggestions.append(`
-              <a href="#" class="list-group-item item-option list-group-item-action"
-                 data-id="${item.id}" data-name="${item.name}"
-                 data-price="${item.selling_price}" data-qty="${item.qty_remaining}">
-                <strong>${item.name}</strong><br>
-                <small class="text-muted">₦${parseFloat(item.selling_price).toFixed(2)} | ${item.qty_remaining} available</small>
-              </a>
-            `);
-          });
+        // Check for duplicates
+        let isDuplicate = false;
+        orderTableBody.querySelectorAll('.item-id').forEach(inputId => {
+            if (inputId.value == item.id) {
+                isDuplicate = true;
+            }
+        });
+        if (isDuplicate) {
+            alert(`Item "${item.name}" is already in the order.`);
+            return;
         }
 
-        container.append(suggestions);
-      });
-    });
-  }
+        row.querySelector('.item-search').value = item.name;
+        row.querySelector('.item-id').value = item.id;
+        row.querySelector('.qty-available').textContent = item.qty_remaining;
+        row.querySelector('.unit-price').textContent = parseFloat(item.selling_price).toFixed(2);
 
-  $(document).on('click', '.item-option', function(e) {
-    e.preventDefault();
-    const el = $(this);
-    const row = el.closest('tr');
-    const container = el.closest('td');
-    const itemId = String(el.data('id'));
+        const qtyInput = row.querySelector('.quantity-input');
+        qtyInput.disabled = false;
+        qtyInput.setAttribute('max', item.qty_remaining);
 
-    // Check if item already added
-    const existingItem = $('#order-table .item-id').filter(function() {
-      return $(this).val() === itemId;
-    });
-
-    if (existingItem.length > 0) {
-      showAlert('Item "' + el.data('name') + '" is already in the order');
-      container.find('.item-suggestions').remove();
-      return;
+        row.querySelector('.item-suggestions').innerHTML = '';
+        updateTotals();
+        ensureEmptyRow();
+        qtyInput.focus();
+        qtyInput.select();
     }
 
-    // Fill the row with selected item
-    fillRowWithItem(row, {
-      id: el.data('id'),
-      name: el.data('name'),
-      selling_price: el.data('price'),
-      qty_remaining: el.data('qty')
-    });
+    function addItemToNextAvailableRow(itemData) {
+        let emptyRow = null;
+        orderTableBody.querySelectorAll('tr').forEach(row => {
+            if (!row.querySelector('.item-id').value && !emptyRow) {
+                emptyRow = row;
+            }
+        });
 
-    container.find('.item-suggestions').remove();
-    ensureEmptyRow();
-  });
-
-  // Function to fill a row with item data directly (for barcode scanning)
-  function fillItemRowDirectly(item) {
-    // Find the first empty row
-    let targetRow = $('#order-table tbody tr').filter(function() {
-      return !$(this).find('.item-id').val();
-    }).first();
-
-    if (targetRow.length === 0) {
-      // No empty row found, create one
-      addNewRow();
-      targetRow = $('#order-table tbody tr').last();
+        if (!emptyRow) {
+            emptyRow = addNewRow();
+        }
+        fillRowWithItem(emptyRow, itemData);
     }
 
-    fillRowWithItem(targetRow, item);
-    ensureEmptyRow();
-  }
+    document.getElementById('top-items-container').addEventListener('click', function(e) {
+        if (e.target.classList.contains('top-item-badge')) {
+            const itemData = {
+                id: e.target.dataset.itemId,
+                name: e.target.dataset.itemName,
+                selling_price: e.target.dataset.itemPrice,
+                qty_remaining: e.target.dataset.itemQty
+            };
+            addItemToNextAvailableRow(itemData);
+        }
+    });
 
-  // Function to fill any row with item data
-  function fillRowWithItem(row, item) {
-    row.find('.item-search').val(item.name).prop('readonly', true);
-    row.find('.item-id').val(item.id);
-    row.find('.unit-price').text('₦' + parseFloat(item.selling_price).toFixed(2));
-    row.find('.qty-available').text(item.qty_remaining);
-    row.find('.quantity-input').val(1).attr('max', item.qty_remaining);
+    function ensureEmptyRow() {
+        let hasEmptyRow = false;
+        orderTableBody.querySelectorAll('tr').forEach(row => {
+            if (!row.querySelector('.item-id').value) {
+                hasEmptyRow = true;
+            }
+        });
+        if (!hasEmptyRow) {
+            addNewRow();
+        }
+    }
 
-    updateRowTotal(row);
-  }
+    // --- BARCODE SCANNER ---
+    let barcodeBuffer = '';
+    let barcodeTimer;
+    document.addEventListener('keydown', function(e) {
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            return; // Don't interfere with normal typing
+        }
+        if (e.key === 'Enter') {
+            if (barcodeBuffer.length > 3) {
+                handleBarcodeScanned(barcodeBuffer);
+            }
+            barcodeBuffer = '';
+            e.preventDefault();
+        } else if (e.key.length === 1) {
+            barcodeBuffer += e.key;
+        }
 
-  // --------------- Row Management ---------------
-  $('#add-item-row').click(function() {
+        clearTimeout(barcodeTimer);
+        barcodeTimer = setTimeout(() => {
+            if (barcodeBuffer.length > 3) {
+                handleBarcodeScanned(barcodeBuffer);
+            }
+            barcodeBuffer = '';
+        }, 200);
+    });
+
+    function handleBarcodeScanned(barcode) {
+        fetch(`${barcodeLookupUrl}?barcode=${barcode}`)
+            .then(res => res.json())
+            .then(data => {
+                alert(data.item)
+                if(data.student) {
+                    populateStudent(data.student);
+                } else if (data.item) {
+                    addItemToNextAvailableRow(data.item);
+                } else {
+                    alert(`Barcode "${barcode}" not found.`);
+                }
+            });
+    }
+
+    // --- CALCULATIONS & FORM ---
+    document.getElementById('discount').addEventListener('input', () => updateTotals());
+    document.getElementById('add-item-row').addEventListener('click', () => addNewRow());
+    document.getElementById('clear-form-btn').addEventListener('click', () => {
+        if(confirm('Are you sure you want to clear this entire form?')) {
+            location.reload();
+        }
+    });
+
+    function updateTotals() {
+        let subtotal = 0;
+        orderTableBody.querySelectorAll('.order-row').forEach(row => {
+            const qty = parseFloat(row.querySelector('.quantity-input').value) || 0;
+            const price = parseFloat(row.querySelector('.unit-price').textContent) || 0;
+            const total = qty * price;
+            row.querySelector('.total-price').textContent = `₦${total.toFixed(2)}`;
+            subtotal += total;
+        });
+
+        const discount = parseFloat(document.getElementById('discount').value) || 0;
+        const grandTotal = Math.max(0, subtotal - discount);
+
+        document.getElementById('subtotal').value = `₦${subtotal.toFixed(2)}`;
+        document.getElementById('grand-total').value = `₦${grandTotal.toFixed(2)}`;
+    }
+
+    orderForm.addEventListener('submit', function(e) {
+        let hasItems = false;
+        orderTableBody.querySelectorAll('.order-row').forEach(row => {
+            if(row.querySelector('.item-id').value) { hasItems = true; }
+        });
+        if (!hasItems) {
+            e.preventDefault();
+            alert('Please add at least one item to the order.');
+            return;
+        }
+
+        if (paymentMethodSelect.value === 'student_wallet') {
+            if (!studentIdInput.value) {
+                e.preventDefault();
+                alert('Please select a student for wallet payment.');
+                return;
+            }
+            const grandTotal = parseFloat(document.getElementById('grand-total').value.replace('₦', '')) || 0;
+            const balance = parseFloat(document.getElementById('wallet-balance').textContent) || 0;
+            const debt = parseFloat(document.getElementById('wallet-debt').textContent) || 0;
+            const available = balance + (maxDebt - debt);
+
+            if (grandTotal > available) {
+                e.preventDefault();
+                alert(`Insufficient funds. Available: ₦${available.toFixed(2)}, Required: ₦${grandTotal.toFixed(2)}`);
+                return;
+            }
+        }
+    });
+
+    // --- INITIALIZATION ---
+    function debounce(func, delay) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+
+    clearStudent();
     addNewRow();
-  });
-
-  function addNewRow() {
-    const rowCount = $('#order-table tbody tr').length;
-    const newRow = $('.order-row:first').clone();
-
-    // Reset all inputs and displays
-    newRow.find('input').val('');
-    newRow.find('.qty-available, .unit-price, .total-price').text('—');
-    newRow.find('.item-search').prop('readonly', false);
-    newRow.find('.item-suggestions').remove();
-
-    // Update form field names
-    newRow.find('.item-id').attr('name', `items[${rowCount}][item_id]`);
-    newRow.find('.quantity-input').attr('name', `items[${rowCount}][quantity]`).val(1).removeAttr('max');
-
-    $('#order-table tbody').append(newRow);
-    bindItemSearchEvents(newRow);
-  }
-
-  function ensureEmptyRow() {
-    // Check if there's at least one empty row
-    const emptyRows = $('#order-table tbody tr').filter(function() {
-      return !$(this).find('.item-id').val();
-    });
-
-    if (emptyRows.length === 0) {
-      addNewRow();
-    }
-  }
-
-  $(document).on('click', '.remove-row', function() {
-    const totalRows = $('#order-table tbody tr').length;
-    if (totalRows > 1) {
-      $(this).closest('tr').remove();
-      recalculateRowIndices();
-      calculateTotals();
-      ensureEmptyRow();
-    }
-  });
-
-  $(document).on('input', '.quantity-input', function() {
-    const row = $(this).closest('tr');
-    const qty = parseFloat($(this).val()) || 0;
-    const maxQty = parseFloat($(this).attr('max')) || Infinity;
-
-    if (qty < 0.01) {
-      $(this).val(0.01);
-    } else if (qty > maxQty) {
-      $(this).val(maxQty);
-      showAlert(`Only ${maxQty} units available for this item`);
-    }
-
-    updateRowTotal(row);
-  });
-
-  $(document).on('input', '#discount', function() {
-    calculateTotals();
-  });
-
-  function updateRowTotal(row) {
-    const qty = parseFloat(row.find('.quantity-input').val()) || 0;
-    const priceText = row.find('.unit-price').text().replace('₦', '');
-    const price = parseFloat(priceText) || 0;
-    const total = qty * price;
-
-    row.find('.total-price').text('₦' + total.toFixed(2));
-    calculateTotals();
-  }
-
-  function calculateTotals() {
-    let subtotal = 0;
-    $('#order-table .total-price').each(function() {
-      const totalText = $(this).text().replace('₦', '');
-      const total = parseFloat(totalText) || 0;
-      subtotal += total;
-    });
-
-    const discount = parseFloat($('#discount').val()) || 0;
-    const grandTotal = Math.max(0, subtotal - discount);
-
-    $('#subtotal').val(subtotal.toFixed(2));
-    $('#grand_total').val(grandTotal.toFixed(2));
-  }
-
-  function recalculateRowIndices() {
-    $('#order-table tbody tr').each(function(index) {
-      $(this).find('.item-id').attr('name', `items[${index}][item_id]`);
-      $(this).find('.quantity-input').attr('name', `items[${index}][quantity]`);
-    });
-  }
-
-  // --------------- Utility Functions ---------------
-  function showAlert(message, type = 'error') {
-    $('#error-message').text(message);
-    $('#error-modal').fadeIn();
-
-    if (type === 'success') {
-      setTimeout(function() {
-        $('#error-modal').fadeOut();
-      }, 3000);
-    }
-  }
-
-  $('#close-error-modal').click(function() {
-    $('#error-modal').fadeOut();
-  });
-
-  // Hide suggestions when clicking outside
-  $(document).on('click', function(e) {
-    if (!$(e.target).closest('.item-suggestions, .item-search, #student-suggestions, #student-search').length) {
-      $('.item-suggestions').remove();
-      $('#student-suggestions').empty();
-    }
-  });
-
-  window.clearForm = function() {
-    if (confirm('Are you sure you want to clear the form?')) {
-      location.reload();
-    }
-  };
-
-  // --------------- Form Validation ---------------
-  $('#order-form').submit(function(e) {
-    const grandTotal = parseFloat($('#grand_total').val()) || 0;
-    const walletBalance = parseFloat($('#wallet_balance').text()) || 0;
-    const walletDebt = parseFloat($('#wallet_debt').text()) || 0;
-    const paymentMethod = $('select[name="payment_method"]').val();
-
-    let hasItems = false;
-    let invalidQuantity = false;
-
-    $('#order-table tbody tr').each(function() {
-      const itemId = $(this).find('.item-id').val();
-      const qty = parseFloat($(this).find('.quantity-input').val()) || 0;
-      const maxQty = parseFloat($(this).find('.quantity-input').attr('max')) || Infinity;
-
-      if (itemId) {
-        hasItems = true;
-        if (qty < 0.01 || qty > maxQty) {
-          invalidQuantity = true;
-        }
-      }
-    });
-
-    if (!hasItems) {
-      e.preventDefault();
-      showAlert('Please add at least one item to the order');
-      return false;
-    }
-
-    if (invalidQuantity) {
-      e.preventDefault();
-      showAlert('Please check item quantities - some may be invalid');
-      return false;
-    }
-
-    if (paymentMethod === 'student_wallet') {
-      if (!$('#student-id').val()) {
-        e.preventDefault();
-        showAlert('Please select a student for wallet payment');
-        return false;
-      }
-
-      const availableFunds = walletBalance + (maxDebt - walletDebt);
-      if (grandTotal > availableFunds) {
-        e.preventDefault();
-        showAlert(`Insufficient funds. Available: ₦${availableFunds.toFixed(2)}, Required: ₦${grandTotal.toFixed(2)}`);
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  // --------------- Initialization ---------------
-  bindItemSearchEvents($('.order-row'));
-
-  // Focus on student search on page load
-  $('#student-search').focus();
+    studentSearchInput.focus();
 });
 </script>
 {% endblock %}

@@ -18,8 +18,6 @@
                 </div>
             </div>
 
-            {% include 'admin_site/partials/error.html' %}
-
             <form method="POST" action="" enctype="multipart/form-data">
                 {% csrf_token %}
                 <div class="row">
@@ -125,28 +123,16 @@
                             <div class="card-body">
                                 <p class="text-muted">Update fields as needed and click Save.</p>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Recorded by</label>
-                                    <input type="text" class="form-control" value="{{ income.created_by.get_full_name|default:income.created_by.username }}" disabled>
-                                </div>
-
                                 <div class="d-grid gap-2">
                                     <button type="submit" name="save" class="btn btn-primary">
                                         <i class="bi bi-check-circle"></i> Save Changes
                                     </button>
-                                    <a href="{% url 'income_detail' income.pk %}" class="btn btn-outline-secondary">Cancel</a>
+                                    <a href="{% url 'income_detail' form.instance.pk %}" class="btn btn-outline-secondary">Cancel</a>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- small card: meta -->
-                        <div class="card mt-3">
-                            <div class="card-body">
-                                <h6 class="mb-2">Record Info</h6>
-                                <p class="mb-1"><strong>Recorded At:</strong> {{ income.created_at|date:"d M Y, P" }}</p>
-                                <p class="mb-0"><strong>Record ID:</strong> {{ income.pk }}</p>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
             </form>

@@ -58,7 +58,7 @@
 <header class="header non-printable fixed-top d-flex align-items-center" id="header">
 
     <div class="d-flex align-items-center justify-content-between">
-        <a class="logo d-flex align-items-center" href="% url 'admin_dashboard' %}">
+        <a class="logo d-flex align-items-center" href="{% url 'admin_dashboard' %}">
             <!--        <img src="/media/{{ site_info.logo }}" alt="" style="width:100px;height:100px">-->
             <span class="d-none d-lg-block">{{ school_info|upper }}</span>
         </a>
@@ -82,7 +82,7 @@
                 No Product is running low
                 {% endif %}
                 {% if 'inventory.add_stockinmodel' in perms  %}
-              <a href="% url 'product_stock_in' %}"><span class="badge rounded-pill bg-primary p-2 ms-2">Stock Now</span></a>
+              <a href="{% url 'inventory_manual_stock_in_create' %}"><span class="badge rounded-pill bg-primary p-2 ms-2">Stock Now</span></a>
                 {% endif %}
             </li>
             <li>
@@ -94,7 +94,7 @@
               <i class="bi bi-exclamation-circle text-warning"></i>
               <div>
                 <h4>{{low_stock|title}}</h4>
-                <p>Only {{low_stock.quantity}} unit{{low_stock.quantity|pluralize}} left</p>
+                <p>Only {{low_stock.total_quantity}} unit{{low_stock.total_quantity|pluralize}} left</p>
               </div>
             </li>
 
@@ -146,7 +146,7 @@
                     </li>
 
                     <li>
-                        <a class="dropdown-item d-flex align-items-center" href="% url 'logout' %}">
+                        <a class="dropdown-item d-flex align-items-center" href="{% url 'logout' %}">
                             <i class="bi bi-box-arrow-right"></i>
                             <span>Sign Out</span>
                         </a>
@@ -202,7 +202,7 @@
         {% if 'student.add_studentmodel' in perms or 'student.view_studentmodel' in perms  %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#stud" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-journal-bookmark-fill"></i><span>STUDENT</span><i
+                <i class="bi bi-journal-bookmark-fill"></i><span>Student</span><i
                     class="bi bi-chevron-down ms-auto"></i>
             </a>
             <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="stud">
@@ -249,16 +249,22 @@
         {% if 'inventory.add_stockinmodel' in perms or 'inventory.view_productmodel' in perms  %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#acad" data-bs-toggle="collapse" href="#">
-                <i class="ri-book-mark-fill"></i><span>INVENTORY</span><i class="bi bi-chevron-down ms-auto"></i>
+                <i class="ri-book-mark-fill"></i><span>Inventory</span><i class="bi bi-chevron-down ms-auto"></i>
             </a>
             <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="acad">
 
                 {% if 'inventory.add_stockinmodel' in perms  %}
+                 <li>
+                    <a href="{% url 'inventory_item_list' %}">
+                        <i class="bi bi-circle"></i><span>Product</span>
+                    </a>
+                </li>
                 <li>
                     <a href="{% url 'inventory_manual_stock_in_create' %}">
                         <i class="bi bi-circle"></i><span>Stock In</span>
                     </a>
                 </li>
+
                 <li>
                     <a href="{% url 'inventory_stock_transfer_list' %}">
                         <i class="bi bi-circle"></i><span>Stock Transfers</span>
@@ -290,11 +296,7 @@
                         <i class="bi bi-circle"></i><span>Purchase Advances</span>
                     </a>
                 </li>
-                <li>
-                    <a href="{% url 'inventory_item_list' %}">
-                        <i class="bi bi-circle"></i><span>Product</span>
-                    </a>
-                </li>
+
 
                 <li>
                     <a href="{% url 'inventory_category_list' %}">
@@ -317,29 +319,28 @@
          {% if 'student.add_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms or 'student.change_studentfundingmodel' in perms  %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#fees" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-cash-stack"></i><span>FEES</span><i class="bi bi-chevron-down ms-auto"></i>
+                <i class="bi bi-cash-stack"></i><span>Fees</span><i class="bi bi-chevron-down ms-auto"></i>
             </a>
             <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="fees">
-                {% if 'student.add_studentfundingmodel' in perms  %}
-                <li>
-                    <a href="% url 'deposit_select_student' %}">
-                        <i class="bi bi-circle"></i><span>Student Deposit</span>
-                    </a>
-                </li>
-                {% endif %}
-
-                {% if 'student.view_studentfundingmodel' in perms  %}
-                <li>
-                    <a href="% url 'deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
-                        <i class="bi bi-circle"></i><span>Payment History</span>
-                    </a>
-                </li>
-                {% endif %}
-
                 {% if 'student.change_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms  %}
+                <li>
+                    <a href="{% url 'finance_student_payment_search' %}">
+                        <i class="bi bi-circle"></i><span>Fee Payment</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_payment_index' %}">
+                        <i class="bi bi-circle"></i><span>Fee Payment History</span>
+                    </a>
+                </li>
                 <li>
                     <a href="{% url 'finance_invoice_list' %}">
                         <i class="bi bi-circle"></i><span>Fee Invoices</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'fee_dashboard' %}">
+                        <i class="bi bi-circle"></i><span>Fee Dashboard</span>
                     </a>
                 </li>
                 <li>
@@ -366,24 +367,38 @@
          {% if 'student.add_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms or 'student.change_studentfundingmodel' in perms  %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#fee" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-cash-stack"></i><span>FINANCE</span><i class="bi bi-chevron-down ms-auto"></i>
+                <i class="bi bi-cash-stack"></i><span>Finance</span><i class="bi bi-chevron-down ms-auto"></i>
             </a>
             <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="fee">
                 {% if 'student.add_studentfundingmodel' in perms  %}
                 <li>
-                    <a href="% url 'deposit_select_student' %}">
-                        <i class="bi bi-circle"></i><span>Student Deposit</span>
+                    <a href="{% url 'finance_dashboard' %}">
+                        <i class="bi bi-circle"></i><span>Finance Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'deposit_select_student' %}">
+                        <i class="bi bi-circle"></i><span>Wallet Deposit</span>
                     </a>
                 </li>
                 {% endif %}
 
                 {% if 'student.view_studentfundingmodel' in perms  %}
                 <li>
-                    <a href="% url 'deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
-                        <i class="bi bi-circle"></i><span>Payment History</span>
+                    <a href="{% url 'deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
+                        <i class="bi bi-circle"></i><span>Deposit History</span>
                     </a>
                 </li>
                 {% endif %}
+
+                {% if 'student.change_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms  %}
+                <li>
+                    <a href="{% url 'pending_deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term.id}}">
+                        <i class="bi bi-circle"></i><span>Pending Deposit</span>
+                    </a>
+                </li>
+                {% endif %}
+
 
                 {% if 'student.change_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms  %}
                 <li>
@@ -396,9 +411,32 @@
                         <i class="bi bi-circle"></i><span>Advance Payments</span>
                     </a>
                 </li>
+
                 <li>
                     <a href="{% url 'finance_all_payments_list' %}">
                         <i class="bi bi-circle"></i><span>Supplier Payments Log</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'expense_index' %}">
+                        <i class="bi bi-circle"></i><span>Expenses</span>
+                    </a>
+                </li>
+                 <li>
+                    <a href="{% url 'income_index' %}">
+                        <i class="bi bi-circle"></i><span>Incomes</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'income_category_index' %}">
+                        <i class="bi bi-circle"></i><span>Income Category</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'expense_category_index' %}">
+                        <i class="bi bi-circle"></i><span>Expense Category</span>
                     </a>
                 </li>
                 {% endif %}
@@ -414,11 +452,83 @@
         </li>
         {% endif %}
 
+         {% if 'student.add_studentfundingmodel' in perms or 'student.view_studentfundingmodel' in perms or 'student.change_studentfundingmodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#sal" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-cash-stack"></i><span>Salary Management</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="sal">
+                <li>
+                    <a href="{% url 'finance_process_payroll' %}">
+                        <i class="bi bi-circle"></i><span>Process Salary</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_salary_advance_list' %}">
+                        <i class="bi bi-circle"></i><span>Salary Advance</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_salary_advance_debtors' %}">
+                        <i class="bi bi-circle"></i><span>Salary Advance Debtors</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_payroll_dashboard' %}">
+                        <i class="bi bi-circle"></i><span>Salary Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_salary_structure_list' %}">
+                        <i class="bi bi-circle"></i><span>Salary Structure</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_staff_bank_detail_list' %}">
+                        <i class="bi bi-circle"></i><span>Bank Accounts</span>
+                    </a>
+                </li>
+
+
+
+
+            </ul>
+        </li>
+        {% endif %}
+
+        {% if 'admin_site.add_classesmodel' in perms  %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#cafe" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-alarm"></i><span>Cafeteria</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="cafe">
+                <li>
+                    <a href="{% url 'cafeteria_collection_history' %}">
+                        <i class="bi bi-circle"></i><span>Colletions</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'cafeteria_meal_list' %}">
+                        <i class="bi bi-circle"></i><span>Meals</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'cafeteria_settings_detail' %}">
+                        <i class="bi bi-circle"></i><span>Setting</span>
+                    </a>
+                </li>
+
+            </ul>
+        </li>
+        {% endif %}
+
 
         {% if 'admin_site.add_classesmodel' in perms  %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#sb_att" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-alarm"></i><span>SETUP</span><i class="bi bi-chevron-down ms-auto"></i>
+                <i class="bi bi-alarm"></i><span>Setup</span><i class="bi bi-chevron-down ms-auto"></i>
             </a>
             <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="sb_att">
                 <li>
@@ -436,26 +546,10 @@
         </li>
         {% endif %}
 
-        {% if 'inventory.change_salemodel' in perms  %}
-        <li class="nav-item">
-            <a class="nav-link collapsed" data-bs-target="#result" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-bar-chart"></i><span>STATISTICS</span><i class="bi bi-chevron-down ms-auto"></i>
-            </a>
-            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="result">
-                <li>
-                    <a href="% url 'activity_log' %}">
-                        <i class="bi bi-circle"></i><span>Activity Log</span>
-                    </a>
-                </li>
-
-            </ul>
-        </li>
-        {% endif %}
-
         {% if 'human_resource.add_staffmodel' in perms or 'human_resource.view_staffmodel' in perms or 'auth.add_group' in perms %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#hr" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-people"></i><span>HUMAN RESOURCE</span><i class="bi bi-chevron-down ms-auto"></i>
+                <i class="bi bi-people"></i><span>Human Resource</span><i class="bi bi-chevron-down ms-auto"></i>
             </a>
             <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="hr">
                 {% if 'human_resource.add_staffmodel' in perms  %}
@@ -496,7 +590,7 @@
         {% if 'admin_site.change_schoolinfomodel' in perms or 'admin_site.change_schoolsettingmodel' in perms  %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#tables-nav" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-gear-fill"></i><span>SETTING</span><i class="bi bi-chevron-down ms-auto"></i>
+                <i class="bi bi-gear-fill"></i><span>Setting</span><i class="bi bi-chevron-down ms-auto"></i>
             </a>
             <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="tables-nav">
                 {% if 'admin_site.change_schoolinfomodel' in perms  %}
@@ -523,7 +617,7 @@
 
 
         <li class="nav-item">
-            <a class="nav-link collapsed" href="% url 'logout' %}">
+            <a class="nav-link collapsed" href="{% url 'logout' %}">
                 <i class="bi bi-box-arrow-in-right"></i>
                 <span>Logout</span>
             </a>

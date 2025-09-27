@@ -1,0 +1,102 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="pagetitle no-print">
+  <h1>Invoice Receipt</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'finance_student_dashboard' invoice.student.pk %}">Student Dashboard</a></li>
+      <li class="breadcrumb-item active">Receipt</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="card">
+  <div class="card-body" id="receipt-content">
+    <div class="d-flex justify-content-between align-items-center border-bottom pt-3 pb-2 mb-3">
+        <div>
+            <h4 class="mb-0">{{ school_info.name|default:"Your School Name"|upper }}</h4>
+            <p class="mb-0 text-muted">{{ school_info.address|default:"Your School Address" }}</p>
+            <p class="mb-0 text-muted">{{ school_info.mobile|default:"" }}</p>
+        </div>
+        <h2 class="text-success">RECEIPT</h2>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-6">
+            <strong>BILLED TO:</strong><br>
+            {{ invoice.student|title }}<br>
+            {{ invoice.student.student_class }}<br>
+            Reg No: {{ invoice.student.registration_number }}
+        </div>
+        <div class="col-6 text-end">
+            <strong>Receipt #:</strong> {{ invoice.invoice_number }}<br>
+            <strong>Date Paid:</strong> {{ invoice.payments.last.date|date:"d M, Y" }}<br>
+            <strong>{{ invoice.session }} {{ invoice.term}}</strong>
+        </div>
+    </div>
+
+    <h5 class="card-title pt-2 pb-0">Payment Details</h5>
+    <div class="table-responsive">
+        <table class="table table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>S/N</th>
+                    <th>Fee Description</th>
+                    <th class="text-end">Total Amount (₦)</th>
+                    <th class="text-end">Amount Paid (₦)</th>
+                    <th class="text-end">Balance (₦)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in invoice.items.all %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ item.fee_master }}</td>
+                    <td class="text-end">{{ item.amount|floatformat:2|intcomma }}</td>
+                    <td class="text-end">{{ item.amount_paid|floatformat:2|intcomma }}</td>
+                    <td class="text-end">{{ item.balance|floatformat:2|intcomma }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="2" class="text-end border-0"><strong>Summary:</strong></td>
+                    <td class="text-end table-light"><strong>₦{{ invoice.total_amount|floatformat:2|intcomma }}</strong></td>
+                    <td class="text-end table-light"><strong>₦{{ invoice.amount_paid|floatformat:2|intcomma }}</strong></td>
+                    <td class="text-end table-light"><strong>₦{{ invoice.balance|floatformat:2|intcomma }}</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <div class="row mt-4">
+      <div class="col-12 text-center">
+        <p>Thank you for your payment!</p>
+        <p class="text-muted small">Generated on: {% now "d M, Y, h:i A" %}</p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="card-footer text-center no-print">
+    <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Print Receipt</button>
+  </div>
+</div>
+
+<style>
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+    .card {
+      border: none !important;
+      box-shadow: none !important;
+    }
+    body {
+      background-color: white;
+    }
+  }
+</style>
+{% endblock %}

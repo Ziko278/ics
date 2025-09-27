@@ -97,9 +97,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Create a map for class sections to avoid complex HTML parsing
-    const classList = {{ class_list|safe }}; // Assuming class_list is a JSON-serializable structure
+    const classList = JSON.parse('{{ class_list_json|escapejs }}');
     classList.forEach(cls => {
-        classData[cls.id] = cls.section;
+        classData[cls.id] = cls.sections;
     });
 
     function updateSections() {
@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const queryParts = query.split(' ').filter(p => p);
 
         for (const [pk, fields] of Object.entries(students)) {
-            const fullName = `${fields.surname || ''} ${fields.middle_name || ''} ${fields.last_name || ''}`.toLowerCase();
+            const fullName = `${fields.first_name || ''} ${fields.middle_name || ''} ${fields.last_name || ''}`.toLowerCase();
             if (queryParts.every(part => fullName.includes(part))) {
                  html += `<li class="list-group-item list-group-item-action select-student" style="cursor: pointer;" data-student-id="${pk}">${fullName.toUpperCase()} (${fields.registration_number})</li>`;
             }
@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const student = students[studentId];
         if (!student) return;
 
-        studentFullname.textContent = `${student.surname} ${student.middle_name || ''} ${student.last_name}`.toUpperCase();
+        studentFullname.textContent = `${student.first_name} ${student.middle_name || ''} ${student.last_name}`.toUpperCase();
         studentRegNo.textContent = `Reg No: ${student.registration_number}`;
         studentClassEl.textContent = `${student.student_class_name} ${student.class_section_name}`;
         studentGender.textContent = `Gender: ${student.gender}`;
@@ -174,11 +174,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (student.image) {
             studentImage.src = `/media/${student.image}`;
         } else {
-            studentImage.src = "{% static 'admin_site/img/default-avatar.png' %}";
+            studentImage.src = "{% static 'admin_site/images/default_image.jpg' %}";
         }
         
         // IMPORTANT: Update this URL once the student financial dashboard view is created
-        proceedButton.href = `/finance/student/${studentId}/dashboard/`; // Placeholder URL
+        proceedButton.href = `/admin/finance/student/${studentId}/dashboard/`; // Placeholder URL
         detailPanel.style.display = 'block';
     }
 

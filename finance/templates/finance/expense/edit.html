@@ -16,7 +16,6 @@
                 </div>
             </div>
 
-            {% include 'admin_site/partials/error.html' %}
 
             <form method="POST" action="" enctype="multipart/form-data">
                 {% csrf_token %}
@@ -87,14 +86,6 @@
                                         {% endif %}
                                     </div>
 
-                                    <!-- Description / Notes -->
-                                    <div class="col-md-12">
-                                        <label for="{{ form.notes.id_for_label }}" class="form-label">Notes / Description</label>
-                                        {{ form.notes }}
-                                        {% if form.notes.errors %}
-                                            <div class="invalid-feedback d-block">{{ form.notes.errors|striptags }}</div>
-                                        {% endif %}
-                                    </div>
 
                                 </div>
                             </div>
@@ -108,16 +99,13 @@
                             <div class="card-body">
                                 <p class="text-muted">Update fields as needed and click Save.</p>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Recorded by</label>
-                                    <input type="text" class="form-control" value="{{ expense.created_by.get_full_name|default:expense.created_by.username }}" disabled>
-                                </div>
+
 
                                 <div class="d-grid gap-2">
                                     <button type="submit" name="save" class="btn btn-primary">
                                         <i class="bi bi-check-circle"></i> Save Changes
                                     </button>
-                                    <a href="{% url 'expense_detail' expense.pk %}" class="btn btn-outline-secondary">Cancel</a>
+                                    <a href="{% url 'expense_detail' form.instance.pk %}" class="btn btn-outline-secondary">Cancel</a>
                                 </div>
                             </div>
                         </div>

@@ -32,7 +32,7 @@
                     <tr>
                         <th scope="row">{{ forloop.counter }}</th>
                         <td>
-                            <strong>{{ structure.staff.staff_profile.user.get_full_name|title }}</strong><br>
+                            <strong>{{ structure.staff|title }}</strong><br>
                             <small class="text-muted">{{ structure.staff.staff_id }}</small>
                         </td>
                         <td class="text-end">₦{{ structure.basic_salary|intcomma }}</td>

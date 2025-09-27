@@ -22,7 +22,6 @@
 
         <div class="card-body">
             <h5 class="card-title">Expense Categories</h5>
-            {% include 'admin_site/partials/error.html' %}
             <table class="table table-borderless datatable">
                 <thead>
                 <tr>
@@ -31,7 +30,6 @@
                     <th scope="col">Description</th>
                     <th scope="col" class="text-center">Active</th>
                     <th scope="col">Created At</th>
-                    <th scope="col">Created By</th>
                     <th scope="col" class="text-center">Action</th>
                 </tr>
                 </thead>
@@ -49,7 +47,6 @@
                         {% endif %}
                     </td>
                     <td>{{ category.created_at|date:"Y-m-d H:i" }}</td>
-                    <td>{{ category.created_by.get_full_name|default:category.created_by.username if category.created_by else "—" }}</td>
                     <td class="text-center">
                         <button title="Edit Category" type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#editCategoryModal{{ category.id }}">
                             <i class="bi bi-pencil-square"></i>

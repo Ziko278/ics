@@ -179,7 +179,7 @@ class PurchaseOrderItemForm(forms.ModelForm):
         widgets = {
             'item': forms.HiddenInput(),
             'item_description': forms.TextInput(
-                attrs={'class': 'form-control form-control-sm', 'placeholder': 'Item Description'}),
+                attrs={'class': 'form-control form-control-sm', 'autocomplete': 'off', 'placeholder': 'Item Description'}),
             'quantity': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'placeholder': 'Qty'}),
             'unit_cost': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'placeholder': 'Unit Cost'}),
         }

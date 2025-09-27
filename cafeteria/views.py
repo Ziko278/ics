@@ -13,7 +13,7 @@ from admin_site.models import SessionModel, TermModel, SchoolSettingModel
 from cafeteria.models import MealModel, CafeteriaSettingModel, MealCollectionModel
 from cafeteria.forms import MealForm, CafeteriaSettingForm
 from finance.models import InvoiceModel
-from human_resource.models import StaffModel
+from human_resource.models import StaffModel, StaffProfileModel
 from student.models import StudentModel
 
 
@@ -104,7 +104,7 @@ class CafeteriaSettingDetailView(LoginRequiredMixin, PermissionRequiredMixin, De
     """
     model = CafeteriaSettingModel
     permission_required = 'cafeteria.view_cafeteriasettingmodel'
-    template_name = 'cafeteria/settings/detail.html'
+    template_name = 'cafeteria/setting/detail.html'
     context_object_name = 'setting'
 
     def get_object(self, queryset=None):
@@ -126,7 +126,7 @@ class CafeteriaSettingCreateView(LoginRequiredMixin, PermissionRequiredMixin, Cr
     model = CafeteriaSettingModel
     permission_required = 'cafeteria.add_cafeteriasettingmodel'
     form_class = CafeteriaSettingForm
-    template_name = 'cafeteria/settings/form.html'
+    template_name = 'cafeteria/setting/create.html'
     success_url = reverse_lazy('cafeteria_settings_detail')
 
     def dispatch(self, request, *args, **kwargs):
@@ -148,7 +148,7 @@ class CafeteriaSettingUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Up
     model = CafeteriaSettingModel
     permission_required = 'cafeteria.change_cafeteriasettingmodel'
     form_class = CafeteriaSettingForm
-    template_name = 'cafeteria/settings/form.html'
+    template_name = 'cafeteria/setting/create.html'
     success_url = reverse_lazy('cafeteria_settings_detail')
 
     def get_object(self, queryset=None):
@@ -171,62 +171,73 @@ class MealCollectionLiveView(LoginRequiredMixin, PermissionRequiredMixin, Templa
 
 class StudentSearchForMealAjaxView(LoginRequiredMixin, View):
     """
-    AJAX endpoint to search for a student and check their meal eligibility.
+    AJAX endpoint that can either search for students or fetch eligibility
+    details for a single student.
     """
 
     def get(self, request, *args, **kwargs):
-        query = request.GET.get('q', '').strip()
-        if not query:
-            return JsonResponse({'error': 'No search query provided.'}, status=400)
+        search_query = request.GET.get('q', '').strip()
+        student_id = request.GET.get('student_id')
 
-        student = StudentModel.objects.filter(
-            Q(registration_number__iexact=query) |
-            Q(first_name__icontains=query) |
-            Q(last_name__icontains=query)
-        ).select_related('student_class', 'class_section').filter(status='active').first()
+        # --- MODE 1: Search for a list of students ---
+        if search_query:
+            if len(search_query) < 2:
+                return JsonResponse([], safe=False)
 
-        if not student:
-            return JsonResponse({'error': f"Student '{query}' not found."}, status=404)
+            students = StudentModel.objects.filter(
+                Q(registration_number__icontains=search_query) |
+                Q(first_name__icontains=search_query) |
+                Q(last_name__icontains=search_query)
+            ).filter(status='active').select_related('student_class', 'class_section')[:10]  # Limit to 10 results
 
-        setting = CafeteriaSettingModel.objects.first()
-        is_eligible = True
-        eligibility_message = "Eligible for Meal"
+            results = [{
+                'id': s.pk,
+                'name': f"{s.first_name} {s.last_name}",
+                'class': f"{s.student_class.name} {s.class_section.name}",
+                'image_url': s.image.url if s.image else None,
+            } for s in students]
+            return JsonResponse(results, safe=False)
 
-        # Check 1: Has the student paid the required cafeteria fee (if one is set)?
-        if setting and setting.cafeteria_fee:
-            fee_paid = InvoiceModel.objects.filter(
-                student=student,
-                items__fee_master__fee=setting.cafeteria_fee,
-                status=InvoiceModel.Status.PAID
-            ).exists()
-            if not fee_paid:
+        # --- MODE 2: Get full details for a single student ---
+        elif student_id:
+            student = get_object_or_404(StudentModel, pk=student_id)
+
+            setting = CafeteriaSettingModel.objects.first()
+            is_eligible = True
+            eligibility_message = "Eligible for Meal"
+
+            # Check 1: Fee payment
+            if setting and setting.cafeteria_fee:
+                fee_paid = InvoiceModel.objects.filter(
+                    student=student, items__fee_master__fee=setting.cafeteria_fee, status=InvoiceModel.Status.PAID
+                ).exists()
+                if not fee_paid:
+                    is_eligible = False
+                    eligibility_message = f"Required Fee Not Paid: '{setting.cafeteria_fee.name}'"
+
+            # Check 2: Daily meal limit
+            meals_today_count = MealCollectionModel.objects.filter(student=student,
+                                                                   collection_date=date.today()).count()
+            if setting and meals_today_count >= setting.max_meals_per_day:
                 is_eligible = False
-                eligibility_message = f"Required Fee Not Paid: '{setting.cafeteria_fee.name}'"
+                eligibility_message = f"Daily Limit Reached ({meals_today_count} of {setting.max_meals_per_day} meals)"
 
-        # Check 2: Have they exceeded the daily meal limit?
-        meals_today = MealCollectionModel.objects.filter(student=student, collection_date=date.today()).count()
-        if setting and meals_today >= setting.max_meals_per_day:
-            is_eligible = False
-            eligibility_message = f"Daily Limit Reached ({meals_today} of {setting.max_meals_per_day} meals)"
+            collected_meal_ids = MealCollectionModel.objects.filter(
+                student=student, collection_date=date.today()
+            ).values_list('meal_id', flat=True)
 
-        # Get meals already collected today to prevent showing buttons for them
-        collected_meal_ids = MealCollectionModel.objects.filter(
-            student=student, collection_date=date.today()
-        ).values_list('meal_id', flat=True)
+            return JsonResponse({
+                'student': {'id': student.pk, 'name': f"{student.first_name} {student.last_name}",
+                            'class': f"{student.student_class.name} {student.class_section.name}",
+                            'image_url': student.image.url if student.image else None, },
+                'is_eligible': is_eligible,
+                'eligibility_message': eligibility_message,
+                'meals_today_count': meals_today_count,
+                'available_meals': list(
+                    MealModel.objects.filter(is_active=True).exclude(id__in=collected_meal_ids).values('id', 'name'))
+            })
 
-        return JsonResponse({
-            'student': {
-                'id': student.pk,
-                'name': f"{student.first_name} {student.last_name}",
-                'class': f"{student.student_class.name} {student.class_section.name}",
-                'image_url': student.image.url if student.image else None,
-            },
-            'is_eligible': is_eligible,
-            'eligibility_message': eligibility_message,
-            'meals_today_count': meals_today,
-            'available_meals': list(
-                MealModel.objects.filter(is_active=True).exclude(id__in=collected_meal_ids).values('id', 'name'))
-        })
+        return JsonResponse({'error': 'No search query or student ID provided.'}, status=400)
 
 
 class RecordMealAjaxView(LoginRequiredMixin, View):
@@ -241,7 +252,7 @@ class RecordMealAjaxView(LoginRequiredMixin, View):
             meal = MealModel.objects.get(pk=meal_id)
 
             try:
-                staff_member = StaffModel.objects.get(admin=request.user)
+                staff_member = StaffProfileModel.objects.get(user=request.user).staff
             except StaffModel.DoesNotExist:
                 return JsonResponse(
                     {'status': 'error', 'message': 'Your user account is not linked to a staff profile.'}, status=403)

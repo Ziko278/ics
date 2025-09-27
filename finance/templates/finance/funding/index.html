@@ -1,0 +1,81 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+{% block 'main' %}
+{% if form.errors %}
+        <h5 class="text-danger">{{form.errors}}</h5>
+        {% endif %}
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Select Fee Record</h4>
+            <form>
+                <div class="row">
+                    <div class="col-4">
+                        <select name="session" required class="form-control">
+                            <option value="">-------------------</option>
+                            {% for session in session_list %}
+                            <option value="{{session.id}}">{{ session }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-4">
+                        <select name="term" required class="form-control">
+                            <option value="">-------------------</option>
+                            <option value="1st term">1st Term</option>
+                            <option value="2nd term">2nd Term</option>
+                            <option value="3rd term">3rd Term</option>
+
+                        </select>
+                    </div>
+
+                    <div class="col-4">
+                        <input style="width:50%;margin-left:25%" type="submit" value="Proceed" class="btn btn-success">
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body pt-3" style="overflow-x:auto">
+                <h5 class="card-title">Fee Payments for {{ session }} Session - {{ term }}</h5>
+                <table class="table table-bordered datatable" style="font-size:14px">
+                    <thead>
+                        <tr>
+                            <th scope="col" style="min-width:150px">Student</th>
+                            <th scope="col" style="min-width:100px">Class</th>
+                            <th scope="col">Amount Paid</th>
+                            <th scope="col" style="">Date</th>
+                            <th scope="col" style="">Method</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" style="" class="text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in fee_payment_list %}
+                            <tr>
+                                <td scope="row">{{ payment.student|title }}</td>
+                                <td scope="row">{% if payment.student.student_class %} {{ payment.student.student_class|upper }} {{ payment.student.class_section|upper }} {% endif %}</td>
+                                <td scope="row">{{ payment.amount|intcomma }}</td>
+                                <td scope="row">{{ payment.created_at|date }}</td>
+                                <td scope="row">{{ payment.mode|title }}</td>
+                                <td scope="row" {% if payment.status == 'pending' %} class='text-warning' {% elif payment.status == 'declined'  %} class='text-danger' {% else %} class='text-success' {% endif %}>{{ payment.status|title }}</td>
+                                <td scope="row" class="text-center">
+                                    <a title="View Fee Payment Detail" style="font-size:12px" class="btn btn-primary" href="{% url 'deposit_detail' payment.id %}"><i class="bi bi-eye"></i> </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+{%endblock %}

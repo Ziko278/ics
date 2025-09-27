@@ -7,32 +7,36 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core import serializers
 from django.db import transaction
-from django.db.models import Q, Sum, Avg, F
-from django.db.models.functions import TruncMonth
+from django.db.models import Q, Sum, Avg, F, DecimalField, Value, Count
+from django.db.models.functions import TruncMonth, Coalesce, Concat
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import redirect, get_object_or_404, render
 from django.urls import reverse, reverse_lazy
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
+from django.utils import timezone
+from django.utils.timezone import now
 from django.views import View
 from django.views.generic import TemplateView, CreateView, UpdateView, ListView, DetailView, DeleteView, FormView
 from openpyxl.styles import Font
 
-from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel
+from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ActivityLogModel
 from admin_site.views import FlashFormErrorsMixin
-from human_resource.models import StaffModel
+from human_resource.models import StaffModel, StaffProfileModel
 from inventory.models import PurchaseOrderModel, PurchaseAdvanceModel
-from student.models import StudentModel
+from student.models import StudentModel, StudentWalletModel
+from student.signals import get_day_ordinal_suffix
 from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePaymentModel, FeeModel, FeeGroupModel, \
     FeeMasterModel, InvoiceGenerationJob, InvoiceModel, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryRecord, SalaryAdvance, \
-    SalaryStructure
+    SalaryStructure, StudentFundingModel, InvoiceItemModel, SalaryAdvanceRepayment, AdvanceSettlementModel
 from .forms import FinanceSettingForm, SupplierPaymentForm, PurchaseAdvancePaymentForm, FeeForm, FeeGroupForm, \
     InvoiceGenerationForm, FeePaymentForm, ExpenseCategoryForm, ExpenseForm, IncomeCategoryForm, \
     IncomeForm, TermlyFeeAmountFormSet, FeeMasterCreateForm, BulkPaymentForm, StaffBankDetailForm, PaysheetRowForm, \
-    SalaryAdvanceForm, SalaryStructureForm
+    SalaryAdvanceForm, SalaryStructureForm, SalaryAdvanceRepaymentForm, StudentFundingForm
 from finance.tasks import generate_invoices_task
+from pytz import timezone as pytz_timezone
 
 # ===================================================================
 # Finance Settings Views (Singleton Pattern)
@@ -642,13 +646,89 @@ def invoice_job_status_api(request, pk):
 # ===================================================================
 # Invoice and Payment Management Views
 # ===================================================================
+
 class InvoiceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = InvoiceModel
     permission_required = 'finance.view_invoicemodel'
     template_name = 'finance/invoice/index.html'
     context_object_name = 'invoices'
     paginate_by = 20
-    # Add search and filter logic here for student name, invoice #, status, etc.
+
+    def get_queryset(self):
+        """
+        This method builds the list of invoices based on the filters
+        and search query from the URL.
+        """
+        # Start with the base queryset and pre-fetch related models for performance
+        queryset = super().get_queryset().select_related(
+            'student', 'student__student_class', 'student__class_section', 'session', 'term'
+        )
+
+        # Get filter values from the request's GET parameters
+        search_query = self.request.GET.get('q', '').strip()
+        session_id = self.request.GET.get('session')
+        term_id = self.request.GET.get('term')
+        status = self.request.GET.get('status', '')
+
+        # Apply session filter
+        if session_id:
+            queryset = queryset.filter(session_id=session_id)
+
+        # Apply term filter
+        if term_id:
+            queryset = queryset.filter(term_id=term_id)
+
+        # Apply status filter
+        if status:
+            queryset = queryset.filter(status=status)
+
+        # Apply search query
+        if search_query:
+            # Annotate the student's full name to make it searchable
+            queryset = queryset.annotate(
+                student_full_name=Concat(
+                    'student__first_name', Value(' '), 'student__last_name'
+                )
+            ).filter(
+                Q(student_full_name__icontains=search_query) |
+                Q(student__registration_number__icontains=search_query) |
+                Q(invoice_number__icontains=search_query)
+            )
+
+        return queryset.order_by('-issue_date')
+
+    def get_context_data(self, **kwargs):
+        """
+        This method adds the necessary data for the filter dropdowns and
+        to remember the user's current selections.
+        """
+        context = super().get_context_data(**kwargs)
+        school_setting = SchoolSettingModel.objects.first()
+
+        # Data for the filter dropdowns
+        context['sessions'] = SessionModel.objects.all().order_by('-start_year')
+        context['terms'] = TermModel.objects.all().order_by('order')
+        context['status_choices'] = InvoiceModel.Status.choices
+
+        # Get the currently selected filter values to keep them selected in the form
+        selected_session_id = self.request.GET.get('session')
+        selected_term_id = self.request.GET.get('term')
+
+        # Pass the selected objects or defaults to the template
+        if selected_session_id:
+            context['selected_session'] = SessionModel.objects.get(pk=selected_session_id)
+        elif school_setting:
+            context['selected_session'] = school_setting.session
+
+        if selected_term_id:
+            context['selected_term'] = TermModel.objects.get(pk=selected_term_id)
+        elif school_setting:
+            context['selected_term'] = school_setting.term
+
+        context['selected_status'] = self.request.GET.get('status', '')
+        context['search_query'] = self.request.GET.get('q', '')
+
+        return context
 
 
 class InvoiceDetailView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
@@ -689,18 +769,46 @@ class InvoiceDetailView(LoginRequiredMixin, PermissionRequiredMixin, CreateView)
 
 
 class StudentFeeSearchView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
-    """
-    The main search page for finding a student to manage their fees.
-    """
     permission_required = 'finance.add_feepaymentmodel'
     template_name = 'finance/payment/select_student.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+
+        # Get classes with sections as JSON-serializable data
+        class_list = []
+        for cls in ClassesModel.objects.prefetch_related('section').all().order_by('name'):
+            class_list.append({
+                'id': cls.id,
+                'name': cls.name,
+                'sections': [{'id': s.id, 'name': s.name} for s in cls.section.all()]
+            })
+
         context['class_list'] = ClassesModel.objects.prefetch_related('section').all().order_by('name')
-        # Pre-load all students for the client-side name search
-        all_students = StudentModel.objects.select_related('student_class', 'class_section').filter(status='active')
-        context['student_list_json'] = serializers.serialize("json", all_students)
+        context['class_list_json'] = json.dumps(class_list)
+
+        # Pre-load students with related names
+        all_students = StudentModel.objects.filter(status='active').select_related('student_class', 'class_section')
+
+        # Create custom student data with class/section names
+        student_data = []
+        for student in all_students:
+            student_data.append({
+                'pk': student.id,
+                'fields': {
+                    'first_name': student.first_name,
+                    'last_name': student.last_name,
+                    'registration_number': student.registration_number,
+                    'gender': student.gender,
+                    'image': student.image.url if student.image else '',
+                    'student_class_id': student.student_class.id,
+                    'student_class_name': student.student_class.name,
+                    'class_section_id': student.class_section.id if student.class_section else '',
+                    'class_section_name': student.class_section.name if student.class_section else '',
+                }
+            })
+
+        context['student_list_json'] = json.dumps(student_data)
         return context
 
 
@@ -719,13 +827,7 @@ def get_students_by_reg_no_ajax(request):
     return render(request, 'finance/payment/partials/student_search_results.html', {'students': students})
 
 
-class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
-    """
-    Displays a financial dashboard for a student AND handles the creation
-    of new fee payments against their CURRENT invoice.
-    """
-    model = FeePaymentModel
-    form_class = FeePaymentForm
+class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = 'finance.add_feepaymentmodel'
     template_name = 'finance/payment/student_dashboard.html'
 
@@ -735,56 +837,151 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
         context['student'] = student
 
         school_setting = SchoolSettingModel.objects.first()
-        current_session = school_setting.session if school_setting else None
-        current_term = school_setting.term if school_setting else None
 
-        current_invoice = student.invoices.filter(session=current_session, term=current_term).first()
+        # --- NEW LOGIC: Load a specific invoice or the current one ---
+        invoice_id = self.request.GET.get('invoice_id')
+        if invoice_id:
+            # Load a specific invoice from the history
+            current_invoice = get_object_or_404(student.invoices, pk=invoice_id)
+        else:
+            # Default to the invoice for the current term
+            current_invoice = student.invoices.filter(
+                session=school_setting.session, term=school_setting.term
+            ).first()
+
         context['current_invoice'] = current_invoice
-
-        if 'form' not in context and current_invoice:
-            context['form'] = FeePaymentForm(invoice=current_invoice)
-
-        context['invoice_history'] = student.invoices.exclude(
-            pk=current_invoice.pk if current_invoice else None
-        ).order_by('-session__start_year', '-term__order')
-
+        context['invoice_history'] = student.invoices.order_by('-session__start_year', '-term__order')
         context['all_payments'] = FeePaymentModel.objects.filter(invoice__student=student).order_by('-date')
 
+        # Pass other necessary form fields for payment mode, date, etc.
+        context['payment_form'] = FeePaymentForm()  # Assuming FeePaymentForm exists for mode/date fields
         return context
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        student = get_object_or_404(StudentModel, pk=self.kwargs['pk'])
-        school_setting = SchoolSettingModel.objects.first()
-        if school_setting:
-            current_invoice = student.invoices.filter(session=school_setting.session, term=school_setting.term).first()
-            kwargs['invoice'] = current_invoice
-        return kwargs
+    def post(self, request, *args, **kwargs):
+        student = get_object_or_404(StudentModel, pk=self.kwargs.get('pk'))
+        invoice_id = request.POST.get('invoice_id')
+        invoice = get_object_or_404(InvoiceModel, pk=invoice_id)
 
-    def form_valid(self, form):
-        invoice = self.get_form_kwargs().get('invoice')
-        if not invoice:
-            messages.error(self.request, "Cannot record payment: No current invoice found for this student.")
-            return redirect(self.get_success_url())
+        with transaction.atomic():
+            total_paid_in_transaction = Decimal('0.00')
+            payments_made = []
 
-        payment = form.save(commit=False)
-        payment.invoice = invoice
-        payment.status = FeePaymentModel.PaymentStatus.CONFIRMED
-        payment.confirmed_by = self.request.user
-        payment.save()
+            # Loop through the submitted form data to find item payments
+            for key, value in request.POST.items():
+                if key.startswith('item_') and value:
+                    try:
+                        item_id = int(key.split('_')[1])
+                        amount_for_item = Decimal(value)
 
-        # After saving the payment, update the invoice's status based on the new balance.
-        if invoice.balance <= Decimal('0.01'):
-            invoice.status = InvoiceModel.Status.PAID
-        else:
-            invoice.status = InvoiceModel.Status.PARTIALLY_PAID
-        invoice.save()
+                        if amount_for_item > 0:
+                            item = get_object_or_404(InvoiceItemModel, pk=item_id, invoice=invoice)
 
-        messages.success(self.request, f"Payment of ₦{payment.amount} recorded successfully.")
-        return redirect(self.get_success_url())
+                            # Don't allow overpayment on a single item
+                            payable_amount = min(amount_for_item, item.balance)
 
-    def get_success_url(self):
-        return reverse('finance_student_dashboard', kwargs={'pk': self.kwargs['pk']})
+                            item.amount_paid += payable_amount
+                            item.save()
+
+                            payments_made.append(f"{item.description} (₦{payable_amount})")
+                            total_paid_in_transaction += payable_amount
+                    except (ValueError, TypeError):
+                        continue
+
+            # If any money was actually paid, create a single master payment record for the audit trail
+            if total_paid_in_transaction > 0:
+                FeePaymentModel.objects.create(
+                    invoice=invoice,
+                    amount=total_paid_in_transaction,
+                    payment_mode=request.POST.get('payment_mode'),
+                    date=request.POST.get('date'),
+                    reference=request.POST.get('reference'),
+                    status=FeePaymentModel.PaymentStatus.CONFIRMED,
+                    confirmed_by=request.user
+                )
+
+                # Finally, update the parent invoice's status
+                invoice.refresh_from_db()
+                if invoice.balance <= Decimal('0.01'):
+                    invoice.status = InvoiceModel.Status.PAID
+                else:
+                    invoice.status = InvoiceModel.Status.PARTIALLY_PAID
+                invoice.save()
+
+                messages.success(request, f"Payment of ₦{total_paid_in_transaction} was applied successfully.")
+            else:
+                messages.warning(request, "No payment amount was entered.")
+
+        return redirect('finance_student_dashboard', pk=student.pk)
+
+
+class InvoiceReceiptView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
+    model = InvoiceModel
+    permission_required = 'finance.view_invoicemodel'
+    template_name = 'finance/payment/invoice_receipt.html'
+    context_object_name = 'invoice'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # You can add school settings to the context if needed for the header
+        # context['school_setting'] = SchoolSettingModel.objects.first()
+        return context
+
+
+class FeePaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = FeePaymentModel
+    permission_required = 'finance.view_feepaymentmodel'  # Assumes default permission
+    template_name = 'finance/payment/payment_index.html'
+    context_object_name = 'payment_list'
+    paginate_by = 25
+
+    def get_queryset(self):
+        # Start with a base queryset, pre-fetching related data for efficiency
+        queryset = FeePaymentModel.objects.select_related(
+            'invoice__student',
+            'invoice__session',
+            'invoice__term'
+        ).order_by('-date', '-created_at')
+
+        # Get filter parameters from the URL
+        session_id = self.request.GET.get('session', '')
+        term_id = self.request.GET.get('term', '')
+        search_query = self.request.GET.get('search', '').strip()
+
+        # Apply filters if they exist
+        if session_id:
+            queryset = queryset.filter(invoice__session_id=session_id)
+
+        if term_id:
+            queryset = queryset.filter(invoice__term_id=term_id)
+
+        # Apply search query if it exists
+        if search_query:
+            # Annotate the student's full name to make it searchable
+            queryset = queryset.annotate(
+                student_full_name=Concat(
+                    'invoice__student__first_name', Value(' '), 'invoice__student__last_name'
+                )
+            ).filter(
+                Q(student_full_name__icontains=search_query) |
+                Q(invoice__student__registration_number__icontains=search_query) |
+                Q(invoice__invoice_number__icontains=search_query)
+            )
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Pass data for the filter dropdowns
+        context['session_list'] = SessionModel.objects.all().order_by('-start_year')
+        context['term_list'] = TermModel.objects.all().order_by('order')
+
+        # Pass current filter values back to the template to maintain state
+        context['current_session_id'] = self.request.GET.get('session', '')
+        context['current_term_id'] = self.request.GET.get('term', '')
+        context['search_query'] = self.request.GET.get('search', '')
+
+        return context
 
 
 class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
@@ -990,7 +1187,7 @@ class ExpenseListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         return context
 
 
-class ExpenseCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
+class ExpenseCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = ExpenseModel
     permission_required = 'finance.add_expense'
     form_class = ExpenseForm
@@ -1250,7 +1447,7 @@ class SalaryStructureUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Upd
     model = SalaryStructure
     permission_required = 'finance.change_salarystructure'
     form_class = SalaryStructureForm
-    template_name = 'finance/salary_structure/update.html'
+    template_name = 'finance/salary_structure/edit.html'
 
     def get_success_url(self):
         messages.success(self.request, "Salary Structure Updated Successfully.")
@@ -1337,6 +1534,106 @@ class SalaryAdvanceActionView(LoginRequiredMixin, PermissionRequiredMixin, View)
         return redirect('finance_salary_advance_detail', pk=advance.pk)
 
 
+class SalaryAdvanceDebtorsListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """Lists all staff members with outstanding salary advance balances."""
+    model = StaffModel
+    permission_required = 'finance.view_salaryadvance'
+    template_name = 'finance/salary_advance/debtors_list.html'
+    context_object_name = 'debtors'
+
+    def get_queryset(self):
+        # Find staff who have disbursed but not fully completed advances
+        queryset = StaffModel.objects.annotate(
+            total_advanced=Coalesce(
+                Sum('salary_advances__amount', filter=Q(salary_advances__status__in=['disbursed', 'completed'])),
+                Value(0), output_field=DecimalField()),
+            total_repaid=Coalesce(Sum('salary_advances__repaid_amount',
+                                      filter=Q(salary_advances__status__in=['disbursed', 'completed'])),
+                                  Value(0), output_field=DecimalField())
+        ).annotate(
+            total_due=F('total_advanced') - F('total_repaid')
+        ).filter(
+            total_due__gt=0
+        ).order_by('staff_profile__user__last_name')
+        return queryset
+
+
+class StaffDebtDetailView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Shows a breakdown of a staff's debt and provides a form for repayment."""
+    permission_required = 'finance.change_salaryadvance'
+    template_name = 'finance/salary_advance/staff_debt_detail.html'
+
+    def get(self, request, *args, **kwargs):
+        staff = get_object_or_404(StaffModel, pk=self.kwargs.get('staff_pk'))
+
+        # Get all advances that are owing
+        outstanding_advances = SalaryAdvance.objects.filter(
+            staff=staff,
+            status=SalaryAdvance.Status.DISBURSED
+        ).order_by('request_date')
+
+        # Calculate total due
+        total_due = sum(advance.balance for advance in outstanding_advances)
+
+        form = SalaryAdvanceRepaymentForm()
+
+        context = {
+            'staff': staff,
+            'outstanding_advances': outstanding_advances,
+            'total_due': total_due,
+            'form': form
+        }
+        return render(request, self.template_name, context)
+
+
+@transaction.atomic
+def record_salary_advance_repayment(request, staff_pk):
+    """Processes a repayment, applying it to the oldest debts first."""
+    if request.method != 'POST':
+        return redirect('finance_salary_advance_debtors')
+
+    staff = get_object_or_404(StaffModel, pk=staff_pk)
+    form = SalaryAdvanceRepaymentForm(request.POST)
+
+    if form.is_valid():
+        amount_paid = form.cleaned_data['amount_paid']
+        payment_to_apply = amount_paid
+
+        # Log the repayment transaction
+        repayment = form.save(commit=False)
+        repayment.staff = staff
+        repayment.created_by = request.user
+        repayment.save()
+
+        # Get all outstanding advances for the staff, oldest first
+        outstanding_advances = SalaryAdvance.objects.filter(
+            staff=staff,
+            status=SalaryAdvance.Status.DISBURSED
+        ).order_by('request_date')
+
+        for advance in outstanding_advances:
+            if payment_to_apply <= 0:
+                break
+
+            balance_due = advance.balance
+            payment_for_this_advance = min(payment_to_apply, balance_due)
+
+            advance.repaid_amount += payment_for_this_advance
+            payment_to_apply -= payment_for_this_advance
+
+            # If advance is fully paid, mark as completed
+            if advance.balance <= 0:
+                advance.status = SalaryAdvance.Status.COMPLETED
+
+            advance.save()
+
+        messages.success(request, f"Repayment of {amount_paid} recorded successfully for {staff}.")
+    else:
+        messages.error(request, "Invalid data submitted. Please check the form.")
+
+    return redirect('finance_staff_debt_detail', staff_pk=staff.pk)
+
+
 @login_required
 @permission_required('finance.add_salaryrecord')
 def process_payroll_view(request):
@@ -1406,7 +1703,7 @@ def process_payroll_view(request):
 
             messages.success(request, 'Paysheet saved successfully!')
             # Redirect back to the same page with the same filters
-            return redirect(reverse('process_payroll') + f'?year={year}&month={month}')
+            return redirect(reverse('finance_process_payroll') + f'?year={year}&month={month}')
         else:
             messages.error(request, 'Please correct the errors below. Invalid data was submitted.')
 
@@ -1523,16 +1820,6 @@ def payroll_dashboard_view(request):
 
     # --- 2. Charts Data ---
 
-    # Chart 1: Payroll Cost by Department (Bar Chart)
-    dept_payroll = SalaryRecord.objects.filter(year=current_year, month=current_month) \
-        .values('staff__department__name') \
-        .annotate(total_cost=Sum(net_salary_expression)) \
-        .order_by('-total_cost')
-
-    dept_payroll_data = [
-        {'name': item['staff__department__name'] or 'Unassigned', 'value': float(item['total_cost'])}
-        for item in dept_payroll if item['total_cost']
-    ]
 
     # Chart 2: Salary Trend (Line Chart - Last 12 Months)
     twelve_months_ago = today - timedelta(days=365)
@@ -1547,17 +1834,6 @@ def payroll_dashboard_view(request):
         for item in salary_trend if item['month_year'] and item['total_net']
     ]
 
-    # Chart 3: Average Salary by Position (Bar Chart)
-    position_payroll = SalaryRecord.objects.filter(year=current_year, month=current_month) \
-        .values('staff__position__name') \
-        .annotate(avg_salary=Avg(net_salary_expression)) \
-        .order_by('-avg_salary')
-
-    position_payroll_data = [
-        {'name': item['staff__position__name'] or 'Unassigned', 'value': float(item['avg_salary'])}
-        for item in position_payroll if item['avg_salary']
-    ]
-
     context = {
         # KPI Cards
         'total_payroll_current': total_payroll_current,
@@ -1566,13 +1842,851 @@ def payroll_dashboard_view(request):
         'percent_change': percent_change,
 
         # Chart Data (passed as JSON)
-        'dept_payroll_data': json.dumps(dept_payroll_data),
         'salary_trend_data': json.dumps(salary_trend_data),
-        'position_payroll_data': json.dumps(position_payroll_data),
     }
 
     return render(request, 'finance/salary_record/dashboard.html', context)
 
 
+class DepositPaymentSelectStudentView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
+    template_name = 'finance/funding/select_student.html'
+    permission_required = 'student.add_studentfundingmodel'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['class_list'] = ClassesModel.objects.all().order_by('name')
+        student_list = StudentModel.objects.all()
+        context['student_list'] = serializers.serialize("json", student_list)
+        return context
 
 
+@login_required
+def deposit_get_class_students(request):
+    class_pk = request.GET.get('class_pk')
+    section_pk = request.GET.get('section_pk')
+
+    student_list = StudentModel.objects.filter(student_class=class_pk, class_section=section_pk)
+    result = ''
+    for student in student_list:
+        full_name = "{} {}".format(student.first_name.title(), student.last_name.title())
+        result += """<li class='list-group-item select_student d-flex justify-content-between align-items-center' student_id='{}'>
+        {} </li>""".format(student.id, full_name)
+    if result == '':
+        result += """<li class='list-group-item  d-flex justify-content-between align-items-center bg-danger text-white'>
+        No Student in Selected Class</li>"""
+    return HttpResponse(result)
+
+
+@login_required
+def deposit_get_class_students_by_reg_number(request):
+    reg_no = request.GET.get('reg_no')
+
+    student_list = StudentModel.objects.filter(registration_number__contains=reg_no)
+    result = ''
+    for student in student_list:
+        full_name = "{} {}".format(student.first_name.title(), student.last_name.title())
+        result += """<li class='list-group-item select_student d-flex justify-content-between align-items-center' student_id={}>
+        {} </li>""".format(student.id, full_name)
+    if result == '':
+        result += """<li class='list-group-item d-flex justify-content-between align-items-center bg-danger text-white'>
+        No Student in with inputed Registration Number</li>"""
+    return HttpResponse(result)
+
+
+@login_required
+@permission_required("student.view_studentfundingmodel", raise_exception=True)
+def deposit_payment_list_view(request):
+    session_id = request.GET.get('session', None)
+    school_setting = SchoolSettingModel.objects.first()
+    if not session_id:
+        session = school_setting.session
+    else:
+        session = SessionModel.objects.get(id=session_id)
+    session_list = SessionModel.objects.all()
+    term = request.GET.get('term', None)
+    if not term:
+        term = school_setting.term
+    fee_payment_list = StudentFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
+    context = {
+        'fee_payment_list': fee_payment_list,
+        'session': session,
+        'term': term,
+        'session_list': session_list
+    }
+    return render(request, 'finance/funding/index.html', context)
+
+
+@login_required
+@permission_required("student.view_studentfundingmodel", raise_exception=True)
+def pending_deposit_payment_list_view(request):
+    session_id = request.GET.get('session', None)
+    session = SessionModel.objects.get(id=session_id)
+    term_id = request.GET.get('session', None)
+    term = TermModel.objects.get(id=session_id)
+    session_list = SessionModel.objects.all()
+    term_list = TermModel.objects.all().order_by('order')
+    fee_payment_list = StudentFundingModel.objects.filter(session=session, term=term, status='pending').order_by('-id')
+    context = {
+        'fee_payment_list': fee_payment_list,
+        'session': session,
+        'term': term,
+        'session_list': session_list,
+        'term_list': term_list,
+    }
+    return render(request, 'finance/funding/pending.html', context)
+
+
+@login_required
+@permission_required("student.add_studentfundingmodel", raise_exception=True)
+def deposit_create_view(request, student_pk):
+    student = StudentModel.objects.get(pk=student_pk)
+    setting = SchoolSettingModel.objects.first()
+
+    if request.method == 'POST':
+        form = StudentFundingForm(request.POST, request.FILES)  # Pass request.FILES for file uploads
+        if form.is_valid():
+            deposit = form.save(commit=False)  # Don't save yet, we need to set the student
+            deposit.student = student  # Associate the funding with the student
+
+            try:
+                profile = StaffProfileModel.objects.get(user=request.user)
+                deposit.created_by = profile.staff
+            except Exception:
+                pass
+            # Set session and term based on school setting if not provided by form
+            if not deposit.session:
+                deposit.session = setting.session
+            if not deposit.term:
+                deposit.term = setting.term
+
+            amount = deposit.amount  # Get amount directly from the saved instance
+            messages.success(request, f'Deposit of ₦{amount} successful!')
+
+            # Update student wallet
+            student_wallet, created = StudentWalletModel.objects.get_or_create(student=student)  # Get or create wallet
+
+            student_wallet.balance += amount
+
+            if student_wallet.debt > 0:
+                if student_wallet.balance > student_wallet.debt:
+                    student_wallet.balance -= student_wallet.debt
+                    student_wallet.debt = 0
+                else:
+                    student_wallet.debt -= student_wallet.balance
+                    student_wallet.balance = 0
+
+            student_wallet.save()
+
+            deposit.balance = student_wallet.balance - student_wallet.debt
+            deposit.save()  # Now save the deposit
+
+            target_timezone = pytz_timezone('Africa/Lagos')
+
+            localized_created_at = timezone.localtime(deposit.created_at, timezone=target_timezone)
+
+            formatted_time = localized_created_at.strftime(
+                f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
+            )
+
+            log = f"""
+                       <div class='text-white bg-success' style='padding:5px;'>
+                       <p class=''>Student Wallet Funding: <a href={reverse('deposit_detail', kwargs={'pk': deposit.id})}><b>₦{amount}</b></a> deposit to wallet of
+                       <a href={reverse('student_detail', kwargs={'pk': deposit.student.id})}><b>{deposit.student.__str__().title()}</b></a>
+                        by <a href={reverse('staff_detail', kwargs={'pk': deposit.created_by.id})}><b>{deposit.created_by.__str__().title()}</b></a>
+                       <br><span style='float:right'>{formatted_time}</span>
+                       </p>
+
+                       </div>
+                       """
+
+            activity = ActivityLogModel.objects.create(log=log)
+            activity.save()
+
+            return redirect('deposit_detail',
+                        pk=deposit.pk)  # Redirect to prevent form resubmission on refresh
+        else:
+            # If form is not valid, messages.error can show form errors
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field.replace('_', ' ').title()}: {error}")
+    else:
+        form = StudentFundingForm()  # Instantiate an empty form for GET request
+
+    context = {
+        'student': student,
+        'form': form,
+        'payment_list': StudentFundingModel.objects.filter(student=student, term=setting.term,
+                                                           session=setting.session).order_by('-created_at'),
+        'setting': setting
+    }
+    return render(request, 'finance/funding/create.html', context)
+
+
+@login_required
+def deposit_detail_view(request, pk):
+    deposit = get_object_or_404(StudentFundingModel, pk=pk)
+
+    # Compute total profit here
+    return render(request, 'finance/funding/detail.html', {
+        'funding': deposit,
+    })
+
+
+@login_required
+@permission_required("student.change_studentfundingmodel", raise_exception=True)
+@transaction.atomic
+def confirm_payment_view(request, payment_id):
+    payment = get_object_or_404(StudentFundingModel, pk=payment_id)
+    student = payment.student # Get the student associated with this payment
+
+    if request.method == 'POST':
+        # Check if the payment is already confirmed or declined
+        if payment.status != 'pending':
+            messages.warning(request, f"Payment is already {payment.status.capitalize()}. Cannot confirm.")
+            # Redirect to a list of payments or the payment detail page
+            return redirect(reverse('pending_deposit_index')) # Replace with your actual URL name
+
+        # Get or create student wallet
+        student_wallet, created = StudentWalletModel.objects.get_or_create(student=student)
+
+        # Apply the payment amount to the wallet balance
+        # Keeping calculations as float as per original deposit_create_view
+        student_wallet.balance += payment.amount
+
+        # Apply debt reduction logic
+        if student_wallet.debt > 0:
+            if student_wallet.balance > student_wallet.debt:
+                student_wallet.balance -= student_wallet.debt
+                student_wallet.debt = 0.0 # Use 0.0 for float consistency
+            else:
+                student_wallet.debt -= student_wallet.balance
+                student_wallet.balance = 0.0 # Use 0.0 for float consistency
+
+        student_wallet.save() # Save the updated wallet
+
+        # Update the payment status and its internal balance field
+        payment.status = 'confirmed'
+        # Replicate the balance update from the original view
+        payment.balance = student_wallet.balance - student_wallet.debt
+        payment.save() # Save the updated payment record
+
+        # Log wallet confirmation
+        from pytz import timezone as pytz_timezone
+        localized_created_at = timezone.localtime(now(), timezone=pytz_timezone('Africa/Lagos'))
+        formatted_time = localized_created_at.strftime(
+            f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
+        )
+
+        student_url = reverse('student_detail', kwargs={'pk': student.pk})
+        payment_url = reverse('deposit_detail', kwargs={'pk': payment.pk})
+        staff = StaffProfileModel.objects.get(user=request.user).staff
+        staff_url = reverse('staff_detail', kwargs={'pk': staff.pk}) if staff else '#'
+
+        log = f"""
+        <div class='text-white bg-success p-2' style='border-radius:5px;'>
+          <p>
+            Payment of <a href="{payment_url}"><b>₦{payment.amount:.2f}</b></a> for
+            <a href="{student_url}"><b>{student.__str__().title()}</b></a> was
+            <b>confirmed</b> by
+            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a>.
+            <br>
+            <b>Status:</b> Confirmed &nbsp; | &nbsp;
+            <b>Wallet Balance:</b> ₦{student_wallet.balance:.2f}
+            <span class='float-end'>{now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+          </p>
+        </div>
+        """
+
+        ActivityLogModel.objects.create(
+            log=log,
+        )
+
+        messages.success(request, f"Payment of ₦{payment.amount} for {student.first_name} {student.last_name} confirmed successfully.")
+        return redirect(reverse('deposit_index')) # Replace with your actual URL name
+
+    else:
+        # For GET requests to this URL, you might want to display a confirmation prompt
+        # or just redirect with a message. Assuming redirect for simplicity.
+        messages.info(request, "Please use a POST request to confirm this payment.")
+        return redirect(reverse('pending_deposit_index'))  # Replace with your actual URL name
+
+
+# --- Decline Payment View ---
+@login_required
+@permission_required("student.change_studentfundingmodel", raise_exception=True)
+@transaction.atomic
+def decline_payment_view(request, payment_id):
+    payment = get_object_or_404(StudentFundingModel, pk=payment_id)
+    student = payment.student # Get the student associated with this payment
+
+    if request.method == 'POST':
+        # Check if the payment is already confirmed or declined
+        if payment.status != 'pending':
+            messages.warning(request, f"Payment is already {payment.status.capitalize()}. Cannot decline.")
+            # Redirect to a list of payments or the payment detail page
+            return redirect(reverse('pending_deposit_index')) # Replace with your actual URL name
+
+        # Update the payment status to 'declined'
+        payment.status = 'declined'
+        payment.save()
+
+        # Log wallet deposit decline
+        from pytz import timezone as pytz_timezone
+        localized_created_at = timezone.localtime(now(), timezone=pytz_timezone('Africa/Lagos'))
+        formatted_time = localized_created_at.strftime(
+            f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
+        )
+
+        student_url = reverse('student_detail', kwargs={'pk': student.pk})
+        payment_url = reverse('deposit_detail', kwargs={'pk': payment.pk})
+        staff = StaffProfileModel.objects.get(user=request.user).staff
+        staff_url = reverse('staff_detail', kwargs={'pk': staff.pk}) if staff else '#'
+
+        log = f"""
+        <div class='text-white bg-danger p-2' style='border-radius:5px;'>
+          <p>
+            Payment of <a href="{payment_url}"><b>₦{payment.amount:.2f}</b></a> for
+            <a href="{student_url}"><b>{student.__str__().title()}</b></a> was
+            <b>declined</b> by
+            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a>.
+            <br>
+            <b>Status:</b> Declined
+            <span class='float-end'>{now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+          </p>
+        </div>
+        """
+
+        ActivityLogModel.objects.create(
+            log=log,
+        )
+
+        messages.success(request, f"Payment of ₦{payment.amount} for {student.first_name} {student.last_name} has been declined.")
+        return redirect(reverse('deposit_index'))  # Replace with your actual URL name
+    else:
+        # For GET requests to this URL, you might want to display a confirmation prompt
+        # or just redirect with a message. Assuming redirect for simplicity.
+        messages.info(request, "Method Not Supported.")
+        return redirect(reverse('pending_deposit_index'))  # Replace with your actual URL name
+
+
+
+@login_required
+def fee_dashboard(request):
+    # Get current session and term or allow filtering
+    current_setting = SchoolSettingModel.objects.first()
+    selected_session_id = request.GET.get('session',
+                                          current_setting.session.id if current_setting and current_setting.session else None)
+    selected_term_id = request.GET.get('term',
+                                       current_setting.term.id if current_setting and current_setting.term else None)
+
+    if selected_session_id:
+        selected_session = SessionModel.objects.get(id=selected_session_id)
+    else:
+        selected_session = None
+
+    if selected_term_id:
+        selected_term = TermModel.objects.get(id=selected_term_id)
+    else:
+        selected_term = None
+
+    # Base queryset for invoices
+    invoice_filter = Q()
+    if selected_session:
+        invoice_filter &= Q(session=selected_session)
+    if selected_term:
+        invoice_filter &= Q(term=selected_term)
+
+    invoices = InvoiceModel.objects.filter(invoice_filter)
+
+    # === KEY METRICS ===
+    total_expected = invoices.aggregate(
+        total=Sum('items__amount')
+    )['total'] or Decimal('0.00')
+
+    total_paid = FeePaymentModel.objects.filter(
+        invoice__in=invoices,
+        status='confirmed'
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    total_pending = total_expected - total_paid
+
+    # Student funding (additional payments)
+    funding_filter = Q(status='confirmed')
+    if selected_session:
+        funding_filter &= Q(session=selected_session)
+    if selected_term:
+        funding_filter &= Q(term=selected_term)
+
+    total_funding = StudentFundingModel.objects.filter(funding_filter).aggregate(
+        total=Sum('amount')
+    )['total'] or Decimal('0.00')
+
+    # Collection rate
+    collection_rate = (total_paid / total_expected * 100) if total_expected > 0 else 0
+
+    # === DISTRIBUTION ANALYSIS ===
+
+    # Fee distribution by type
+    fee_distribution = InvoiceItemModel.objects.filter(
+        invoice__in=invoices
+    ).values(
+        'fee_master__fee__name'
+    ).annotate(
+        expected=Sum('amount'),
+        paid=Sum('amount_paid'),
+        pending=F('expected') - F('paid')
+    ).order_by('-expected')
+
+    # Distribution by class
+    class_distribution = invoices.values(
+        'student__student_class__name'
+    ).annotate(
+        expected=Sum('items__amount'),
+        paid_amount=Sum('payments__amount', filter=Q(payments__status='confirmed')),
+        student_count=Count('student', distinct=True)
+    ).order_by('-expected')
+
+    # === PAYMENT TRENDS (Last 30 days) ===
+    end_date = timezone.now().date()
+    start_date = end_date - timedelta(days=30)
+
+    daily_payments = []
+    current_date = start_date
+    while current_date <= end_date:
+        day_payments = FeePaymentModel.objects.filter(
+            date=current_date,
+            status='confirmed',
+            invoice__in=invoices
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        daily_payments.append({
+            'date': current_date.strftime('%Y-%m-%d'),
+            'amount': float(day_payments)
+        })
+        current_date += timedelta(days=1)
+
+    # === DEFAULTERS & ALERTS ===
+
+    # Students with high outstanding balances
+    defaulters = []
+    for invoice in invoices.filter(status__in=['unpaid', 'partially_paid']):
+        balance = invoice.balance
+        if balance > 0:
+            defaulters.append({
+                'student': invoice.student,
+                'class': invoice.student.student_class.name if invoice.student.student_class else 'N/A',
+                'balance': balance,
+                'invoice': invoice
+            })
+
+    # Sort defaulters by balance (highest first)
+    defaulters = sorted(defaulters, key=lambda x: x['balance'], reverse=True)[:20]
+
+    # === MONTHLY TRENDS (Last 12 months) ===
+    monthly_trends = []
+    for i in range(12):
+        month_date = end_date.replace(day=1) - timedelta(days=30 * i)
+        month_start = month_date.replace(day=1)
+        if month_date.month == 12:
+            month_end = month_date.replace(year=month_date.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            month_end = month_date.replace(month=month_date.month + 1, day=1) - timedelta(days=1)
+
+        month_payments = FeePaymentModel.objects.filter(
+            date__range=[month_start, month_end],
+            status='confirmed'
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        month_funding = StudentFundingModel.objects.filter(
+            created_at__date__range=[month_start, month_end],
+            status='confirmed'
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        monthly_trends.append({
+            'month': month_date.strftime('%b %Y'),
+            'fee_payments': float(month_payments),
+            'funding': float(month_funding),
+            'total_income': float(month_payments + month_funding)
+        })
+
+    monthly_trends.reverse()  # Latest first
+
+    # === PAYMENT METHOD ANALYSIS ===
+    payment_methods = FeePaymentModel.objects.filter(
+        invoice__in=invoices,
+        status='confirmed'
+    ).values('payment_mode').annotate(
+        total=Sum('amount'),
+        count=Count('id')
+    ).order_by('-total')
+
+    funding_methods = StudentFundingModel.objects.filter(
+        funding_filter
+    ).values('method').annotate(
+        total=Sum('amount'),
+        count=Count('id')
+    ).order_by('-total')
+
+    # === RECENT ACTIVITY ===
+    recent_payments = FeePaymentModel.objects.filter(
+        invoice__in=invoices,
+        status='confirmed'
+    ).select_related(
+        'invoice__student', 'invoice__student__student_class'
+    ).order_by('-date', '-created_at')[:10]
+
+    recent_funding = StudentFundingModel.objects.filter(
+        funding_filter
+    ).select_related(
+        'student', 'student__student_class'
+    ).order_by('-created_at')[:10]
+
+    context = {
+        # Filters
+        'sessions': SessionModel.objects.all(),
+        'terms': TermModel.objects.all(),
+        'selected_session': selected_session,
+        'selected_term': selected_term,
+
+        # Key metrics
+        'total_expected': total_expected,
+        'total_paid': total_paid,
+        'total_pending': total_pending,
+        'total_funding': total_funding,
+        'collection_rate': round(collection_rate, 1),
+        'total_students': invoices.values('student').distinct().count(),
+        'total_invoices': invoices.count(),
+        'pending_invoices': invoices.exclude(status='paid').count(),
+
+        # Distributions
+        'fee_distribution': fee_distribution,
+        'class_distribution': class_distribution,
+        'defaulters': defaulters,
+        'payment_methods': payment_methods,
+        'funding_methods': funding_methods,
+
+        # Recent activity
+        'recent_payments': recent_payments,
+        'recent_funding': recent_funding,
+
+        # Chart data (JSON)
+        'daily_payments_data': json.dumps(daily_payments),
+        'monthly_trends_data': json.dumps(monthly_trends),
+        'fee_distribution_chart': json.dumps([
+            {'name': item['fee_master__fee__name'], 'value': float(item['expected'])}
+            for item in fee_distribution
+        ]),
+        'class_distribution_chart': json.dumps([
+            {'name': item['student__student_class__name'] or 'No Class', 'value': float(item['expected'] or 0)}
+            for item in class_distribution
+        ]),
+    }
+
+    return render(request, 'finance/fee_dashboard.html', context)
+
+
+@login_required
+def finance_dashboard(request):
+    # Get current session and term or allow filtering
+    current_setting = SchoolSettingModel.objects.first()
+    selected_session_id = request.GET.get('session',
+                                          current_setting.session.id if current_setting and current_setting.session else None)
+    selected_term_id = request.GET.get('term',
+                                       current_setting.term.id if current_setting and current_setting.term else None)
+
+    if selected_session_id:
+        selected_session = SessionModel.objects.get(id=selected_session_id)
+    else:
+        selected_session = None
+
+    if selected_term_id:
+        selected_term = TermModel.objects.get(id=selected_term_id)
+    else:
+        selected_term = None
+
+    # Base filters
+    session_filter = Q()
+    term_filter = Q()
+    if selected_session:
+        session_filter = Q(session=selected_session)
+    if selected_term:
+        term_filter = Q(term=selected_term)
+
+    combined_filter = session_filter & term_filter
+
+    # === INCOME CALCULATIONS ===
+
+    # 1. Fee payments
+    fee_payments = FeePaymentModel.objects.filter(
+        status='confirmed'
+    )
+    if selected_session:
+        fee_payments = fee_payments.filter(invoice__session=selected_session)
+    if selected_term:
+        fee_payments = fee_payments.filter(invoice__term=selected_term)
+
+    total_fee_income = fee_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 2. Student funding
+    total_funding_income = StudentFundingModel.objects.filter(
+        combined_filter,
+        status='confirmed'
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 3. Other income
+    total_other_income = IncomeModel.objects.filter(
+        combined_filter
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 4. Salary advance repayments
+    total_salary_repayments = SalaryAdvanceRepayment.objects.filter(
+        combined_filter
+    ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+
+    # 5. Purchase advance settlements (payments by staff)
+    total_advance_settlements_income = AdvanceSettlementModel.objects.filter(
+        settlement_type='payment',
+        advance__session=selected_session if selected_session else None,
+        advance__term=selected_term if selected_term else None
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    total_income = (total_fee_income + total_funding_income + total_other_income +
+                    total_salary_repayments + total_advance_settlements_income)
+
+    # === EXPENSE CALCULATIONS ===
+
+    # 1. General expenses
+    total_expenses = ExpenseModel.objects.filter(
+        combined_filter
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 2. Salary payments
+    total_salary_payments = SalaryRecord.objects.filter(
+        combined_filter
+    ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+
+    # 3. Supplier payments
+    total_supplier_payments = SupplierPaymentModel.objects.filter(
+        combined_filter,
+        status='completed'
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 4. Purchase advance payments
+    total_purchase_advance_payments = PurchaseAdvancePaymentModel.objects.filter(
+        advance__session=selected_session if selected_session else None,
+        advance__term=selected_term if selected_term else None
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 5. Salary advance disbursements (when status changed to disbursed)
+    # Note: This tracks new advances given out, not repayments
+    salary_advances_given = SalaryAdvance.objects.filter(
+        combined_filter,
+        status='disbursed'
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 6. Advance settlements (refunds to staff)
+    total_advance_settlements_expense = AdvanceSettlementModel.objects.filter(
+        settlement_type='refund'
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    total_expenses_paid = (total_expenses + total_salary_payments + total_supplier_payments +
+                           total_purchase_advance_payments + salary_advances_given +
+                           total_advance_settlements_expense)
+
+    # === OUTSTANDING RECEIVABLES (What we're owed) ===
+
+    # 1. Unpaid fee balances
+    invoice_filter = Q()
+    if selected_session:
+        invoice_filter &= Q(session=selected_session)
+    if selected_term:
+        invoice_filter &= Q(term=selected_term)
+
+    invoices = InvoiceModel.objects.filter(invoice_filter)
+    total_fee_receivables = sum(invoice.balance for invoice in invoices if invoice.balance > 0)
+
+    # 2. Outstanding salary advances
+    outstanding_salary_advances = SalaryAdvance.objects.filter(
+        status='disbursed'
+    ).aggregate(
+        total=Sum(F('amount') - F('repaid_amount'))
+    )['total'] or Decimal('0.00')
+
+    # 3. Outstanding purchase advances
+    outstanding_purchase_advances = Decimal('0.00')
+    try:
+        purchase_advances = PurchaseAdvanceModel.objects.filter(
+            status='disbursed'
+        )
+        for advance in purchase_advances:
+            outstanding_purchase_advances += (advance.approved_amount - advance.disbursed_amount)
+    except:
+        pass  # Handle if PurchaseAdvanceModel doesn't have these fields
+
+    total_receivables = total_fee_receivables + outstanding_salary_advances + outstanding_purchase_advances
+
+    # === OUTSTANDING OBLIGATIONS (What we owe) ===
+
+    # 1. Unpaid staff salaries
+    # Calculate unpaid salaries manually since net_salary is a property
+    unpaid_salaries = Decimal('0.00')
+    salary_records = SalaryRecord.objects.filter(combined_filter)
+    for record in salary_records:
+        if record.net_salary > record.amount_paid:
+            unpaid_salaries += (record.net_salary - record.amount_paid)
+
+    total_obligations = unpaid_salaries
+
+    # === NET POSITION ===
+    net_cash_position = total_income - total_expenses_paid
+    net_overall_position = (total_income + total_receivables) - (total_expenses_paid + total_obligations)
+
+    # === MONTHLY TRENDS (Last 12 months) ===
+    monthly_trends = []
+    for i in range(12):
+        month_date = timezone.now().date().replace(day=1) - timedelta(days=30 * i)
+        month_start = month_date.replace(day=1)
+        if month_date.month == 12:
+            month_end = month_date.replace(year=month_date.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            month_end = month_date.replace(month=month_date.month + 1, day=1) - timedelta(days=1)
+
+        # Monthly income
+        month_fee_income = FeePaymentModel.objects.filter(
+            date__range=[month_start, month_end],
+            status='confirmed'
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        month_other_income = IncomeModel.objects.filter(
+            income_date__range=[month_start, month_end]
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        month_funding = StudentFundingModel.objects.filter(
+            created_at__date__range=[month_start, month_end],
+            status='confirmed'
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        # Monthly expenses
+        month_expenses = ExpenseModel.objects.filter(
+            expense_date__range=[month_start, month_end]
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        month_salary_payments = SalaryRecord.objects.filter(
+            paid_date__range=[month_start, month_end]
+        ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+
+        total_month_income = month_fee_income + month_other_income + month_funding
+        total_month_expenses = month_expenses + month_salary_payments
+
+        monthly_trends.append({
+            'month': month_date.strftime('%b %Y'),
+            'income': float(total_month_income),
+            'expenses': float(total_month_expenses),
+            'net': float(total_month_income - total_month_expenses)
+        })
+
+    monthly_trends.reverse()
+
+    # === INCOME BREAKDOWN ===
+    income_breakdown = [
+        {'name': 'Fee Payments', 'value': float(total_fee_income)},
+        {'name': 'Student Funding', 'value': float(total_funding_income)},
+        {'name': 'Other Income', 'value': float(total_other_income)},
+        {'name': 'Salary Repayments', 'value': float(total_salary_repayments)},
+        {'name': 'Advance Settlements', 'value': float(total_advance_settlements_income)},
+    ]
+
+    # === EXPENSE BREAKDOWN ===
+    expense_breakdown = [
+        {'name': 'General Expenses', 'value': float(total_expenses)},
+        {'name': 'Staff Salaries', 'value': float(total_salary_payments)},
+        {'name': 'Supplier Payments', 'value': float(total_supplier_payments)},
+        {'name': 'Purchase Advances', 'value': float(total_purchase_advance_payments)},
+        {'name': 'Salary Advances', 'value': float(salary_advances_given)},
+        {'name': 'Staff Refunds', 'value': float(total_advance_settlements_expense)},
+    ]
+
+    # === RECENT TRANSACTIONS ===
+    recent_income = []
+
+    # Recent fee payments
+    recent_fee_payments = fee_payments.select_related(
+        'invoice__student'
+    ).order_by('-date')[:5]
+
+    for payment in recent_fee_payments:
+        recent_income.append({
+            'type': 'Fee Payment',
+            'description': f'{payment.invoice.student} - {payment.payment_mode}',
+            'amount': payment.amount,
+            'date': payment.date
+        })
+
+    # Recent other income
+    recent_other_income = IncomeModel.objects.filter(
+        combined_filter
+    ).order_by('-income_date')[:3]
+
+    for income in recent_other_income:
+        recent_income.append({
+            'type': 'Other Income',
+            'description': income.description or income.category.name,
+            'amount': income.amount,
+            'date': income.income_date
+        })
+
+    # Sort by date
+    recent_income.sort(key=lambda x: x['date'], reverse=True)
+    recent_income = recent_income[:10]
+
+    # Recent expenses
+    recent_expenses = ExpenseModel.objects.filter(
+        combined_filter
+    ).select_related('category').order_by('-expense_date')[:10]
+
+    context = {
+        # Filters
+        'sessions': SessionModel.objects.all(),
+        'terms': TermModel.objects.all(),
+        'selected_session': selected_session,
+        'selected_term': selected_term,
+
+        # Key financial metrics
+        'total_income': total_income,
+        'total_expenses_paid': total_expenses_paid,
+        'net_cash_position': net_cash_position,
+        'total_receivables': total_receivables,
+        'total_obligations': total_obligations,
+        'net_overall_position': net_overall_position,
+
+        # Income breakdown
+        'total_fee_income': total_fee_income,
+        'total_funding_income': total_funding_income,
+        'total_other_income': total_other_income,
+        'total_salary_repayments': total_salary_repayments,
+
+        # Expense breakdown
+        'total_expenses': total_expenses,
+        'total_salary_payments': total_salary_payments,
+        'total_supplier_payments': total_supplier_payments,
+        'salary_advances_given': salary_advances_given,
+
+        # Receivables breakdown
+        'total_fee_receivables': total_fee_receivables,
+        'outstanding_salary_advances': outstanding_salary_advances,
+        'outstanding_purchase_advances': outstanding_purchase_advances,
+
+        # Obligations
+        'unpaid_salaries': unpaid_salaries,
+
+        # Recent activity
+        'recent_income': recent_income,
+        'recent_expenses': recent_expenses,
+
+        # Chart data
+        'monthly_trends_data': json.dumps(monthly_trends),
+        'income_breakdown_data': json.dumps(income_breakdown),
+        'expense_breakdown_data': json.dumps(expense_breakdown),
+    }
+
+    return render(request, 'finance/finance_dashboard.html', context)

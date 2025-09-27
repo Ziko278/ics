@@ -12,7 +12,7 @@ from admin_site.models import TermModel, ClassesModel, SessionModel, SchoolSetti
 from finance.models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePaymentModel, FeeModel, \
     FeeGroupModel, FeeMasterModel, InvoiceGenerationJob, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryStructure, SalaryAdvance, \
-    SalaryRecord
+    SalaryRecord, SalaryAdvanceRepayment, StudentFundingModel
 from human_resource.models import StaffModel
 from inventory.models import PurchaseOrderModel
 
@@ -330,13 +330,12 @@ class ExpenseForm(forms.ModelForm):
     class Meta:
         model = ExpenseModel
         fields = [
-            "category", "description", "amount", "expense_date",
+            "category", "amount", "expense_date",
             "payment_method", "reference", "receipt", "notes",
             "session", "term",
         ]
         widgets = {
             "category": forms.Select(attrs={"class": "form-control"}),
-            "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0.01"}),
             "expense_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "payment_method": forms.TextInput(attrs={"class": "form-control", "placeholder": "cash, card, transfer"}),
@@ -506,7 +505,7 @@ class StaffBankDetailForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Only allow selecting active staff who don't already have bank details
         if not self.instance.pk:
-            self.fields['staff'].queryset = StaffModel.objects.filter(is_active=True, bank_details__isnull=True)
+            self.fields['staff'].queryset = StaffModel.objects.filter(bank_details__isnull=True)
         else:
             self.fields['staff'].queryset = StaffModel.objects.filter(pk=self.instance.staff.pk)
             self.fields['staff'].disabled = True
@@ -551,7 +550,7 @@ class SalaryStructureForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Only allow selecting active staff who don't already have a salary structure
         if not self.instance.pk:
-            self.fields['staff'].queryset = StaffModel.objects.filter(is_active=True, salary_structure__isnull=True)
+            self.fields['staff'].queryset = StaffModel.objects.filter(salary_structure__isnull=True)
         else:
             self.fields['staff'].queryset = StaffModel.objects.filter(pk=self.instance.staff.pk)
             self.fields['staff'].disabled = True
@@ -575,7 +574,7 @@ class SalaryAdvanceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['staff'].queryset = StaffModel.objects.filter(is_active=True)
+        self.fields['staff'].queryset = StaffModel.objects.filter()
 
     def clean_amount(self):
         amount = self.cleaned_data.get('amount')
@@ -589,6 +588,17 @@ class SalaryAdvanceForm(forms.ModelForm):
         #         raise ValidationError("Advance cannot exceed the staff member's net salary.")
 
         return amount
+
+
+class SalaryAdvanceRepaymentForm(forms.ModelForm):
+    """Form to record a repayment for a salary advance."""
+    class Meta:
+        model = SalaryAdvanceRepayment
+        fields = ['amount_paid', 'payment_date']
+        widgets = {
+            'amount_paid': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Enter amount paid'}),
+            'payment_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        }
 
 
 # ===================================================================
@@ -608,3 +618,26 @@ class PaysheetRowForm(forms.ModelForm):
             'notes': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
             'amount_paid': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
         }
+
+
+class StudentFundingForm(forms.ModelForm):
+    """Form for creating a new funding record."""
+    class Meta:
+        model = StudentFundingModel
+        # Be explicit about the fields a user can fill
+        fields = [
+             'amount', 'method', 'mode',
+             'proof_of_payment', 'teller_number', 'reference'
+        ]
+        widgets = {
+            'amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'method': forms.Select(attrs={'class': 'form-select'}),
+            'mode': forms.Select(attrs={'class': 'form-select'}),
+            'proof_of_payment': forms.FileInput(attrs={'class': 'form-control'}),
+            'teller_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'reference': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # You can hide the student field if it's set by the URL

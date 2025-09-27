@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+  <title>{{site_info.title|title}}</title>
+  <meta content="" name="description">
+  <meta content="" name="keywords">
+
+  <!-- Favicons -->
+  <link href="{{ site_info.logo.url }}" rel="icon">
+  <link href="{{ site_info.logo.url }}" rel="apple-touch-icon">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.gstatic.com" rel="preconnect">
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="{% static 'admin_site/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+  <!-- Latest Bootstrap Icons from CDN -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+
+  <link href="{% static 'admin_site/vendor/quill/quill.snow.css' %}" rel="stylesheet">
+  <link href="{% static 'admin_site/vendor/quill/quill.bubble.css' %}" rel="stylesheet">
+  <link href="{% static 'admin_site/vendor/simple-datatables/style.css' %}" rel="stylesheet">
+
+  <!-- Template Main CSS File -->
+  <link href="{% static 'admin_site/styles/style.css' %}" rel="stylesheet">
+
+  <!-- =======================================================
+  * Template Name: NiceAdmin - v2.2.2
+  * Template URL: https://bootstrapmade.com/nice-admin-bootstrap-admin-html-template/
+  * Author: BootstrapMade.com
+  * License: https://bootstrapmade.com/license/
+  ======================================================== -->
+  <style>
+    @media print {
+      .non-printable {
+        display: none !important;
+      }
+    }
+  </style>
+  <style>
+  .nav-link {
+    height:35px
+  }
+
+
+
+</style>
+</head>
+
+<body>
+
+  <!-- ======= Header ======= -->
+  <header id="header" class="header non-printable fixed-top d-flex align-items-center">
+
+    <div class="d-flex align-items-center justify-content-between">
+      <a href="{% url 'admin_dashboard' %}" class="logo d-flex align-items-center">
+<!--        <img src="/media/{{ site_info.logo }}" alt="" style="width:100px;height:100px">-->
+        <span class="d-none d-lg-block">{{ site_info|upper }}</span>
+      </a>
+      <i class="bi bi-list toggle-sidebar-btn"></i>
+    </div><!-- End Logo -->
+
+    <nav class="header-nav ms-auto">
+      <ul class="d-flex align-items-center">
+
+
+
+        <li class="nav-item dropdown pe-3">
+
+          <a class="nav-link nav-profile d-flex align-items-center pe-0" href="#" data-bs-toggle="dropdown">
+            {% if user.is_superuser %}
+                <img src="{{ site_info.logo.url }}" alt="Profile" class="rounded-circle">
+            {% else %}
+                {% if user.profile.staff.image %}
+                    <img src="{{user.profile.staff.image.url}}" alt="Profile" class="rounded-circle">
+                {% else %}
+                    <img src="{% static 'admin_site/images/default_image.jpg' %}" alt="Profile" class="rounded-circle">
+                {% endif %}
+            {% endif %}
+
+          </a><!-- End Profile Image Icon -->
+
+          <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
+            <li class="dropdown-header">
+              <h6 class="card-title">{{ user.username|upper}}</h6>
+              <span>{% if user.is_superuser %} SuperAdmin {% else %} {{ user.profile.staff|title }} {% endif %}</span>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="% url 'user_profile' %}">
+                <i class="bi bi-person"></i>
+                <span>My Profile</span>
+              </a>
+            </li>
+
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="% url 'change_password' %}">
+                <i class="bi bi-gear"></i>
+                <span>Change Password</span>
+              </a>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="{% url 'logout' %}">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Sign Out</span>
+              </a>
+            </li>
+
+          </ul><!-- End Profile Dropdown Items -->
+        </li><!-- End Profile Nav -->
+
+      </ul>
+    </nav><!-- End Icons Navigation -->
+
+  </header><!-- End Header -->
+
+  <!-- ======= Sidebar ======= -->
+  <aside id="sidebar" class="sidebar non-printable" style="">
+
+    <ul class="sidebar-nav" id="sidebar-nav">
+
+      <li class="nav-item">
+        <a class="nav-link " href="{% url 'admin_dashboard' %}">
+          <i class="bi  bi-speedometer2"></i>
+          <span>Dashboard</span>
+        </a>
+      </li>
+
+     <li class="nav-item">
+  <a class="nav-link collapsed" data-bs-target="#finance-nav" data-bs-toggle="collapse" href="#">
+    <i class="bi bi-cash-coin"></i><span>Finance</span><i class="bi bi-chevron-down ms-auto"></i>
+  </a>
+  <ul id="finance-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+
+    <!-- Patient Finance -->
+    <li>
+      <a href="{% url 'patient_funding' %}">
+        <i class="bi bi-circle"></i><span>Fund and Pay</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'finance_payment_select' %}">
+        <i class="bi bi-circle"></i><span>Make Payment</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'finance_other_payment' %}">
+        <i class="bi bi-circle"></i><span>Make Other Payment</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'finance_dashboard' %}">
+        <i class="bi bi-circle"></i><span>Dashboard</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'patient_transaction_index' %}">
+        <i class="bi bi-circle"></i><span>All Payments</span>
+      </a>
+    </li>
+
+    <li>
+      <a href="{% url 'registration_payment_create' %}">
+        <i class="bi bi-circle"></i><span>New Registration Payments</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'registration_payment_index' %}">
+        <i class="bi bi-circle"></i><span>Registration Payments</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'other_payment_service_list' %}">
+        <i class="bi bi-circle"></i><span>Other Payments</span>
+      </a>
+    </li>
+
+    <!-- Operational Finance -->
+
+<!--    <li>-->
+<!--      <a href="{% url 'income_index' %}">-->
+<!--        <i class="bi bi-circle"></i><span>Income Records</span>-->
+<!--      </a>-->
+<!--    </li>-->
+<!--    <li>-->
+<!--      <a href="{% url 'expense_index' %}">-->
+<!--        <i class="bi bi-circle"></i><span>Expense Records</span>-->
+<!--      </a>-->
+<!--    </li>-->
+
+    <li>
+      <a href="{% url 'remittance_dashboard' %}">
+        <i class="bi bi-circle"></i><span>Remittance Dashboard</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'remittance_list' %}">
+        <i class="bi bi-circle"></i><span>Remittance History</span>
+      </a>
+    </li>
+
+    <!-- Payroll -->
+<!--    <li>-->
+<!--      <a href="{% url 'process_payroll' %}">-->
+<!--        <i class="bi bi-circle"></i><span>Process Salary</span>-->
+<!--      </a>-->
+<!--    </li>-->
+<!--    <li>-->
+<!--      <a href="{% url 'payroll_dashboard' %}">-->
+<!--        <i class="bi bi-circle"></i><span>Salary Dashboard</span>-->
+<!--      </a>-->
+<!--    </li>-->
+<!--    <li>-->
+<!--      <a href="{% url 'salary_structure_index' %}">-->
+<!--        <i class="bi bi-circle"></i><span>Salary Structures</span>-->
+<!--      </a>-->
+<!--    </li>-->
+<!--     <li>-->
+<!--      <a href="{% url 'staff_bank_detail_index' %}">-->
+<!--        <i class="bi bi-circle"></i><span>Staff Bank Details</span>-->
+<!--      </a>-->
+<!--    </li>-->
+
+    <!-- Setup & Configuration -->
+<!--    <li>-->
+<!--      <a href="{% url 'income_category_index' %}">-->
+<!--        <i class="bi bi-circle"></i><span>Income Categories</span>-->
+<!--      </a>-->
+<!--    </li>-->
+<!--    <li>-->
+<!--      <a href="{% url 'expense_category_index' %}">-->
+<!--        <i class="bi bi-circle"></i><span>Expense Categories</span>-->
+<!--      </a>-->
+<!--    </li>-->
+    <li>
+      <a href="{% url 'finance_setting_detail' 1 %}">
+        <i class="bi bi-circle"></i><span>Settings</span>
+      </a>
+    </li>
+
+  </ul>
+</li>
+
+      <li class="nav-item">
+        <a class="nav-link collapsed" data-bs-target="#acad" data-bs-toggle="collapse" href="#">
+          <i class="bi bi-activity"></i><span>Consultation</span><i class="bi bi-chevron-down ms-auto"></i>
+        </a>
+        <ul id="acad" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+
+          <li>
+            <a href="{% url 'consultation_payment_create' %}">
+              <i class="bi bi-circle"></i><span>Add to Queue</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'patient_queue_index' %}">
+              <i class="bi bi-circle"></i><span>Waiting List</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'doctor_dashboard' %}">
+              <i class="bi bi-circle"></i><span>Doctor List</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'consultant_list' %}">
+              <i class="bi bi-circle"></i><span>Consultants</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'specialization_index' %}">
+              <i class="bi bi-circle"></i><span>Specialization</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'specialization_group_index' %}">
+              <i class="bi bi-circle"></i><span>Specialization Groups</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'consultation_fee_index' %}">
+              <i class="bi bi-circle"></i><span>Consultation Fee</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'room_index' %}">
+              <i class="bi bi-circle"></i><span>Consultation Room</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'block_index' %}">
+              <i class="bi bi-circle"></i><span>Consultation Block</span>
+            </a>
+          </li>
+
+        </ul>
+      </li>
+
+       <li class="nav-item">
+        <a class="nav-link collapsed" data-bs-target="#sb_att" data-bs-toggle="collapse" href="#">
+          <i class="bi bi-person-vcard"></i><span>Patient</span><i class="bi bi-chevron-down ms-auto"></i>
+        </a>
+        <ul id="sb_att" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+          <li>
+            <a href="{% url 'pending_patient_index' %}">
+              <i class="bi bi-circle"></i><span>Register Patient</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'patient_index' %}">
+              <i class="bi bi-circle"></i><span>View Patient</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'patient_payment_history' %}">
+              <i class="bi bi-circle"></i><span>Registration Payments</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'patient_dashboard' %}">
+              <i class="bi bi-circle"></i><span>Patient Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'registration_fee_index' %}">
+              <i class="bi bi-circle"></i><span>Registration Fee</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'patient_setting_detail' 1 %}">
+              <i class="bi bi-circle"></i><span>Settings</span>
+            </a>
+          </li>
+
+        </ul>
+      </li>
+
+
+      <li class="nav-item">
+  <a class="nav-link collapsed" data-bs-target="#inpatient-nav" data-bs-toggle="collapse" href="#">
+    <i class="bi bi-clipboard2-pulse"></i><span>Inpatient</span><i class="bi bi-chevron-down ms-auto"></i>
+  </a>
+  <ul id="inpatient-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+    <li>
+      <a href="{% url 'inpatient_dashboard' %}">
+        <i class="bi bi-circle"></i><span>Dashboard</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'admission_index' %}">
+        <i class="bi bi-circle"></i><span>Admissions</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'surgery_index' %}">
+        <i class="bi bi-circle"></i><span>Surgeries</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'ward_index' %}">
+        <i class="bi bi-circle"></i><span>Wards & Beds</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'surgery_type_index' %}">
+        <i class="bi bi-circle"></i><span>Surgery Types</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'inpatient_settings_detail' %}">
+        <i class="bi bi-circle"></i><span>Settings</span>
+      </a>
+    </li>
+  </ul>
+</li>
+
+
+      <li class="nav-item">
+        <a class="nav-link collapsed" data-bs-target="#lnote" data-bs-toggle="collapse" href="#">
+          <i class="bi bi-shield-check"></i><span>INSURANCE</span><i class="bi bi-chevron-down ms-auto"></i>
+        </a>
+        <ul id="lnote" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+          <li>
+            <a href="{% url 'patient_insurance_list' %}">
+              <i class="bi bi-circle"></i><span>Policies</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'coverage_plan_index' %}">
+              <i class="bi bi-circle"></i><span>HMO Plans</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'hmo_index' %}">
+              <i class="bi bi-circle"></i><span>HMO</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'insurance_provider_index' %}">
+              <i class="bi bi-circle"></i><span>Insurance Providers</span>
+            </a>
+          </li>
+
+
+        </ul>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link collapsed" data-bs-target="#result" data-bs-toggle="collapse" href="#">
+          <i class="bi bi-capsule"></i><span>Pharmacy</span><i class="bi bi-chevron-down ms-auto"></i>
+        </a>
+        <ul id="result" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+
+          <li>
+            <a href="{% url 'drug_dispense_page' %}">
+              <i class="bi bi-circle"></i><span>Dispense Drug</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'general_dispense_index' %}">
+              <i class="bi bi-circle"></i><span>Drug Dispenses</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'pharmacy_dashboard' %}">
+              <i class="bi bi-circle"></i><span>Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'drug_index' %}">
+              <i class="bi bi-circle"></i><span>Drugs</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'drug_transfer_index' %}">
+              <i class="bi bi-circle"></i><span>Drug Transfer</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'drug_stock_create' %}">
+              <i class="bi bi-circle"></i><span>Stock Drug</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'drug_batch_index' %}">
+              <i class="bi bi-circle"></i><span>Drug Stock Batch</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'drug_formulation_index' %}">
+              <i class="bi bi-circle"></i><span>Drug Formulation</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'generic_drug_index' %}">
+              <i class="bi bi-circle"></i><span>Generic Drug</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'drug_category_index' %}">
+              <i class="bi bi-circle"></i><span>Drug Category</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'manufacturer_index' %}">
+              <i class="bi bi-circle"></i><span>Drug Manufacturers</span>
+            </a>
+          </li>
+
+        </ul>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link collapsed" data-bs-target="#labo" data-bs-toggle="collapse" href="#">
+          <i class="bi bi-beaker"></i><span>Laboratory</span><i class="bi bi-chevron-down ms-auto"></i>
+        </a>
+        <ul id="labo" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+
+
+          <li>
+            <a href="{% url 'lab_entry' %}">
+              <i class="bi bi-circle"></i><span>Order New Test</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'lab_order_list' %}">
+              <i class="bi bi-circle"></i><span>View Lab Orders</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'lab_result_index' %}">
+              <i class="bi bi-circle"></i><span>View Lab Results</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'laboratory_dashboard' %}">
+              <i class="bi bi-circle"></i><span>Lab Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'lab_template_index' %}">
+              <i class="bi bi-circle"></i><span>Lab Test</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'lab_category_index' %}">
+              <i class="bi bi-circle"></i><span>Lab Test Category</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'lab_setting_detail' 1 %}">
+              <i class="bi bi-circle"></i><span>Lab Setting</span>
+            </a>
+          </li>
+
+
+        </ul>
+      </li>
+
+
+      <li class="nav-item">
+        <a class="nav-link collapsed" data-bs-target="#radiog" data-bs-toggle="collapse" href="#">
+          <i class="bi bi-body-text"></i><span>Radiography</span><i class="bi bi-chevron-down ms-auto"></i>
+        </a>
+        <ul id="radiog" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+
+
+          <li>
+            <a href="{% url 'scan_entry' %}">
+              <i class="bi bi-circle"></i><span>Order New Scan</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'scan_order_index' %}">
+              <i class="bi bi-circle"></i><span>View Scan Orders</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'scan_result_index' %}">
+              <i class="bi bi-circle"></i><span>View Scan Results</span>
+            </a>
+          </li>
+<!--          <li>-->
+<!--            <a href="{% url 'laboratory_dashboard' %}">-->
+<!--              <i class="bi bi-circle"></i><span>Scan Dashboard</span>-->
+<!--            </a>-->
+<!--          </li>-->
+          <li>
+            <a href="{% url 'scan_template_index' %}">
+              <i class="bi bi-circle"></i><span>Scan Templates</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'scan_category_index' %}">
+              <i class="bi bi-circle"></i><span>Scan Category</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'scan_setting_detail' 1 %}">
+              <i class="bi bi-circle"></i><span>Scan Setting</span>
+            </a>
+          </li>
+
+
+        </ul>
+      </li>
+
+      <li class="nav-item">
+  <a class="nav-link collapsed" data-bs-target="#services-nav" data-bs-toggle="collapse" href="#">
+    <i class="bi bi-card-checklist"></i><span>Services & Inventory</span><i class="bi bi-chevron-down ms-auto"></i>
+  </a>
+  <ul id="services-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+
+    <li>
+      <a href="{% url 'patient_order_page' %}">
+        <i class="bi bi-circle"></i><span>New Order</span>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'item_order_list' %}">
+        <i class="bi bi-circle"></i><span>Item Orders</span>
+      </a>
+    </li><li>
+      <a href="{% url 'service_order_list' %}">
+        <i class="bi bi-circle"></i><span>Service Orders</span>
+      </a>
+    </li>
+
+    <li>
+      <a href="{% url 'service_item_list' %}">
+        <i class="bi bi-circle"></i><span>Inventory Items</span>
+      </a>
+    </li>
+
+    <li>
+      <a href="{% url 'service_dashboard' %}">
+        <i class="bi bi-circle"></i><span>Dashboard</span>
+      </a>
+    </li>
+
+    <li>
+      <a href="{% url 'service_item_batch_list' %}">
+        <i class="bi bi-circle"></i><span>Stock Batch</span>
+      </a>
+    </li>
+
+    <li>
+      <a href="{% url 'service_category_list' %}">
+        <i class="bi bi-circle"></i><span>Categories</span>
+      </a>
+    </li>
+
+
+  </ul>
+</li>
+
+
+      <li class="nav-item">
+        <a class="nav-link collapsed" data-bs-target="#hr" data-bs-toggle="collapse" href="#">
+          <i class="bi bi-people"></i><span>Human Resource</span><i class="bi bi-chevron-down ms-auto"></i>
+        </a>
+        <ul id="hr" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+          <li>
+            <a href="{% url 'staff_index' %}">
+              <i class="bi bi-circle"></i><span>View Staff</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'staff_create' %}">
+              <i class="bi bi-circle"></i><span>Add Staff</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'position_index' %}">
+              <i class="bi bi-circle"></i><span>Positions</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'department_index' %}">
+              <i class="bi bi-circle"></i><span>Departments</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'group_index' %}">
+              <i class="bi bi-circle"></i><span>Roles</span>
+            </a>
+          </li>
+
+	   <li>
+            <a href="{% url 'human_resource_setting_detail' 1 %}">
+              <i class="bi bi-circle"></i><span>Setting</span>
+            </a>
+          </li>
+        </ul>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link collapsed" data-bs-target="#tables-nav" data-bs-toggle="collapse" href="#">
+          <i class="bi bi-gear-fill"></i><span>SETTING</span><i class="bi bi-chevron-down ms-auto"></i>
+        </a>
+        <ul id="tables-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+          <li>
+            <a href="{% url 'site_info_detail' 1 %}">
+              <i class="bi bi-circle"></i><span>Hospital Info</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'group_index' %}">
+              <i class="bi bi-circle"></i><span>Roles/Permissions</span>
+            </a>
+          </li>
+        </ul>
+      </li>
+
+      <li class="nav-heading">Account</li>
+
+<!--      <li class="nav-item">-->
+<!--        <a class="nav-link collapsed" href="% url 'user_profile' %}">-->
+<!--          <i class="bi bi-person"></i>-->
+<!--          <span>My Profile</span>-->
+<!--        </a>-->
+<!--      </li>-->
+
+      <li class="nav-item">
+        <a class="nav-link collapsed" href="{% url 'logout' %}">
+          <i class="bi bi-box-arrow-in-right"></i>
+          <span>Logout</span>
+        </a>
+      </li><!-- End Login Page Nav -->
+
+
+    </ul>
+
+  </aside><!-- End Sidebar-->
+
+
+
+  <main id="main" class="main">
+    {% if messages %}
+      {% for message in messages %}
+      <div class="alert alert-{{message.tags}} {% if message.tags == 'error' %} alert-danger {% endif %} alert-dismissible fade show non-printable" role="alert">
+          <i class="bi bi-exclamation-octagon me-1"></i>
+          {{message}}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if 0 %}
+    <div class="pagetitle non-printable">
+      <h1>{% block 'page' %} {%endblock %}</h1>
+      <nav>
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="% url 'dashboard' %}">Home</a></li>
+          <li class="breadcrumb-item active">{% block 'subpage' %} {% endblock %}</li>
+        </ol>
+      </nav>
+    </div><!-- End Page Title -->
+    {% endif %}
+
+    <section class="section dashboard">
+
+      {% block 'main' %} {% endblock %}
+    </section>
+
+  </main><!-- End #main -->
+
+  <a href="#" class="back-to-top non-printable d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+
+  <!-- Vendor JS Files -->
+  <script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/chart.js/chart.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/quill/quill.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/simple-datatables/simple-datatables.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/tinymce/tinymce.min.js' %}"></script>
+
+  <script src="{% static 'admin_site/vendor/php-email-form/validate.js' %}"></script>
+
+
+  <!-- Template Main JS File -->
+  <script src="{% static 'admin_site/scripts/main.js' %}"></script>
+
+</body>
+
+</html>

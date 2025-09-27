@@ -27,6 +27,7 @@ from .forms import CategoryForm, SupplierForm, ItemUpdateForm, ItemCreateForm, M
     PurchaseAdvanceItemForm, PurchaseAdvanceCreateForm
 from .services import perform_stock_out, perform_stock_transfer
 from pytz import timezone as pytz_timezone
+from django.http import HttpResponse
 
 logger = logging.getLogger(__name__)
 
@@ -1092,34 +1093,44 @@ class AdvanceItemSearchAjaxView(LoginRequiredMixin, View):
             })
         return JsonResponse({'items': results})
 
+
 @login_required
 @permission_required("inventory.add_salemodel", raise_exception=True)
 @transaction.atomic
 def place_order_view(request):
-    # GET -> show form
+    # --- GET Request: Show the order form and suggestions ---
     if request.method == 'GET':
-        settings_obj = SchoolSettingModel.objects.last()
+        # Query for the top 10 best-selling items by quantity
+        top_items = SaleItemModel.objects.values('item__id', 'item__name', 'item__current_selling_price',  # <-- ADD THIS LINE
+            'item__shop_quantity' ) \
+                        .annotate(total_sold=Sum('quantity')) \
+                        .order_by('-total_sold')[:10]
+
         context = {
-            'settings': settings_obj,
+            'settings': SchoolSettingModel.objects.last(),
             'items': ItemModel.objects.filter(is_active=True),
+            'top_items': top_items,
         }
         return render(request, 'inventory/sales/place_order.html', context)
 
-    # POST -> process sale
-    # validate student
-    pk = request.POST.get('student_id')
-    if not pk:
-        messages.error(request, 'Please Select a Student')
+    # --- POST Request: Process the sale ---
+    student_id = request.POST.get('student_id')
+    payment_method = request.POST.get('payment_method')
+    student = None
+
+    # UPDATED: Student is now optional. Get the student object only if an ID is provided.
+    if student_id:
+        student = get_object_or_404(StudentModel, pk=student_id)
+
+    # Validate that a student is selected if 'Student Wallet' is the payment method
+    if payment_method == 'student_wallet' and not student:
+        messages.error(request, 'A student must be selected to use the Student Wallet payment method.')
         return redirect(reverse('place_order'))
 
-    student = get_object_or_404(StudentModel, pk=pk)
-    wallet, _ = StudentWalletModel.objects.get_or_create(student=student)
-
-    # Gather line-items (assumes contiguous indices 0..N-1)
+    # Gather line-items from the form
     idx = 0
     items = []
     subtotal = Decimal('0.00')
-
     while True:
         item_id = request.POST.get(f'items[{idx}][item_id]')
         qty = request.POST.get(f'items[{idx}][quantity]')
@@ -1135,49 +1146,49 @@ def place_order_view(request):
 
         unit_price = item.current_selling_price
         line_total = unit_price * quantity
-
         items.append((item, quantity, unit_price))
         subtotal += line_total
         idx += 1
 
-    # discount and totals
+    if not items:
+        messages.error(request, 'No items were added to the order.')
+        return redirect(reverse('place_order'))
+
     discount = Decimal(str(request.POST.get('discount', '0.00') or '0.00'))
     total_amount = subtotal - discount
 
-    # Validate funds against wallet + allowed debt
-    settings_obj = SchoolSettingModel.objects.first()
-    max_debt = Decimal(str(settings_obj.max_student_debt)) if settings_obj and settings_obj.max_student_debt is not None else Decimal('0.00')
-    available = Decimal(str(wallet.balance)) + (max_debt - Decimal(str(wallet.debt or 0)))
+    # UPDATED: Conditional fund validation only for wallet payments
+    if payment_method == 'student_wallet':
+        wallet, _ = StudentWalletModel.objects.get_or_create(student=student)
+        settings_obj = SchoolSettingModel.objects.first()
+        max_debt = Decimal(str(settings_obj.max_student_debt or '0.00'))
+        available = Decimal(str(wallet.balance or '0.00')) + (max_debt - Decimal(str(wallet.debt or '0.00')))
 
-    if total_amount > available:
-        return HttpResponseBadRequest('Insufficient funds or max debt exceeded')
+        if total_amount > available:
+            messages.error(request,
+                           f'Insufficient funds for {student}. Available: ₦{available}, Needed: ₦{total_amount}')
+            return redirect(reverse('place_order'))
 
-    # Create Sale header
+    # UPDATED: Create Sale header with optional student and correct payment method
     sale = SaleModel.objects.create(
-        customer=student,
+        customer=student,  # This will be None for walk-in customers
         discount=discount,
-        payment_method=SaleModel.PaymentMethod.STUDENT_WALLET
+        payment_method=payment_method
     )
 
-    # Attach created_by if available
     try:
         created_by = StaffProfileModel.objects.get(user=request.user).staff
         sale.created_by = created_by
         sale.save()
     except Exception:
-        # ignore if we cannot find staff profile
         pass
 
-    # Process each line using FIFO consumption of StockInItemModel (line-level batches)
+    # --- FIFO Stock Consumption and Sale Item Creation (Your Original, Correct Logic) ---
     for item, qty, unit_price in items:
-        # lock item row for update to avoid concurrent modifications
         item = ItemModel.objects.select_for_update().get(pk=item.pk)
-
         remaining = qty
         total_cost = Decimal('0.00')
 
-        # Query StockInItemModel (the line model) - these hold per-batch quantities & unit_cost
-        # select_for_update to lock the batch rows inside the surrounding transaction
         batches = StockInItemModel.objects.select_for_update().filter(
             item=item,
             quantity_remaining__gt=Decimal('0.00')
@@ -1186,33 +1197,23 @@ def place_order_view(request):
         for batch in batches:
             if remaining <= Decimal('0.00'):
                 break
-
             available_in_batch = batch.quantity_remaining or Decimal('0.00')
             take = min(remaining, available_in_batch)
-
             if take <= Decimal('0.00'):
                 continue
 
-            # decrement the batch's remaining quantity and save
             batch.quantity_remaining = (available_in_batch - take).quantize(Decimal('0.01'))
             batch.save(update_fields=['quantity_remaining'])
-
-            # accumulate cost using the batch's unit_cost
             unit_cost = batch.unit_cost or Decimal('0.00')
             total_cost += (take * unit_cost)
-
             remaining -= take
 
-        # If remaining > 0 after consuming all batches -> not enough stock
         if remaining > Decimal('0.00'):
-            # Rollback will happen because we are in @transaction.atomic; raise to abort
-            raise ValueError(f"Not enough stock to fulfill {item.name}")
+            raise ValueError(f"Not enough stock to fulfill {qty} of {item.name}. Only {qty - remaining} available.")
 
-        # compute average cost for this sale item
         avg_cost = (total_cost / qty).quantize(Decimal('0.01')) if qty > 0 else Decimal('0.00')
 
-        # create sale item record with actual cost
-        sale_item = SaleItemModel.objects.create(
+        SaleItemModel.objects.create(
             sale=sale,
             item=item,
             quantity=qty,
@@ -1220,61 +1221,37 @@ def place_order_view(request):
             unit_cost=avg_cost
         )
 
-        # Update ItemModel quantities (shop first, then store) to reflect the sale
-        # Using the locked 'item' instance we fetched above
         to_take = qty
-
-        # subtract from shop_quantity first
         shop_avail = item.shop_quantity or Decimal('0.00')
         if shop_avail >= to_take:
             item.shop_quantity = (shop_avail - to_take)
             to_take = Decimal('0.00')
         else:
-            # consume all shop stock then from store
             item.shop_quantity = Decimal('0.00')
             to_take = (to_take - shop_avail)
 
         if to_take > Decimal('0.00'):
             store_avail = item.store_quantity or Decimal('0.00')
-            if store_avail >= to_take:
-                item.store_quantity = (store_avail - to_take)
-                to_take = Decimal('0.00')
-            else:
-                # This should not happen because FIFO consumption already guaranteed stock availability,
-                # but guard just in case.
-                item.store_quantity = Decimal('0.00')
-                to_take = (to_take - store_avail)
+            item.store_quantity = (store_avail - to_take)
 
-        # Save item counts
         item.save(update_fields=['shop_quantity', 'store_quantity'])
 
-    # Deduct from student wallet / add debt if needed
-    wallet_balance = Decimal(str(wallet.balance or 0))
-    if wallet_balance >= total_amount:
-        wallet.balance = float((wallet_balance - total_amount).quantize(Decimal('0.01')))
-    else:
-        remainder = total_amount - wallet_balance
-        wallet.balance = 0.0
-        wallet.debt = float((Decimal(str(wallet.debt or 0)) + remainder).quantize(Decimal('0.01')))
-    wallet.save(update_fields=['balance', 'debt'])
+    # --- UPDATED: Conditional wallet deduction ---
+    if payment_method == 'student_wallet':
+        wallet.refresh_from_db()
+        wallet_balance = Decimal(str(wallet.balance or 0))
+        if wallet_balance >= total_amount:
+            wallet.balance = float((wallet_balance - total_amount).quantize(Decimal('0.01')))
+        else:
+            remainder = total_amount - wallet_balance
+            wallet.balance = 0.0
+            wallet.debt = float((Decimal(str(wallet.debt or 0)) + remainder).quantize(Decimal('0.01')))
+        wallet.save(update_fields=['balance', 'debt'])
 
-    # Create activity log
-    target_timezone = pytz_timezone('Africa/Lagos')
-    localized_created_at = timezone.localtime(sale.created_at, timezone=target_timezone)
-    formatted_time = localized_created_at.strftime(f"%B {localized_created_at.day} %Y %I:%M%p")
+    # --- Activity Log Creation (Optional) ---
+    # You can uncomment and update this section if needed
 
-    # log = f"""
-    # <div class='text-white bg-secondary p-2' style='border-radius: 5px;'>
-    #     <p>Order Placement: <a href='{reverse('order_detail', kwargs={'pk': sale.id})}'><b>New order of ₦{total_amount}</b></a> placed for
-    #     <a href='{reverse('student_detail', kwargs={{'pk': sale.customer.id}})}'><b>{sale.customer.__str__().title()}</b></a>
-    #     by <a href='{reverse('staff_detail', kwargs={{'pk': sale.created_by.id}})}'><b>{sale.created_by.__str__().title()}</b></a>
-    #     <br><span class='float-end'>{formatted_time}</span>
-    #     </p>
-    # </div>
-    # """
-    #
-    # ActivityLogModel.objects.create(log=log)
-    messages.success(request, 'Order saved successfully.')
+    messages.success(request, f'Sale #{sale.id} recorded successfully.')
     return redirect(reverse('place_order'))
 
 
@@ -1447,7 +1424,7 @@ def api_barcode_lookup(request):
                 'id': item.id,
                 'name': item.name,
                 'selling_price': float(item.selling_price),
-                'qty_remaining': float(item.quantity_on_hand)
+                'qty_remaining': float(item.shop_quantity)
             }
         })
     except ItemModel.DoesNotExist:
@@ -1470,32 +1447,26 @@ def process_refund(request, pk):
         return redirect('order_detail', pk=pk)
 
     refund_reason = request.POST.get('refund_reason', '').strip()
-    if not refund_reason:
-        messages.error(request, 'Please provide a reason for the refund.')
-        return redirect('order_detail', pk=pk)
 
     try:
         # Restore items to inventory
         for sale_item in sale.items.all():
             item = sale_item.item
-            item.quantity_on_hand += sale_item.quantity
+            item.shop_quantity += sale_item.quantity
             item.save()
 
             # Restore stock batches (FIFO in reverse)
             remaining_qty = sale_item.quantity
-            batches = StockInModel.objects.filter(
+            batches = StockInItemModel.objects.filter(
                 item=item,
-                status__in=['finished', 'active']
-            ).order_by('-date_added', '-created_at')  # Reverse order for refund
+            ).order_by('-stock_in__created_at')  # Reverse order for refund
 
             for batch in batches:
                 if remaining_qty <= 0:
                     break
 
                 restore_qty = min(remaining_qty, sale_item.quantity)
-                batch.quantity_left += restore_qty
-                batch.quantity_sold = (batch.quantity_sold or Decimal('0.00')) - restore_qty
-                batch.status = 'active' if batch.quantity_left > 0 else 'finished'
+                batch.quantity_remaining += restore_qty
                 batch.save()
 
                 remaining_qty -= restore_qty
@@ -1540,14 +1511,14 @@ def process_refund(request, pk):
 @login_required
 def api_barcode_lookup(request):
     """Enhanced barcode lookup for both students and items"""
-    barcode = request.POST.get('barcode', '')
+    barcode = request.GET.get('barcode', '')
 
     if not barcode:
         return JsonResponse({'success': False, 'message': 'No barcode provided'})
 
     # Try to find student first
     try:
-        student = StudentModel.objects.get(barcode=barcode)
+        student = StudentModel.objects.get(registration_number=barcode)
         wallet, _ = StudentWalletModel.objects.get_or_create(student=student)
         return JsonResponse({
             'success': True,
@@ -1564,19 +1535,20 @@ def api_barcode_lookup(request):
     except StudentModel.DoesNotExist:
         pass
 
-    # Try to find item
     try:
         item = ItemModel.objects.get(barcode=barcode, is_active=True)
+        print(item)
         return JsonResponse({
             'success': True,
             'item': {
                 'id': item.id,
                 'name': item.name,
-                'selling_price': float(item.selling_price),
-                'qty_remaining': float(item.quantity_on_hand)
+                'selling_price': float(item.current_selling_price),
+                'qty_remaining': float(item.shop_quantity)
             }
         })
     except ItemModel.DoesNotExist:
         pass
+    print('lllllllllllll')
 
     return JsonResponse({'success': False, 'message': 'Barcode not found'})

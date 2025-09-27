@@ -42,6 +42,7 @@ def generate_invoices_task(job_id):
                     student=student,
                     session=job.session,
                     term=job.term,
+                    fee=fee_master.__str__(),
                     defaults={'due_date': timezone.now().date()}  # Set a default due date
                 )
 

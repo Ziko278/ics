@@ -138,9 +138,9 @@ class SupplierModel(models.Model):
 
     def get_total_supplied_amount(self):
         """Calculates the total value of all received purchase orders from this supplier."""
-        # Using the default reverse name 'purchaseordermodel_set'
-        total = self.purchaseordermodel_set.filter(status='received').aggregate(
-            total_sum=Sum('total_amount')
+        # THE FIX: Calculate the sum by multiplying the quantity and unit cost from the related items.
+        total = self.purchaseordermodel_set.filter().aggregate(
+            total_sum=Sum(F('items__quantity') * F('items__unit_cost'))
         )['total_sum']
         return total or Decimal('0.00')
 
@@ -155,7 +155,7 @@ class SupplierModel(models.Model):
     @property
     def balance_owed(self):
         """Calculates the outstanding balance owed to the supplier."""
-        return self.get_total_supplied_amount() - self.get_total_paid_amount()
+        return abs(self.get_total_supplied_amount() - self.get_total_paid_amount())
 
 
 class PurchaseOrderModel(models.Model):
@@ -195,6 +195,13 @@ class PurchaseOrderModel(models.Model):
     def save(self, *args, **kwargs):
         if not self.order_number:
             self.order_number = f"PO-{timezone.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+        if self.session is None or self.term is None:
+            setting = SchoolSettingModel.objects.first()
+            if setting:
+                if self.session is None:
+                    self.session = setting.session
+                if self.term is None:
+                    self.term = setting.term
         super().save(*args, **kwargs)
 
     @property

@@ -1,0 +1,158 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+{% block 'main' %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Student Funding Details</h4>
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Student: <a href="{% url 'student_detail' pk=funding.student.pk %}">{{ funding.student }}</a></h5>
+                    <hr>
+                    <dl class="row">
+                        <dt class="col-sm-4">Amount Paid:</dt>
+                        <dd class="col-sm-8">₦{{ funding.amount|floatformat:2 }}</dd>
+
+                        <dt class="col-sm-4">Payment Method:</dt>
+                        <dd class="col-sm-8">{{ funding.get_method_display }}</dd>
+
+                        <dt class="col-sm-4">Payment Mode:</dt>
+                        <dd class="col-sm-8">{{ funding.get_mode_display }}</dd>
+
+                        <dt class="col-sm-4">Date Created:</dt>
+                        <dd class="col-sm-8">{{ funding.created_at|date:"M d, Y P" }}</dd>
+
+                        <dt class="col-sm-4">Recorded By:</dt>
+                        <dd class="col-sm-8">
+                            {% if funding.created_by %}
+                                <a href="{% url 'staff_detail' pk=funding.created_by.pk %}">{{ funding.created_by|title }}</a>
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-4">Session:</dt>
+                        <dd class="col-sm-8">{{ funding.session }}</dd>
+
+                        <dt class="col-sm-4">Term:</dt>
+                        <dd class="col-sm-8">{{ funding.get_term_display }}</dd>
+
+                        {% if funding.teller_number %}
+                        <dt class="col-sm-4">Teller Number:</dt>
+                        <dd class="col-sm-8">{{ funding.teller_number }}</dd>
+                        {% endif %}
+
+                        {% if funding.reference %}
+                        <dt class="col-sm-4">Reference:</dt>
+                        <dd class="col-sm-8">{{ funding.reference }}</dd>
+                        {% endif %}
+
+                        {% if funding.decline_reason %}
+                        <dt class="col-sm-4">Decline Reason:</dt>
+                        <dd class="col-sm-8 text-danger">{{ funding.decline_reason }}</dd>
+                        {% endif %}
+
+                        {% if funding.proof_of_payment %}
+                        <dt class="col-sm-4">Proof of Payment:</dt>
+                        <dd class="col-sm-8"><a href="{{ funding.proof_of_payment.url }}" target="_blank">View Proof</a></dd>
+                        {% endif %}
+                    </dl>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'deposit_index' %}" class="btn btn-secondary">Back to List</a>
+                        <button class="btn btn-info" onclick="printReceipt()">Print Receipt</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function printReceipt() {
+        const funding = {
+            studentName: "{{ funding.student|title }}",
+            amount: "{{ funding.amount|floatformat:2|escapejs }}",
+            balance: "{{ funding.balance|floatformat:2|escapejs }}",
+            method: "{{ funding.get_method_display|escapejs }}",
+            mode: "{{ funding.get_mode_display|escapejs }}",
+            createdAt: "{{ funding.created_at|date:'M d, Y P'|escapejs }}",
+            recordedBy: "{% if funding.created_by %}{{ funding.created_by.get_full_name|escapejs }}{% else %}N/A{% endif %}",
+            session: "{{ funding.session|escapejs }}",
+            term: "{{ funding.get_term_display|escapejs }}",
+            tellerNumber: "{% if funding.teller_number %}{{ funding.teller_number|escapejs }}{% else %}N/A{% endif %}",
+            reference: "{% if funding.reference %}{{ funding.reference|escapejs }}{% else %}N/A{% endif %}",
+            schoolName: "{% if school_info %}{{ school_info.name|title|escapejs }}{% else %}Your School Name{% endif %}",
+            schoolAddress: "{% if school_info %}{{ school_setting.address|escapejs }}{% else %}Your School Address{% endif %}",
+            schoolPhone: "{% if school_info %}{{ school_setting.mobile|escapejs }}{% else %}Your School Phone{% endif %}",
+            schoolEmail: "{% if school_info %}{{ school_info.email|escapejs }}{% else %}Your School Email{% endif %}",
+        };
+
+        const receiptContent = `
+            <html>
+            <head>
+                <title>Payment Receipt - ${funding.studentName}</title>
+                <style>
+                    body { font-family: 'Arial', sans-serif; margin: 20px; color: #333; }
+                    .receipt-container { width: 300px; margin: 0 auto; border: 1px solid #ccc; padding: 15px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                    .header { text-align: center; margin-bottom: 15px; }
+                    .header h2 { margin: 0; color: #007bff; }
+                    .header p { margin: 2px 0; font-size: 0.8em; }
+                    .details p { margin: 5px 0; font-size: 0.9em; }
+                    .details strong { display: inline-block; width: 100px; }
+                    .amount-section { text-align: center; margin: 20px 0; padding: 10px; border-top: 1px dashed #ccc; border-bottom: 1px dashed #ccc; }
+                    .amount-section h3 { margin: 0; color: #28a745; }
+                    .footer { text-align: center; margin-top: 20px; font-size: 0.75em; color: #666; }
+                    @media print {
+                        body { margin: 0; }
+                        .receipt-container { border: none; box-shadow: none; width: 100%; padding: 0; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="receipt-container">
+                    <div class="header">
+                        <h2>${funding.schoolName}</h2>
+                        <p>${funding.schoolAddress}</p>
+                        <p>Phone: ${funding.schoolPhone} | Email: ${funding.schoolEmail}</p>
+                        <p>${funding.schoolWebsite}</p>
+                        <hr>
+                        <h3>RECEIPT</h3>
+                    </div>
+                    <div class="details">
+                        <p><strong>Student:</strong> ${funding.studentName}</p>
+                        <p><strong>Date:</strong> ${funding.createdAt}</p>
+                        <p><strong>Session:</strong> ${funding.session}</p>
+                        <p><strong>Term:</strong> ${funding.term}</p>
+                        <p><strong>Method:</strong> ${funding.method}</p>
+                        <p><strong>Mode:</strong> ${funding.mode}</p>
+                        ${funding.tellerNumber !== 'N/A' ? `<p><strong>Teller No:</strong> ${funding.tellerNumber}</p>` : ''}
+                        ${funding.reference !== 'N/A' ? `<p><strong>Reference:</strong> ${funding.reference}</p>` : ''}
+                        <p><strong>Recorded By:</strong> ${funding.recordedBy}</p>
+                    </div>
+                    <div class="amount-section">
+                        <p style="margin-bottom: 5px;">Amount Paid:</p>
+                        <h3>₦${funding.amount}</h3>
+                        <p style="margin-top: 5px;">Balance: ₦${funding.balance}</p>
+                    </div>
+                    <div class="footer">
+                        <p>Thank you for your payment!</p>
+                        <p>This is a computer generated receipt, no signature is required.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(receiptContent);
+        printWindow.document.close(); // Close the document to ensure content is loaded
+        printWindow.focus(); // Focus the new window
+        printWindow.print(); // Trigger the print dialog
+        // printWindow.close(); // Optional: Close the window after printing (might be too fast for some browsers)
+    }
+</script>
+{% endblock %}

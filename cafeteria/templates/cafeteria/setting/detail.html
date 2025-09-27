@@ -44,7 +44,7 @@
 
              <div class="row mt-3 border-top pt-3">
                 <div class="col-lg-5 col-md-5 label text-muted">Last Updated By</div>
-                <div class="col-lg-7 col-md-7 text-muted">{{ setting.updated_by.staff_profile.staff.get_full_name|default:"N/A" }}</div>
+                <div class="col-lg-7 col-md-7 text-muted">{{ setting.updated_by.user_staff_profile.staff|default:"N/A" }}</div>
             </div>
              <div class="row mt-2">
                 <div class="col-lg-5 col-md-5 label text-muted">Last Updated At</div>

@@ -1,0 +1,419 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+{% load humanize %}
+
+<div class="pagetitle">
+    <h1>Fee Dashboard</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}">Home</a></li>
+            <li class="breadcrumb-item active">Fee Dashboard</li>
+        </ol>
+    </nav>
+</div>
+
+<section class="section dashboard">
+    <!-- Filter Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Filter Dashboard</h5>
+                    <form method="get" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Session</label>
+                            <select name="session" class="form-select">
+                                <option value="">All Sessions</option>
+                                {% for session in sessions %}
+                                <option value="{{ session.id }}" {% if selected_session and selected_session.id == session.id %}selected{% endif %}>
+                                    {{ session }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Term</label>
+                            <select name="term" class="form-select">
+                                <option value="">All Terms</option>
+                                {% for term in terms %}
+                                <option value="{{ term.id }}" {% if selected_term and selected_term.id == term.id %}selected{% endif %}>
+                                    {{ term.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">&nbsp;</label>
+                            <div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-funnel"></i> Apply Filter
+                                </button>
+                                <a href="{% url 'fee_dashboard' %}" class="btn btn-secondary">
+                                    <i class="bi bi-arrow-clockwise"></i> Reset
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics Row -->
+    <div class="row">
+        <div class="col-lg-6 col-md-6">
+            <div class="card info-card revenue-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Expected</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-currency-dollar text-success"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_expected|floatformat:2|intcomma }}</h6>
+                            <span class="text-muted small pt-2 ps-1">Expected fees</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 col-md-6">
+            <div class="card info-card sales-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Collected</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-cash-coin text-primary"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_paid|floatformat:2|intcomma }}</h6>
+                            <span class="text-success small pt-2 ps-1">{{ collection_rate }}% collected</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 col-md-6">
+            <div class="card info-card customers-card">
+                <div class="card-body">
+                    <h5 class="card-title">Outstanding</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-exclamation-triangle text-warning"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_pending|floatformat:2|intcomma }}</h6>
+                            <span class="text-warning small pt-2 ps-1">Pending collection</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 col-md-6">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Student Funding</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-wallet2 text-info"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_funding|floatformat:2|intcomma }}</h6>
+                            <span class="text-info small pt-2 ps-1">Additional funding</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Statistics Row -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Students</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-people text-secondary"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>{{ total_students }}</h6>
+                            <span class="text-muted small pt-2 ps-1">With invoices</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Invoices</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-receipt text-primary"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>{{ total_invoices }}</h6>
+                            <span class="text-muted small pt-2 ps-1">Generated</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Pending Invoices</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-clock text-warning"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>{{ pending_invoices }}</h6>
+                            <span class="text-warning small pt-2 ps-1">Not fully paid</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Collection Rate</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-graph-up text-success"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>{{ collection_rate }}%</h6>
+                            <span class="{% if collection_rate >= 80 %}text-success{% elif collection_rate >= 60 %}text-warning{% else %}text-danger{% endif %} small pt-2 ps-1">
+                                {% if collection_rate >= 80 %}Excellent{% elif collection_rate >= 60 %}Good{% else %}Needs attention{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row">
+        <!-- Daily Payment Trends -->
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Payment Trends <span>/Last 30 Days</span></h5>
+                    <div id="paymentsChart"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fee Distribution -->
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Fee Distribution</h5>
+                    <div id="feeDistributionChart" style="min-height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="row">
+        <!-- Recent Payments -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Fee Payments</h5>
+                    {% if recent_payments %}
+                    <div class="table-responsive">
+                        <table class="table table-borderless">
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Amount</th>
+                                    <th>Method</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for payment in recent_payments %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ payment.invoice.student }}</strong>
+                                        <br><small class="text-muted">{{ payment.invoice.student.student_class.name|default:"N/A" }}</small>
+                                    </td>
+                                    <td class="text-success">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ payment.get_payment_mode_display }}</span>
+                                    </td>
+                                    <td>{{ payment.date }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-cash-coin" style="font-size: 3rem;"></i>
+                        <p>No recent payments</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Student Funding -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Student Funding</h5>
+                    {% if recent_funding %}
+                    <div class="table-responsive">
+                        <table class="table table-borderless">
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Amount</th>
+                                    <th>Method</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for funding in recent_funding %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ funding.student }}</strong>
+                                        <br><small class="text-muted">{{ funding.student.student_class.name|default:"N/A" }}</small>
+                                    </td>
+                                    <td class="text-info">₦{{ funding.amount|floatformat:2|intcomma }}</td>
+                                    <td>
+                                        <span class="badge bg-info">{{ funding.get_method_display }}</span>
+                                    </td>
+                                    <td>{{ funding.created_at|date:"M d, Y" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-wallet2" style="font-size: 3rem;"></i>
+                        <p>No recent funding</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</section>
+
+  <script src="{% static 'admin_site/vendor/apexcharts/apexcharts.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/echarts/echarts.min.js' %}"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    // Daily Payments Chart (Last 30 days)
+    const paymentsData = {{ daily_payments_data|safe }};
+
+    if (paymentsData && paymentsData.length > 0) {
+        new ApexCharts(document.querySelector("#paymentsChart"), {
+            series: [
+                {
+                    name: 'Daily Payments (₦)',
+                    data: paymentsData.map(d => d.amount),
+                }
+            ],
+            chart: {
+                height: 350,
+                type: 'area',
+                toolbar: { show: false }
+            },
+            stroke: {
+                width: 3,
+                curve: 'smooth'
+            },
+            colors: ['#2eca6a'],
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 1,
+                    opacityFrom: 0.7,
+                    opacityTo: 0.3,
+                }
+            },
+            xaxis: {
+                categories: paymentsData.map(d => d.date),
+                type: 'datetime'
+            },
+            yaxis: {
+                title: { text: 'Amount (₦)' },
+                labels: {
+                    formatter: function(val) {
+                        return "₦" + val.toFixed(0);
+                    }
+                }
+            },
+            markers: { size: 4 },
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return "₦" + val.toFixed(2);
+                    }
+                }
+            }
+        }).render();
+    }
+
+    // Fee Distribution Pie Chart
+    const feeDistributionData = {{ fee_distribution_chart|safe }};
+
+    if (feeDistributionData && feeDistributionData.length > 0) {
+        echarts.init(document.querySelector("#feeDistributionChart")).setOption({
+            tooltip: {
+                trigger: 'item',
+                formatter: '{a} <br/>{b}: ₦{c} ({d}%)'
+            },
+            legend: {
+                top: '5%',
+                left: 'center'
+            },
+            series: [{
+                name: 'Fee Types',
+                type: 'pie',
+                radius: ['40%', '70%'],
+                avoidLabelOverlap: false,
+                label: {
+                    show: false,
+                    position: 'center'
+                },
+                emphasis: {
+                    label: {
+                        show: true,
+                        fontSize: '18',
+                        fontWeight: 'bold'
+                    }
+                },
+                labelLine: { show: false },
+                data: feeDistributionData
+            }]
+        });
+    } else {
+        document.querySelector("#feeDistributionChart").innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-pie-chart" style="font-size: 3rem;"></i><p>No fee distribution data</p></div>';
+    }
+
+});
+</script>
+
+{% endblock %}

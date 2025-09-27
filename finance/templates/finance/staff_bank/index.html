@@ -33,7 +33,7 @@
                 {% for detail in bank_detail_list %}
                 <tr>
                     <th scope="row">{{ forloop.counter }}</th>
-                    <td>{{ detail.staff.staff_profile.user.get_full_name|title }}</td>
+                    <td>{{ detail.staff|title }}</td>
                     <td>{{ detail.bank_name|title }}</td>
                     <td>{{ detail.account_number }}</td>
                     <td>{{ detail.account_name|title }}</td>

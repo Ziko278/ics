@@ -1,0 +1,681 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+{% load humanize %}
+
+<div class="pagetitle">
+    <h1>Finance Dashboard</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}">Home</a></li>
+            <li class="breadcrumb-item active">Finance Dashboard</li>
+        </ol>
+    </nav>
+</div>
+
+<section class="section dashboard">
+    <!-- Filter Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Filter Dashboard</h5>
+                    <form method="get" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Session</label>
+                            <select name="session" class="form-select">
+                                <option value="">All Sessions</option>
+                                {% for session in sessions %}
+                                <option value="{{ session.id }}" {% if selected_session.id == session.id %}selected{% endif %}>
+                                    {{ session }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Term</label>
+                            <select name="term" class="form-select">
+                                <option value="">All Terms</option>
+                                {% for term in terms %}
+                                <option value="{{ term.id }}" {% if selected_term.id == term.id %}selected{% endif %}>
+                                    {{ term.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">&nbsp;</label>
+                            <div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-funnel"></i> Apply Filter
+                                </button>
+                                <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">
+                                    <i class="bi bi-arrow-clockwise"></i> Reset
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Financial Position Row -->
+    <div class="row">
+        <div class="col-lg-6 col-md-6">
+            <div class="card info-card revenue-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Income</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-arrow-down-circle text-success"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_income|floatformat:2|intcomma }}</h6>
+                            <span class="text-success small pt-2 ps-1">Money received</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 col-md-6">
+            <div class="card info-card sales-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Expenses</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-arrow-up-circle text-danger"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_expenses_paid|floatformat:2|intcomma }}</h6>
+                            <span class="text-danger small pt-2 ps-1">Money paid out</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 col-md-6">
+            <div class="card info-card customers-card">
+                <div class="card-body">
+                    <h5 class="card-title">Net Cash Position</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-wallet2 {% if net_cash_position >= 0 %}text-success{% else %}text-danger{% endif %}"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6 class="{% if net_cash_position >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {% if net_cash_position >= 0 %}
+                                    ₦{{ net_cash_position|floatformat:2|intcomma }}
+                                {% else %}
+                                    (₦{{ net_cash_position|floatformat:2|intcomma|slice:"1:" }})
+                                {% endif %}
+                            </h6>
+                            <span class="{% if net_cash_position >= 0 %}text-success{% else %}text-danger{% endif %} small pt-2 ps-1">
+                                Cash flow
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 col-md-6">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Net Overall Position</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-graph-up-arrow {% if net_overall_position >= 0 %}text-primary{% else %}text-warning{% endif %}"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6 class="{% if net_overall_position >= 0 %}text-primary{% else %}text-warning{% endif %}">
+                                {% if net_overall_position >= 0 %}
+                                    ₦{{ net_overall_position|floatformat:2|intcomma }}
+                                {% else %}
+                                    (₦{{ net_overall_position|floatformat:2|intcomma|slice:"1:" }})
+                                {% endif %}
+                            </h6>
+                            <span class="{% if net_overall_position >= 0 %}text-primary{% else %}text-warning{% endif %} small pt-2 ps-1">
+                                Including receivables
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receivables & Obligations Row -->
+    <div class="row">
+        <div class="col-lg-4 col-md-6">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Receivables</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-receipt-cutoff text-info"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_receivables|floatformat:2|intcomma }}</h6>
+                            <span class="text-info small pt-2 ps-1">Money owed to us</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 col-md-6">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Obligations</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-exclamation-triangle text-warning"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_obligations|floatformat:2|intcomma }}</h6>
+                            <span class="text-warning small pt-2 ps-1">Money we owe</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 col-md-12">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Financial Health</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            {% if net_overall_position > 100000 %}
+                                <i class="bi bi-heart-fill text-success"></i>
+                            {% elif net_overall_position > 0 %}
+                                <i class="bi bi-heart-half text-warning"></i>
+                            {% else %}
+                                <i class="bi bi-heart text-danger"></i>
+                            {% endif %}
+                        </div>
+                        <div class="ps-3">
+                            <h6>
+                                {% if net_overall_position > 100000 %}
+                                    <span class="text-success">Excellent</span>
+                                {% elif net_overall_position > 50000 %}
+                                    <span class="text-primary">Good</span>
+                                {% elif net_overall_position > 0 %}
+                                    <span class="text-warning">Fair</span>
+                                {% else %}
+                                    <span class="text-danger">Needs Attention</span>
+                                {% endif %}
+                            </h6>
+                            <span class="text-muted small pt-2 ps-1">Financial status</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Income & Expense Breakdown -->
+    <div class="row">
+        <!-- Income Breakdown -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Income Sources</h5>
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-mortarboard text-primary me-2"></i>
+                                <strong>Fee Payments</strong>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">₦{{ total_fee_income|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-wallet text-info me-2"></i>
+                                Student Funding
+                            </div>
+                            <span class="badge bg-info rounded-pill">₦{{ total_funding_income|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-cash-coin text-success me-2"></i>
+                                Other Income
+                            </div>
+                            <span class="badge bg-success rounded-pill">₦{{ total_other_income|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-arrow-return-left text-warning me-2"></i>
+                                Salary Repayments
+                            </div>
+                            <span class="badge bg-warning rounded-pill">₦{{ total_salary_repayments|floatformat:0|intcomma }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Expense Breakdown -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Expense Categories</h5>
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-receipt text-danger me-2"></i>
+                                <strong>General Expenses</strong>
+                            </div>
+                            <span class="badge bg-danger rounded-pill">₦{{ total_expenses|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-people text-primary me-2"></i>
+                                Staff Salaries
+                            </div>
+                            <span class="badge bg-primary rounded-pill">₦{{ total_salary_payments|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-truck text-info me-2"></i>
+                                Supplier Payments
+                            </div>
+                            <span class="badge bg-info rounded-pill">₦{{ total_supplier_payments|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-cash-stack text-warning me-2"></i>
+                                Staff Advances
+                            </div>
+                            <span class="badge bg-warning rounded-pill">₦{{ salary_advances_given|floatformat:0|intcomma }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Outstanding Amounts -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Outstanding Amounts</h5>
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-mortarboard text-success me-2"></i>
+                                <strong>Unpaid Fees</strong>
+                                <br><small class="text-muted">From students</small>
+                            </div>
+                            <span class="badge bg-success rounded-pill">₦{{ total_fee_receivables|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-arrow-up-circle text-info me-2"></i>
+                                Salary Advances
+                                <br><small class="text-muted">Staff owes us</small>
+                            </div>
+                            <span class="badge bg-info rounded-pill">₦{{ outstanding_salary_advances|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-basket text-warning me-2"></i>
+                                Purchase Advances
+                                <br><small class="text-muted">Staff owes us</small>
+                            </div>
+                            <span class="badge bg-warning rounded-pill">₦{{ outstanding_purchase_advances|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center border-top">
+                            <div>
+                                <i class="bi bi-exclamation-triangle text-danger me-2"></i>
+                                <strong>Unpaid Salaries</strong>
+                                <br><small class="text-muted">We owe staff</small>
+                            </div>
+                            <span class="badge bg-danger rounded-pill">₦{{ unpaid_salaries|floatformat:0|intcomma }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row">
+        <!-- Monthly Income vs Expenses -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Monthly Financial Trends <span>/Last 12 Months</span></h5>
+                    <div id="monthlyFinanceChart"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Income Distribution -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Income Distribution</h5>
+                    <div id="incomeDistributionChart" style="min-height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Expense Distribution and Cash Flow -->
+    <div class="row">
+        <!-- Expense Distribution -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Expense Distribution</h5>
+                    <div id="expenseDistributionChart" style="min-height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial Summary -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Financial Summary</h5>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="text-success">₦{{ total_income|floatformat:0|intcomma }}</h5>
+                                    <small class="text-muted">Total Income</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="text-danger">₦{{ total_expenses_paid|floatformat:0|intcomma }}</h5>
+                                    <small class="text-muted">Total Expenses</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="text-info">₦{{ total_receivables|floatformat:0|intcomma }}</h5>
+                                    <small class="text-muted">Receivables</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="text-warning">₦{{ total_obligations|floatformat:0|intcomma }}</h5>
+                                    <small class="text-muted">Obligations</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="card {% if net_overall_position >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+                                <div class="card-body text-center text-white">
+                                    <h4>
+                                        {% if net_overall_position >= 0 %}
+                                            ₦{{ net_overall_position|floatformat:0|intcomma }}
+                                        {% else %}
+                                            (₦{{ net_overall_position|floatformat:0|intcomma|slice:"1:" }})
+                                        {% endif %}
+                                    </h4>
+                                    <small>Net Financial Position</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="row">
+        <!-- Recent Income -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Income Transactions</h5>
+                    {% if recent_income %}
+                    <div class="table-responsive">
+                        <table class="table table-borderless">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Amount</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for income in recent_income %}
+                                <tr>
+                                    <td>
+                                        <span class="badge {% if income.type == 'Fee Payment' %}bg-primary{% elif income.type == 'Other Income' %}bg-success{% else %}bg-info{% endif %}">
+                                            {{ income.type }}
+                                        </span>
+                                    </td>
+                                    <td>{{ income.description }}</td>
+                                    <td class="text-success">₦{{ income.amount|floatformat:2|intcomma }}</td>
+                                    <td>{{ income.date }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-arrow-down-circle" style="font-size: 3rem;"></i>
+                        <p>No recent income transactions</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Expenses -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Expense Transactions</h5>
+                    {% if recent_expenses %}
+                    <div class="table-responsive">
+                        <table class="table table-borderless">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Amount</th>
+                                    <th>Method</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for expense in recent_expenses %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ expense.category.name }}</strong>
+                                        {% if expense.notes %}
+                                            <br><small class="text-muted">{{ expense.notes|truncatewords:5 }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-danger">₦{{ expense.amount|floatformat:2|intcomma }}</td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ expense.get_payment_method_display }}</span>
+                                    </td>
+                                    <td>{{ expense.expense_date }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-arrow-up-circle" style="font-size: 3rem;"></i>
+                        <p>No recent expense transactions</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</section>
+  <script src="{% static 'admin_site/vendor/apexcharts/apexcharts.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/echarts/echarts.min.js' %}"></script>
+<!-- Chart Scripts -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    
+    // Monthly Finance Trends Chart
+    const monthlyData = {{ monthly_trends_data|safe }};
+    
+    if (monthlyData && monthlyData.length > 0) {
+        new ApexCharts(document.querySelector("#monthlyFinanceChart"), {
+            series: [
+                {
+                    name: 'Income (₦)',
+                    data: monthlyData.map(d => d.income),
+                    type: 'column'
+                },
+                {
+                    name: 'Expenses (₦)',
+                    data: monthlyData.map(d => d.expenses),
+                    type: 'column'
+                },
+                {
+                    name: 'Net Position (₦)',
+                    data: monthlyData.map(d => d.net),
+                    type: 'line'
+                }
+            ],
+            chart: {
+                height: 350,
+                type: 'line',
+                toolbar: { show: false }
+            },
+            stroke: {
+                width: [0, 0, 3],
+                curve: 'smooth'
+            },
+            colors: ['#2eca6a', '#ff6b6b', '#4154f1'],
+            xaxis: {
+                categories: monthlyData.map(d => d.month)
+            },
+            yaxis: [
+                {
+                    title: { text: 'Amount (₦)' },
+                    labels: {
+                        formatter: function(val) {
+                            return "₦" + (val/1000).toFixed(0) + "k";
+                        }
+                    }
+                }
+            ],
+            markers: { size: [0, 0, 4] },
+            tooltip: {
+                shared: true,
+                intersect: false,
+                y: [
+                    {
+                        formatter: function(val) {
+                            return "₦" + val.toFixed(2);
+                        }
+                    },
+                    {
+                        formatter: function(val) {
+                            return "₦" + val.toFixed(2);
+                        }
+                    },
+                    {
+                        formatter: function(val) {
+                            return "₦" + val.toFixed(2);
+                        }
+                    }
+                ]
+            }
+        }).render();
+    }
+
+    // Income Distribution Pie Chart
+    const incomeData = {{ income_breakdown_data|safe }};
+    
+    if (incomeData && incomeData.length > 0) {
+        echarts.init(document.querySelector("#incomeDistributionChart")).setOption({
+            tooltip: {
+                trigger: 'item',
+                formatter: '{a} <br/>{b}: ₦{c} ({d}%)'
+            },
+            legend: {
+                top: '5%',
+                left: 'center'
+            },
+            series: [{
+                name: 'Income Sources',
+                type: 'pie',
+                radius: ['40%', '70%'],
+                avoidLabelOverlap: false,
+                label: {
+                    show: false,
+                    position: 'center'
+                },
+                emphasis: {
+                    label: {
+                        show: true,
+                        fontSize: '14',
+                        fontWeight: 'bold'
+                    }
+                },
+                labelLine: { show: false },
+                data: incomeData.filter(item => item.value > 0)
+            }]
+        });
+    } else {
+        document.querySelector("#incomeDistributionChart").innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-pie-chart" style="font-size: 3rem;"></i><p>No income data available</p></div>';
+    }
+
+    // Expense Distribution Chart
+    const expenseData = {{ expense_breakdown_data|safe }};
+    
+    if (expenseData && expenseData.length > 0) {
+        echarts.init(document.querySelector("#expenseDistributionChart")).setOption({
+            tooltip: {
+                trigger: 'item',
+                formatter: '{a} <br/>{b}: ₦{c} ({d}%)'
+            },
+            legend: {
+                top: '5%',
+                left: 'center'
+            },
+            series: [{
+                name: 'Expense Categories',
+                type: 'pie',
+                radius: '70%',
+                avoidLabelOverlap: false,
+                label: {
+                    show: false,
+                    position: 'center'
+                },
+                emphasis: {
+                    label: {
+                        show: true,
+                        fontSize: '14',
+                        fontWeight: 'bold'
+                    }
+                },
+                labelLine: { show: false },
+                data: expenseData.filter(item => item.value > 0)
+            }]
+        });
+    } else {
+        document.querySelector("#expenseDistributionChart").innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-pie-chart" style="font-size: 3rem;"></i><p>No expense data available</p></div>';
+    }
+
+});
+</script>
+
+{% endblock %}

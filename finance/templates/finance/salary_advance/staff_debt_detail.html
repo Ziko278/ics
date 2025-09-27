@@ -1,0 +1,63 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="row">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Debt Breakdown for {{ staff|title }}</h4>
+                <p class="card-description">Total Amount Due: <strong class="text-danger">₦{{ total_due|intcomma }}</strong></p>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Request Date</th>
+                            <th>Amount</th>
+                            <th>Repaid</th>
+                            <th>Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for advance in outstanding_advances %}
+                        <tr>
+                            <td>{{ advance.request_date|date:"d M Y" }}</td>
+                            <td>₦{{ advance.amount|intcomma }}</td>
+                            <td>₦{{ advance.repaid_amount|intcomma }}</td>
+                            <td class="fw-bold">₦{{ advance.balance|intcomma }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center">No outstanding advances.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Record Repayment</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'finance_record_repayment' staff.pk %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="{{ form.amount_paid.id_for_label }}" class="form-label">Amount Paid</label>
+                        {{ form.amount_paid }}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.payment_date.id_for_label }}" class="form-label">Payment Date</label>
+                        {{ form.payment_date }}
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="mdi mdi-cash-plus"></i> Record Payment
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

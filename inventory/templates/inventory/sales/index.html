@@ -219,7 +219,7 @@
 <script>
 function initiateRefund(orderId) {
     const refundModal = new bootstrap.Modal(document.getElementById('refundModal'));
-    document.getElementById('refundForm').action = `/inventory/orders/${orderId}/refund/`;
+    document.getElementById('refundForm').action = `/admin/inventory/orders/${orderId}/refund/`;
     refundModal.show();
 }
 </script>

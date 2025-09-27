@@ -70,7 +70,7 @@
                     <td>{{ collection.student.first_name }} {{ collection.student.last_name }}</td>
                     <td>{{ collection.student.student_class.name }}</td>
                     <td>{{ collection.meal.name }}</td>
-                    <td>{{ collection.served_by.staff_profile.user.get_full_name|title|default:"-" }}</td>
+                    <td>{{ collection.served_by|title|default:"-" }}</td>
                 </tr>
                 {% empty %}
                 <tr>

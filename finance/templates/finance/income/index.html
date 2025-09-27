@@ -75,7 +75,6 @@
                             <th scope="col">Date</th>
                             <th scope="col">Session</th>
                             <th scope="col">Term</th>
-                            <th scope="col">Created By</th>
                             <th scope="col">Action</th>
                         </tr>
                     </thead>
@@ -93,13 +92,7 @@
                             <td>{{ income.income_date|date:"d M Y" }}</td>
                             <td>{% if income.session %}{{ income.session }}{% else %}—{% endif %}</td>
                             <td>{% if income.term %}{{ income.term }}{% else %}—{% endif %}</td>
-                            <td>
-                                {% if income.created_by %}
-                                    {{ income.created_by.get_full_name|default:income.created_by.username }}
-                                {% else %}
-                                    —
-                                {% endif %}
-                            </td>
+
 
                             <td>
                                 <a href="{% url 'income_detail' income.pk %}" class="btn btn-sm btn-outline-primary" title="View Details">
@@ -108,35 +101,7 @@
                                 <a href="{% url 'income_update' income.pk %}" class="btn btn-sm btn-outline-warning" title="Edit">
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
-                                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ income.pk }}" title="Delete">
-                                    <i class="bi bi-trash"></i>
-                                </button>
 
-                                <!-- per-row delete modal (central behaviour also acceptable) -->
-                                <div class="modal fade" id="deleteModal{{ income.pk }}" tabindex="-1" aria-hidden="true">
-                                    <div class="modal-dialog modal-dialog-centered">
-                                        <div class="modal-content border-danger">
-                                            <div class="modal-header bg-danger text-white">
-                                                <h5 class="modal-title">Confirm Deletion</h5>
-                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                <p>Delete income record <strong>#{{ income.pk }}</strong> — ₦{{ income.amount|intcomma }}?</p>
-                                                <div class="alert alert-warning">
-                                                    <strong>Warning:</strong> This action cannot be undone.
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <form method="post" action="{% url 'income_delete' income.pk %}">
-                                                    {% csrf_token %}
-                                                    <button type="submit" class="btn btn-danger">Yes, Delete</button>
-                                                </form>
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <!-- end per-row modal -->
 
                             </td>
                         </tr>

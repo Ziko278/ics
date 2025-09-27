@@ -1,0 +1,121 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="pagetitle">
+  <h1>General Payment History</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item">Fee Payments</li>
+      <li class="breadcrumb-item active">All Payments</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="card">
+    <div class="card-body pt-3">
+        <h5 class="card-title">Filter Payments</h5>
+
+        <form method="get" class="row g-3 mb-4 align-items-center">
+            <div class="col-md-3">
+                <label for="session-filter" class="form-label">Session</label>
+                <select name="session" id="session-filter" class="form-select">
+                    <option value="">All Sessions</option>
+                    {% for session in session_list %}
+                        <option value="{{ session.pk }}" {% if current_session_id == session.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ session }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="term-filter" class="form-label">Term</label>
+                <select name="term" id="term-filter" class="form-select">
+                    <option value="">All Terms</option>
+                    {% for term in term_list %}
+                        <option value="{{ term.pk }}" {% if current_term_id == term.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ term.name|title }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="search-input" class="form-label">Search</label>
+                <input type="text" name="search" id="search-input" class="form-control" 
+                       placeholder="Student Name, Reg No, Invoice #" value="{{ search_query }}">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">Filter</button>
+                <a href="{% url 'finance_payment_index' %}" class="btn btn-secondary">Clear</a>
+            </div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-striped">
+                <thead class="table-light">
+                    <tr>
+                        <th>Student</th>
+                        <th>Reg. Number</th>
+                        <th class="text-end">Amount Paid</th>
+                        <th>Invoice #</th>
+                        <th>Payment Date</th>
+                        <th>Session / Term</th>
+                        <th>Status</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payment_list %}
+                    <tr>
+                        <td><a href="{% url 'finance_student_dashboard' payment.invoice.student.pk %}">{{ payment.invoice.student|title }}</a></td>
+                        <td>{{ payment.invoice.student.registration_number }}</td>
+                        <td class="text-end fw-bold">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                        <td><a href="{% url 'finance_invoice_detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a></td>
+                        <td>{{ payment.date|date:"d M, Y" }}</td>
+                        <td>{{ payment.invoice.session }} / {{ payment.invoice.term.name|title }}</td>
+                        <td>
+                            {% if payment.status == 'confirmed' %}
+                                <span class="badge bg-success">{{ payment.get_status_display }}</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">{{ payment.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if payment.status == 'confirmed' %}
+                                <a href="{% url 'finance_fee_payment_receipt' payment.pk %}" class="btn btn-outline-info btn-sm" target="_blank" title="Print Receipt">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4">
+                            <h5>No Payments Found</h5>
+                            <p>No payment records match your current filters.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page=1&{{ request.GET.urlencode|cut:'page=' }}">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode|cut:'page=' }}">Previous</a></li>
+                {% endif %}
+                <li class="page-item active" aria-current="page"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+                {% if page_obj.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode|cut:'page=' }}">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ request.GET.urlencode|cut:'page=' }}">Last</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

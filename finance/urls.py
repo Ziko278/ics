@@ -15,7 +15,10 @@ from finance.views import (
     SalaryStructureListView, StaffBankDetailDeleteView, SalaryStructureCreateView, SalaryStructureDetailView,
     SalaryStructureUpdateView, SalaryStructureDeleteView, SalaryAdvanceListView, SalaryAdvanceCreateView,
     SalaryAdvanceDetailView, SalaryAdvanceActionView, process_payroll_view, payroll_dashboard_view,
-    export_payroll_to_excel,
+    export_payroll_to_excel, SalaryAdvanceDebtorsListView, StaffDebtDetailView, record_salary_advance_repayment,
+    DepositPaymentSelectStudentView, deposit_get_class_students, deposit_get_class_students_by_reg_number,
+    deposit_payment_list_view, pending_deposit_payment_list_view, deposit_create_view, confirm_payment_view,
+    decline_payment_view, deposit_detail_view, InvoiceReceiptView, FeePaymentListView, finance_dashboard, fee_dashboard,
 )
 
 urlpatterns = [
@@ -25,54 +28,56 @@ urlpatterns = [
     path('settings/update/', FinanceSettingUpdateView.as_view(), name='finance_setting_update'),
 
     # The main "Accounts Payable" page, listing POs that need payment. This is the main entry point.
-    path('finance/accounts-payable/', SupplierAccountsListView.as_view(), name='finance_accounts_payable_list'),
+    path('accounts-payable/', SupplierAccountsListView.as_view(), name='finance_accounts_payable_list'),
 
     # The detail page for a single PO, where payments are made and managed.
-    path('finance/accounts-payable/<int:po_pk>/', SupplierAccountDetailView.as_view(),
+    path('accounts-payable/<int:po_pk>/', SupplierAccountDetailView.as_view(),
          name='finance_po_payment_detail'),
 
     # The action URL to revert a specific payment record in case of error.
-    path('finance/supplier-payments/<int:pk>/revert/', SupplierPaymentRevertView.as_view(),
+    path('supplier-payments/<int:pk>/revert/', SupplierPaymentRevertView.as_view(),
          name='finance_supplier_payment_revert'),
 
     # The secondary page for viewing a historical log of all individual payment transactions.
-    path('finance/supplier-payments/all/', AllSupplierPaymentsListView.as_view(), name='finance_all_payments_list'),
-    path('finance/supplier-payments/<int:pk>/receipt/', SupplierPaymentReceiptView.as_view(),
+    path('supplier-payments/all/', AllSupplierPaymentsListView.as_view(), name='finance_all_payments_list'),
+    path('supplier-payments/<int:pk>/receipt/', SupplierPaymentReceiptView.as_view(),
          name='finance_supplier_payment_receipt'),
 
-    path('finance/purchase-advances/', PurchaseAdvanceAccountsListView.as_view(), name='finance_advance_accounts_list'),
-    path('finance/purchase-advances/<int:advance_pk>/payments/', PurchaseAdvancePaymentDetailView.as_view(), name='finance_advance_payment_detail'),
+    path('purchase-advances/', PurchaseAdvanceAccountsListView.as_view(), name='finance_advance_accounts_list'),
+    path('purchase-advances/<int:advance_pk>/payments/', PurchaseAdvancePaymentDetailView.as_view(), name='finance_advance_payment_detail'),
 
     # --- Fee Structure Setup ---
-    path('finance/fees/', FeeListView.as_view(), name='finance_fee_list'),
-    path('finance/fees/create/', FeeCreateView.as_view(), name='finance_fee_create'),
-    path('finance/fees/<int:pk>/update/', FeeUpdateView.as_view(), name='finance_fee_update'),
-    path('finance/fees/<int:pk>/delete/', FeeDeleteView.as_view(), name='finance_fee_delete'),
+    path('fees/', FeeListView.as_view(), name='finance_fee_list'),
+    path('fees/create/', FeeCreateView.as_view(), name='finance_fee_create'),
+    path('fees/<int:pk>/update/', FeeUpdateView.as_view(), name='finance_fee_update'),
+    path('fees/<int:pk>/delete/', FeeDeleteView.as_view(), name='finance_fee_delete'),
 
-    path('finance/fee-groups/', FeeGroupListView.as_view(), name='finance_fee_group_list'),
-    path('finance/fee-groups/create/', FeeGroupCreateView.as_view(), name='finance_fee_group_create'),
-    path('finance/fee-groups/<int:pk>/update/', FeeGroupUpdateView.as_view(), name='finance_fee_group_update'),
-    path('finance/fee-groups/<int:pk>/delete/', FeeGroupDeleteView.as_view(), name='finance_fee_group_delete'),
+    path('fee-groups/', FeeGroupListView.as_view(), name='finance_fee_group_list'),
+    path('fee-groups/create/', FeeGroupCreateView.as_view(), name='finance_fee_group_create'),
+    path('fee-groups/<int:pk>/update/', FeeGroupUpdateView.as_view(), name='finance_fee_group_update'),
+    path('fee-groups/<int:pk>/delete/', FeeGroupDeleteView.as_view(), name='finance_fee_group_delete'),
 
-    path('finance/fee-structures/', FeeMasterListView.as_view(), name='finance_fee_master_list'),
-    path('finance/fee-structures/create/', FeeMasterCreateView.as_view(), name='finance_fee_master_create'),
+    path('fee-structures/', FeeMasterListView.as_view(), name='finance_fee_master_list'),
+    path('fee-structures/create/', FeeMasterCreateView.as_view(), name='finance_fee_master_create'),
     # This single URL handles both viewing the details and updating the termly prices
-    path('finance/fee-structures/<int:pk>/', FeeMasterDetailView.as_view(), name='finance_fee_master_detail'),
-    path('finance/fee-structures/<int:pk>/update/', FeeMasterUpdateView.as_view(), name='finance_fee_master_update'),
-    path('finance/fee-structures/<int:pk>/delete/', FeeMasterDeleteView.as_view(), name='finance_fee_master_delete'),
+    path('fee-structures/<int:pk>/', FeeMasterDetailView.as_view(), name='finance_fee_master_detail'),
+    path('fee-structures/<int:pk>/update/', FeeMasterUpdateView.as_view(), name='finance_fee_master_update'),
+    path('fee-structures/<int:pk>/delete/', FeeMasterDeleteView.as_view(), name='finance_fee_master_delete'),
 
     # --- Invoicing & Payment ---
-    path('finance/invoices/', InvoiceListView.as_view(), name='finance_invoice_list'),
-    path('finance/invoices/generate/', InvoiceGenerationView.as_view(), name='finance_invoice_generate'),
-    path('finance/invoices/job/<uuid:pk>/', InvoiceJobStatusView.as_view(), name='finance_invoice_job_status'),
-    path('finance/invoices/job/<uuid:pk>/api/', invoice_job_status_api, name='finance_invoice_job_status_api'),
-    path('finance/invoices/<int:pk>/', InvoiceDetailView.as_view(), name='finance_invoice_detail'),
+    path('invoices/', InvoiceListView.as_view(), name='finance_invoice_list'),
+    path('invoices/generate/', InvoiceGenerationView.as_view(), name='finance_invoice_generate'),
+    path('invoices/job/<uuid:pk>/', InvoiceJobStatusView.as_view(), name='finance_invoice_job_status'),
+    path('invoices/job/<uuid:pk>/api/', invoice_job_status_api, name='finance_invoice_job_status_api'),
+    path('invoices/<int:pk>/', InvoiceDetailView.as_view(), name='finance_invoice_detail'),
 
-    path('finance/student-payments/search/', StudentFeeSearchView.as_view(), name='finance_student_payment_search'),
-    path('finance/student-payments/ajax/get-by-class/', get_students_by_class_ajax, name='finance_ajax_get_students_by_class'),
-    path('finance/student-payments/ajax/get-by-reg-no/', get_students_by_reg_no_ajax, name='finance_ajax_get_students_by_reg_no'),
+    path('student-payments/search/', StudentFeeSearchView.as_view(), name='finance_student_payment_search'),
+    path('student-payments/ajax/get-by-class/', get_students_by_class_ajax, name='finance_ajax_get_students_by_class'),
+    path('student-payments/ajax/get-by-reg-no/', get_students_by_reg_no_ajax, name='finance_ajax_get_students_by_reg_no'),
+    path('payments/', FeePaymentListView.as_view(), name='finance_payment_index'),
 
-    path('finance/student/<int:pk>/dashboard/', StudentFinancialDashboardView.as_view(), name='finance_student_dashboard'),
+    path('student/<int:pk>/dashboard/', StudentFinancialDashboardView.as_view(), name='finance_student_dashboard'),
+    path('invoice/<int:pk>/receipt/', InvoiceReceiptView.as_view(), name='finance_invoice_receipt'),
 
     # The page for making a bulk payment for a student
     path('finance/student/<int:pk>/bulk-payment/', BulkFeePaymentView.as_view(), name='finance_bulk_payment_create'),
@@ -129,10 +134,27 @@ urlpatterns = [
     path('finance/salary-advances/<int:pk>/', SalaryAdvanceDetailView.as_view(), name='finance_salary_advance_detail'),
     path('finance/salary-advances/<int:pk>/action/', SalaryAdvanceActionView.as_view(),
          name='finance_salary_advance_action'),
+    path('salary-advance/debtors/', SalaryAdvanceDebtorsListView.as_view(), name='finance_salary_advance_debtors'),
+    path('salary-advance/staff/<int:staff_pk>/', StaffDebtDetailView.as_view(), name='finance_staff_debt_detail'),
+    path('salary-advance/staff/<int:staff_pk>/repay/', record_salary_advance_repayment, name='finance_record_repayment'),
+
 
     # --- Salary Record (Paysheet) URLs ---
     path('finance/payroll/process/', process_payroll_view, name='finance_process_payroll'),
     path('finance/payroll/dashboard/', payroll_dashboard_view, name='finance_payroll_dashboard'),
     path('finance/payroll/export/<int:year>/<int:month>/', export_payroll_to_excel, name='finance_export_payroll'),
 
+    path('deposit/select-student', DepositPaymentSelectStudentView.as_view(), name='deposit_select_student'),
+    path('deposit/get-class-student', deposit_get_class_students, name='deposit_get_class_students'),
+    path('deposit/get-student-by-reg-number', deposit_get_class_students_by_reg_number,
+         name='deposit_get_class_students_by_reg_number'),
+    path('deposit/payment/index', deposit_payment_list_view, name='deposit_index'),
+    path('deposit/<int:pk>/detail', deposit_detail_view, name='deposit_detail'),
+    path('deposit/payment/pending/index', pending_deposit_payment_list_view, name='pending_deposit_index'),
+    path('deposit/<int:student_pk>/create', deposit_create_view, name='deposit_create'),
+    path('deposit/<int:payment_id>/confirm/', confirm_payment_view, name='confirm_payment'),
+    path('deposit/<int:payment_id>/cancel/', decline_payment_view, name='decline_payment'),
+
+    path('fee/dashboard/', fee_dashboard, name='fee_dashboard'),
+    path('dashboard/', finance_dashboard, name='finance_dashboard'),
 ]

@@ -33,7 +33,7 @@
                     <tr>
                         <th scope="row">{{ forloop.counter }}</th>
                         <td>
-                            <strong>{{ advance.staff.staff_profile.user.get_full_name|title }}</strong><br>
+                            <strong>{{ advance.staff|title }}</strong><br>
                             <small class="text-muted">{{ advance.staff.staff_id }}</small>
                         </td>
                         <td>{{ advance.request_date|date:"d M, Y" }}</td>
