@@ -2,7 +2,9 @@ import logging
 import random
 import string
 
+from django.core.files.storage import FileSystemStorage
 from django.db import transaction, IntegrityError
+from django.db.models import Count
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
@@ -17,7 +19,8 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 
 from .models import StaffModel, StaffProfileModel, HRSettingModel
-from .forms import StaffForm, GroupForm, HRSettingForm
+from .forms import StaffForm, GroupForm, HRSettingForm, StaffUploadForm, StaffProfileUpdateForm
+from human_resource.tasks import process_staff_upload
 
 logger = logging.getLogger(__name__)
 
@@ -481,3 +484,82 @@ class HRSettingUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateVie
     def get_success_url(self):
         return reverse('hr_setting_detail')
 
+
+@login_required
+def staff_upload_view(request):
+    """
+    Handles the file upload form and initiates the background task for processing.
+    """
+    if request.method == 'POST':
+        form = StaffUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            uploaded_file = request.FILES['excel_file']
+
+            # Use FileSystemStorage to save the file securely.
+            # This prevents filename conflicts and saves it in your MEDIA_ROOT.
+            fs = FileSystemStorage()
+            filename = fs.save(uploaded_file.name, uploaded_file)
+            file_path = fs.path(filename)
+
+            # Dispatch the background task with the path to the saved file.
+            process_staff_upload.delay(file_path)
+
+            # Provide immediate feedback to the user.
+            messages.success(request, (
+                'File uploaded successfully! The staff data is being processed in the background. '
+                'You can safely navigate away from this page.'
+            ))
+            return redirect('staff_upload')
+    else:
+        form = StaffUploadForm()
+
+    return render(request, 'human_resource/staff/upload.html', {'form': form})
+
+
+@login_required
+def hr_dashboard_view(request):
+    """
+    Displays a dashboard with key statistics about the staff.
+    """
+    total_staff = StaffModel.objects.count()
+    active_staff = StaffModel.objects.filter(status='active').count()
+    male_staff = StaffModel.objects.filter(gender='MALE').count()
+    female_staff = StaffModel.objects.filter(gender='FEMALE').count()
+
+    # Get a count of staff in each group/department
+    staff_by_group = StaffModel.objects.values('group__name').annotate(
+        staff_count=Count('id')
+    ).order_by('-staff_count')
+
+    context = {
+        'total_staff': total_staff,
+        'active_staff': active_staff,
+        'male_staff': male_staff,
+        'female_staff': female_staff,
+        'staff_by_group': staff_by_group,
+    }
+    return render(request, 'human_resource/dashboard.html', context)
+
+
+@login_required
+def staff_profile_view(request):
+    """
+    Allows a logged-in staff member to view and update their own profile.
+    """
+    # Get the StaffModel instance linked to the currently logged-in user
+    staff = get_object_or_404(StaffModel, staff_profile__user=request.user)
+
+    if request.method == 'POST':
+        form = StaffProfileUpdateForm(request.POST, request.FILES, instance=staff)
+        if form.is_valid():
+            form.save()  # The model's save() method will sync with the User model
+            messages.success(request, 'Your profile has been updated successfully!')
+            return redirect('staff_profile')
+    else:
+        form = StaffProfileUpdateForm(instance=staff)
+
+    context = {
+        'form': form,
+        'staff': staff
+    }
+    return render(request, 'human_resource/staff/profile.html', context)

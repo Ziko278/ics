@@ -1,0 +1,108 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="pagetitle">
+    <h1>HR Dashboard</h1>
+</div>
+
+<section class="section dashboard">
+    <div class="row">
+        <div class="col-lg-3 col-md-6">
+            <div class="card info-card sales-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Staff</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-people"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>{{ total_staff }}</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="card info-card revenue-card">
+                <div class="card-body">
+                    <h5 class="card-title">Active Staff</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-person-check-fill"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>{{ active_staff }}</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="card info-card customers-card">
+                <div class="card-body">
+                    <h5 class="card-title">Male Staff</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-gender-male"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>{{ male_staff }}</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6">
+            <div class="card info-card customers-card" style="--bs-card-icon-color: #ff41b4;">
+                <div class="card-body">
+                    <h5 class="card-title">Female Staff</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-gender-female"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>{{ female_staff }}</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Staff by Department</h5>
+                    {% if staff_by_group %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Department / Role</th>
+                                    <th scope="col">Number of Staff</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for group in staff_by_group %}
+                                <tr>
+                                    <td>{{ group.group__name|default:"Unassigned" }}</td>
+                                    <td>{{ group.staff_count }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted p-4">No staff assigned to departments.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

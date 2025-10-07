@@ -1526,7 +1526,7 @@ def api_barcode_lookup(request):
                 'id': student.id,
                 'name': f"{student.first_name} {student.last_name}",
                 'reg_number': student.registration_number,
-                'student_class': str(student.current_class) if hasattr(student, 'current_class') else '',
+                'student_class': f"{student.student_class} {student.class_section}",
                 'wallet_balance': float(wallet.balance),
                 'wallet_debt': float(wallet.debt),
                 'image_url': student.image.url if student.image else None

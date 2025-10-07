@@ -42,12 +42,16 @@
                 </div>
                 <div class="col-md-5">
                     <div class="student-info">
-                        <p class="mb-1"><strong>Student:</strong> <span id="student-name">—</span> <small id="student-reg" class="text-muted"></small></p>
-                        <p class="mb-0">
-                            <strong>Wallet:</strong> <span id="wallet-balance" class="text-success fw-bold">₦0.00</span>
-                            <strong class="ms-3">Debt:</strong> <span id="wallet-debt" class="text-danger fw-bold">₦0.00</span>
-                        </p>
-                    </div>
+    <p class="mb-1">
+        <strong>Student:</strong> <span id="student-name">—</span> <small id="student-reg" class="text-muted"></small>
+        <br>
+        <strong>Class:</strong> <span id="student-class" class="text-muted">—</span>
+    </p>
+    <p class="mb-0">
+        <strong>Wallet:</strong> <span id="wallet-balance" class="text-success fw-bold">₦0.00</span>
+        <strong class="ms-3">Debt:</strong> <span id="wallet-debt" class="text-danger fw-bold">₦0.00</span>
+    </p>
+</div>
                 </div>
                 <div class="col-md-3 text-end">
                     <img id="student-image" class="img-fluid rounded border" src="{% static 'admin_site/images/default_image.jpg' %}" style="max-height:80px; width: 80px; object-fit: cover;" alt="Student Image">
@@ -362,8 +366,7 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch(`${barcodeLookupUrl}?barcode=${barcode}`)
             .then(res => res.json())
             .then(data => {
-                alert(data.item)
-                if(data.student) {
+                if (data.student) {
                     populateStudent(data.student);
                 } else if (data.item) {
                     addItemToNextAvailableRow(data.item);

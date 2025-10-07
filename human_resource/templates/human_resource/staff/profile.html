@@ -1,0 +1,87 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% block 'main' %}
+
+<div class="pagetitle">
+    <h1>My Profile</h1>
+</div>
+
+<section class="section profile">
+    <div class="row">
+        <div class="col-xl-4">
+            <div class="card">
+                <div class="card-body profile-card pt-4 d-flex flex-column align-items-center">
+                    {% if staff.image %}
+                    <img src="{{ staff.image.url }}" alt="Profile" class="rounded-circle" style="width: 120px; height: 120px; object-fit: cover;">
+                    {% else %}
+                    <img src="{% static 'admin_site/images/default_image.jpg' %}" alt="Profile" class="rounded-circle" style="width: 120px; height: 120px; object-fit: cover;">
+                    {% endif %}
+                    <h2 class="mt-2">{{ staff.first_name }} {{ staff.last_name }}</h2>
+                    <h3>{{ staff.group.name|default:"No Position Assigned" }}</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-8">
+            <div class="card">
+                <div class="card-body pt-3">
+                    <h5 class="card-title">Edit Profile Details</h5>
+
+                    <form method="POST" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-lg-3 col-form-label">Staff ID</label>
+                            <div class="col-md-8 col-lg-9">
+                                <input type="text" class="form-control" value="{{ staff.staff_id }}" readonly>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.first_name.id_for_label }}" class="col-md-4 col-lg-3 col-form-label">First Name</label>
+                            <div class="col-md-8 col-lg-9">
+                                {{ form.first_name }}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.last_name.id_for_label }}" class="col-md-4 col-lg-3 col-form-label">Last Name</label>
+                            <div class="col-md-8 col-lg-9">
+                                {{ form.last_name }}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.mobile.id_for_label }}" class="col-md-4 col-lg-3 col-form-label">Mobile</label>
+                            <div class="col-md-8 col-lg-9">
+                                {{ form.mobile }}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.email.id_for_label }}" class="col-md-4 col-lg-3 col-form-label">Email</label>
+                            <div class="col-md-8 col-lg-9">
+                                {{ form.email }}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.image.id_for_label }}" class="col-md-4 col-lg-3 col-form-label">Profile Image</label>
+                            <div class="col-md-8 col-lg-9">
+                                {{ form.image }}
+                                {% if staff.image %}
+                                <div class="form-text">Currently: <a href="{{ staff.image.url }}" target="_blank">{{ staff.image.name }}</a></div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

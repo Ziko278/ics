@@ -45,50 +45,50 @@ def _send_credentials_email_signal(staff, username, password):
         return False
 
 
-# @receiver(post_save, sender=StaffModel)
-# def create_staff_user_account(sender, instance, created, **kwargs):
-#     """
-#     Signal to automatically create a User account when a new StaffModel instance is created.
-#     """
-#     if created:
-#         staff = instance
-#         logger.info(f"Signal triggered: Creating user account for new staff '{staff}'.")
-#
-#         # Prevent signal from running if a user profile already exists (e.g., from data migration)
-#         if hasattr(staff, 'staff_profile') and staff.staff_profile is not None:
-#             logger.info(f"Signal: Staff '{staff}' already has a profile. Skipping user creation.")
-#             return
-#
-#         try:
-#             # 1. Generate Credentials
-#             username = staff.staff_id
-#             password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-#
-#             # 2. Create Django User
-#             user = User.objects.create_user(
-#                 username=username,
-#                 email=staff.email,
-#                 password=password,
-#                 first_name=staff.first_name,
-#                 last_name=staff.last_name
-#             )
-#
-#             # 3. Create Staff Profile and save password as a fallback
-#             StaffProfileModel.objects.create(
-#                 user=user,
-#                 staff=staff,
-#                 default_password=password
-#             )
-#
-#             # 4. Add user to their assigned group
-#             if staff.group:
-#                 staff.group.user_set.add(user)
-#
-#             logger.info(f"Signal: Successfully created User '{username}' for Staff '{staff}'.")
-#
-#             # 5. Attempt to send email
-#             _send_credentials_email_signal(staff, username, password)
-#
-#         except Exception:
-#             # Log any exception during the process
-#             logger.exception(f"Signal: An unexpected error occurred while creating user for Staff ID {staff.id}.")
+@receiver(post_save, sender=StaffModel)
+def create_staff_user_account(sender, instance, created, **kwargs):
+    """
+    Signal to automatically create a User account when a new StaffModel instance is created.
+    """
+    if created:
+        staff = instance
+        logger.info(f"Signal triggered: Creating user account for new staff '{staff}'.")
+
+        # Prevent signal from running if a user profile already exists (e.g., from data migration)
+        if hasattr(staff, 'staff_profile') and staff.staff_profile is not None:
+            logger.info(f"Signal: Staff '{staff}' already has a profile. Skipping user creation.")
+            return
+
+        try:
+            # 1. Generate Credentials
+            username = staff.staff_id
+            password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+
+            # 2. Create Django User
+            user = User.objects.create_user(
+                username=username,
+                email=staff.email,
+                password=password,
+                first_name=staff.first_name,
+                last_name=staff.last_name
+            )
+
+            # 3. Create Staff Profile and save password as a fallback
+            StaffProfileModel.objects.create(
+                user=user,
+                staff=staff,
+                default_password=password
+            )
+
+            # 4. Add user to their assigned group
+            if staff.group:
+                staff.group.user_set.add(user)
+
+            logger.info(f"Signal: Successfully created User '{username}' for Staff '{staff}'.")
+
+            # 5. Attempt to send email
+            _send_credentials_email_signal(staff, username, password)
+
+        except Exception:
+            # Log any exception during the process
+            logger.exception(f"Signal: An unexpected error occurred while creating user for Staff ID {staff.id}.")

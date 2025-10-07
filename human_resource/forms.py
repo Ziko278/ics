@@ -153,3 +153,41 @@ class HRSettingForm(forms.ModelForm):
             if len(staff_prefix) < 2:
                 raise ValidationError("Staff prefix must be at least 2 characters long.")
         return staff_prefix
+
+
+class StaffUploadForm(forms.Form):
+    """
+    A simple form to handle the upload of the staff Excel file.
+    """
+    excel_file = forms.FileField(
+        label="Staff Data File",
+        help_text="Upload an .xlsx file with columns: first_name, last_name, gender, email, mobile, group_name.",
+        widget=forms.widgets.FileInput(attrs={'class': 'form-control'})
+    )
+
+    def clean_excel_file(self):
+        """
+        Validates that the uploaded file is an Excel file.
+        """
+        file = self.cleaned_data.get('excel_file')
+        if file:
+            if not file.name.endswith('.xlsx'):
+                raise forms.ValidationError("Invalid file type. Only .xlsx files are accepted.")
+        return file
+
+
+class StaffProfileUpdateForm(forms.ModelForm):
+    """
+    Form for staff members to update their own profile information.
+    The 'group' (position) is excluded as requested.
+    """
+    class Meta:
+        model = StaffModel
+        fields = ['first_name', 'last_name', 'mobile', 'email', 'image']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'mobile': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'image': forms.FileInput(attrs={'class': 'form-control'}),
+        }

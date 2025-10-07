@@ -8,12 +8,15 @@ urlpatterns = [
     path('staff/<int:pk>/', StaffDetailView.as_view(), name='staff_detail'),
     path('staff/<int:pk>/edit/', StaffUpdateView.as_view(), name='staff_edit'),
     path('staff/<int:pk>/delete/', StaffDeleteView.as_view(), name='staff_delete'),
+    path('staff/upload/', staff_upload_view, name='staff_upload'),
 
     # Staff Account Action URLs
     path('staff/<int:pk>/generate-login/', generate_staff_login, name='staff_generate_login'),
     path('staff/<int:pk>/update-login/', update_staff_login, name='staff_update_login'),
     path('staff/<int:pk>/disable/', disable_staff, name='staff_disable'),
     path('staff/<int:pk>/enable/', enable_staff, name='staff_enable'),
+    path('dashboard/', hr_dashboard_view, name='hr_dashboard'),
+    path('staff/profile/', staff_profile_view, name='staff_profile'),
 
     # Group & Permission URLs
     path('groups/', GroupListView.as_view(), name='group_index'),

@@ -42,8 +42,8 @@ class StaffModel(models.Model):
 
     staff_id = models.CharField(max_length=100, unique=True, blank=True)
     image = models.FileField(upload_to='images/staff_images', blank=True, null=True)
-    mobile = models.CharField(max_length=20, blank=True, null=True)
-    email = models.EmailField(max_length=100, unique=True)
+    mobile = models.CharField(max_length=20, blank=True, default='')
+    email = models.EmailField(max_length=100, blank=True, default='')
     gender = models.CharField(max_length=10, choices=Gender.choices)
     group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=30, choices=[('active', 'ACTIVE'), ('inactive', 'INACTIVE')], default='active')
@@ -129,3 +129,4 @@ class StaffProfileModel(models.Model):
 
     def __str__(self):
         return self.user.username
+
