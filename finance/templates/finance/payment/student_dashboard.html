@@ -20,7 +20,7 @@
                 <h5 class="card-title pb-0 mb-1">{{ student|title }}</h5>
                 <p class="mb-0">
                     <span class="me-3"><strong>Reg No:</strong> {{ student.registration_number|upper }}</span>
-                    <span><strong>Class:</strong> {{ student.student_class.name }} {{ student.class_section.name }}</span>
+                    <span><strong>Class:</strong> {{ student.student_class|title }} {{ student.class_section|title }}</span>
                 </p>
             </div>
 <!--            <div>-->
@@ -77,6 +77,7 @@
                     <div class="row g-3">
                         <div class="col-md-6"><label class="form-label">Payment Mode</label>{{ payment_form.payment_mode }}</div>
                         <div class="col-md-6"><label class="form-label">Payment Date</label>{{ payment_form.date }}</div>
+                        <div class="col-12"><label class="form-label">Bank Account</label>{{ payment_form.bank_account }}</div>
                         <div class="col-12"><label class="form-label">Reference</label>{{ payment_form.reference }}</div>
                         <div class="col-12"><button type="submit" class="btn btn-primary w-100">Apply Payment(s)</button></div>
                     </div>
@@ -107,7 +108,11 @@
                         <h5 class="card-title">All Previous Invoices</h5>
                         <div class="table-responsive">
                             <table class="table table-striped table-sm">
-                                <thead><tr><th>Invoice #</th><th>Session/Term</th><th class="text-end">Balance</th><th>Status & Actions</th></tr></thead>
+                                <thead><tr><th>Session/Quarter</th>
+                                    <th class="text-end">Balance</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr></thead>
                                 <tbody>
                                     {% for invoice in invoice_history %}
                                     <tr>
@@ -117,9 +122,14 @@
                                             <span class="badge {% if invoice.status == 'paid' %}bg-success{% elif invoice.status == 'partially_paid' %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ invoice.get_status_display }}</span>
 
                                         </td>
-                                        <td><a href="{% url 'finance_invoice_receipt' invoice.pk %}" class="btn btn-outline-info btn-sm ms-2" target="_blank">
-                <i class="bi bi-receipt"></i> Receipt
-            </a></td>
+                                        <td>
+                                            <a title="View Details" href="?invoice_id={{invoice.pk}}" class="btn btn-outline-info btn-sm ms-2" target="_blank">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <a title="Print Receipt" href="{% url 'finance_invoice_receipt' invoice.pk %}" class="btn btn-outline-success btn-sm ms-2" target="_blank">
+                                                <i class="bi bi-receipt"></i>
+                                            </a>
+                                        </td>
                                     </tr>
                                     {% empty %}
                                     <tr><td colspan="4" class="text-center">No past invoices found.</td></tr>

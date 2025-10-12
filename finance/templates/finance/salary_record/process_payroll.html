@@ -52,7 +52,8 @@
                                 <th style="width: 3%;"><input type="checkbox" id="select-all" title="Select All"></th>
                                 <th>Staff</th>
                                 <th class="text-end">Bonus</th>
-                                <th class="text-end">Deductions</th>
+                                <th class="text-end">Advance Deduction</th>
+                                <th class="text-end">Other Deductions</th>
                                 <th class="text-end">Net Salary</th>
                                 <th class="text-end">Amount Paid</th>
                                 <th>Notes</th>
@@ -65,23 +66,35 @@
                                 {{ form.id }}
                                 <td class="text-center"><input type="checkbox" name="mark_as_paid" value="{{ form.instance.id }}" class="pay-checkbox" {% if form.instance.is_paid %}disabled{% endif %}></td>
                                 <td>
-                                    {{ form.instance.staff|title }}
+                                    {{ form.instance.staff.staff_profile.user.get_full_name|title }}
                                     <small class="d-block text-muted">{{ form.instance.staff.staff_id }}</small>
                                 </td>
                                 <td>{{ form.bonus }}</td>
+                                <td>{{ form.salary_advance_deduction }}</td>
                                 <td>{{ form.other_deductions }}</td>
                                 <td class="text-end net-salary fw-bold">₦{{ form.instance.net_salary|floatformat:2|intcomma }}</td>
                                 <td>{{ form.amount_paid }}</td>
                                 <td>{{ form.notes }}</td>
-                                <td class="text-center"><span class="badge bg-secondary">{{ form.instance.payment_status }}</span></td>
+                                <td class="text-center">
+                                    {% if form.instance.payment_status == "Paid" %}
+                                        <span class="badge bg-success">{{ form.instance.payment_status }}</span>
+                                    {% elif form.instance.payment_status == "Partially Paid" %}
+                                        <span class="badge bg-warning text-dark">{{ form.instance.payment_status }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ form.instance.payment_status }}</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td colspan="4" class="text-end">Grand Totals:</td>
-                                <td class="text-end" id="total-net"></td>
-                                <td class="text-end" id="total-paid"></td>
+                                <td colspan="2" class="text-end">Grand Totals:</td>
+                                <td class="text-end">₦{{ totals.total_bonus|default:0|floatformat:2|intcomma }}</td>
+                                <td class="text-end">₦{{ totals.total_advance|default:0|floatformat:2|intcomma }}</td>
+                                <td class="text-end">₦{{ totals.total_other_deductions|default:0|floatformat:2|intcomma }}</td>
+                                <td class="text-end">₦{{ total_net_salary|default:0|floatformat:2|intcomma }}</td>
+                                <td class="text-end">₦{{ total_amount_paid|default:0|floatformat:2|intcomma }}</td>
                                 <td colspan="2"></td>
                             </tr>
                         </tfoot>
@@ -98,11 +111,8 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    function formatCurrency(num) { return '₦' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-
-    // Simplified calculation logic to be added if live updates are needed.
-    // For now, totals are calculated on page load.
-
+    // This script now only handles the row styling and the "select all" checkbox,
+    // as the totals are handled by the Django view.
     document.querySelectorAll('.paysheet-row').forEach(row => {
         if (row.dataset.paid === 'true') {
             row.classList.add('paid-row');

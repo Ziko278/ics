@@ -1,0 +1,158 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="row">
+    <div class="col-md-10 offset-md-1">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Edit Assignment: {{ assignment.item.name }}</h5>
+                <a href="{% url 'assignment_list' %}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Assignments
+                </a>
+            </div>
+            <div class="card-body">
+                {% if messages %}
+                    {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+
+                <div class="alert alert-warning mb-4">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Note:</strong> Editing this assignment will not affect existing collections.
+                    New collections will use the updated settings.
+                </div>
+
+                <form method="POST">
+                    {% csrf_token %}
+
+                    <!-- Item Info (Read Only) -->
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">Item (Cannot be changed)</label>
+                            <input type="text" class="form-control" value="{{ assignment.item.name }} ({{ assignment.item.get_unit_display }})" readonly disabled>
+                            <small class="text-muted">Current Stock: {{ assignment.item.store_quantity }} {{ assignment.item.get_unit_display }}</small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- Quantity per Student -->
+                        <div class="col-md-6 mb-3">
+                            <label for="quantity_per_student" class="form-label">Quantity per Student <span class="text-danger">*</span></label>
+                            <input type="number"
+                                   name="quantity_per_student"
+                                   id="quantity_per_student"
+                                   class="form-control"
+                                   step="0.01"
+                                   min="0.01"
+                                   value="{{ assignment.quantity_per_student }}"
+                                   required>
+                            <small class="text-muted">Unit: {{ assignment.item.get_unit_display }}</small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Session/Term (Auto-set)</label>
+                            <input type="text" class="form-control" value="{{ assignment.session.name }} - {{ assignment.term.name }}" readonly disabled>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- Gender Filter -->
+                        <div class="col-md-4 mb-3">
+                            <label for="gender" class="form-label">Gender</label>
+                            <select name="gender" id="gender" class="form-select">
+                                <option value="both" {% if assignment.gender == 'both' %}selected{% endif %}>Both</option>
+                                <option value="male" {% if assignment.gender == 'male' %}selected{% endif %}>Male Only</option>
+                                <option value="female" {% if assignment.gender == 'female' %}selected{% endif %}>Female Only</option>
+                            </select>
+                        </div>
+
+                        <!-- Type Filter -->
+                        <div class="col-md-4 mb-3">
+                            <label for="type" class="form-label">School Type</label>
+                            <select name="type" id="type" class="form-select">
+                                <option value="" {% if not assignment.type %}selected{% endif %}>All Types</option>
+                                <option value="pri" {% if assignment.type == 'pri' %}selected{% endif %}>Primary Only</option>
+                                <option value="sec" {% if assignment.type == 'sec' %}selected{% endif %}>Secondary Only</option>
+                                <option value="mix" {% if assignment.type == 'mix' %}selected{% endif %}>General</option>
+                            </select>
+                        </div>
+
+                        <!-- Free/Paid -->
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label d-block">Status</label>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="is_free" id="is_free" {% if assignment.is_free %}checked{% endif %}>
+                                <label class="form-check-label" for="is_free">
+                                    Free Item
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="is_mandatory" id="is_mandatory" {% if assignment.is_mandatory %}checked{% endif %}>
+                                <label class="form-check-label" for="is_mandatory">
+                                    Mandatory
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Class Selection -->
+                    <div class="mb-3">
+                        <label class="form-label">Assign to Classes (Leave empty for all classes)</label>
+                        <div class="card">
+                            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                                <div class="row">
+                                    {% for class in classes %}
+                                    <div class="col-md-4 col-sm-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   name="student_classes"
+                                                   value="{{ class.pk }}"
+                                                   id="class_{{ class.pk }}"
+                                                   {% if class in assignment.student_classes.all %}checked{% endif %}>
+                                            <label class="form-check-label" for="class_{{ class.pk }}">
+                                                {{ class.name }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <small class="text-muted">Select specific classes or leave empty to assign to all eligible students</small>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes (Optional)</label>
+                        <textarea name="notes" id="notes" class="form-control" rows="3" placeholder="Add any additional notes or instructions...">{{ assignment.notes }}</textarea>
+                    </div>
+
+                    <!-- Collections Info -->
+                    <div class="alert alert-info">
+                        <h6 class="mb-2">Current Collections Status:</h6>
+                        <ul class="mb-0">
+                            <li><strong>Total Collections:</strong> {{ assignment.collections.count }}</li>
+                            <li><strong>Pending:</strong> {{ assignment.collections.filter.count }}</li>
+                            <li><strong>Collected:</strong> {{ assignment.collections.filter.count }}</li>
+                        </ul>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{% url 'assignment_list' %}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="bi bi-check-circle"></i> Update Assignment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

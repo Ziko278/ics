@@ -6,6 +6,7 @@ import openpyxl
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core import serializers
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q, Sum, Avg, F, DecimalField, Value, Count
 from django.db.models.functions import TruncMonth, Coalesce, Concat
@@ -30,11 +31,13 @@ from student.signals import get_day_ordinal_suffix
 from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePaymentModel, FeeModel, FeeGroupModel, \
     FeeMasterModel, InvoiceGenerationJob, InvoiceModel, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryRecord, SalaryAdvance, \
-    SalaryStructure, StudentFundingModel, InvoiceItemModel, SalaryAdvanceRepayment, AdvanceSettlementModel
+    SalaryStructure, StudentFundingModel, InvoiceItemModel, AdvanceSettlementModel, \
+    SchoolBankDetail, StaffLoan, StaffLoanRepayment
 from .forms import FinanceSettingForm, SupplierPaymentForm, PurchaseAdvancePaymentForm, FeeForm, FeeGroupForm, \
     InvoiceGenerationForm, FeePaymentForm, ExpenseCategoryForm, ExpenseForm, IncomeCategoryForm, \
     IncomeForm, TermlyFeeAmountFormSet, FeeMasterCreateForm, BulkPaymentForm, StaffBankDetailForm, PaysheetRowForm, \
-    SalaryAdvanceForm, SalaryStructureForm, SalaryAdvanceRepaymentForm, StudentFundingForm
+    SalaryAdvanceForm, SalaryStructureForm, StudentFundingForm, SchoolBankDetailForm, \
+    StaffLoanForm, StaffLoanRepaymentForm
 from finance.tasks import generate_invoices_task
 from pytz import timezone as pytz_timezone
 
@@ -1419,6 +1422,71 @@ class StaffBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Del
 
 
 # ===================================================================
+# School Bank Detail Views (Modal Interface)
+# ===================================================================
+class SchoolBankDetailListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = SchoolBankDetail
+    permission_required = 'finance.view_schoolbankdetail'
+    template_name = 'finance/school_bank/index.html'
+    context_object_name = "school_bank_detail_list"
+
+    def get_queryset(self):
+        return SchoolBankDetail.objects.order_by('bank_name')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Assuming you will create a SchoolBankDetailForm
+        context['form'] = SchoolBankDetailForm()
+        return context
+
+
+class SchoolBankDetailCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
+    model = SchoolBankDetail
+    permission_required = 'finance.add_schoolbankdetail'
+    form_class = SchoolBankDetailForm
+
+    def get_success_url(self):
+        return reverse('finance_school_bank_detail_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, "School Bank Detail Created Successfully.")
+        return super().form_valid(form)
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == 'GET':
+            return redirect(self.success_url)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class SchoolBankDetailUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
+    model = SchoolBankDetail
+    permission_required = 'finance.change_schoolbankdetail'
+    form_class = SchoolBankDetailForm
+    success_url = reverse_lazy('finance_school_bank_detail_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, "School Bank Detail Updated Successfully.")
+        return super().form_valid(form)
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == 'GET':
+            return redirect(self.success_url)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class SchoolBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = SchoolBankDetail
+    permission_required = 'finance.delete_schoolbankdetail'
+    template_name = 'finance/school_bank/delete.html'
+    context_object_name = "school_bank_detail"
+    success_url = reverse_lazy('finance_school_bank_detail_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, "School Bank Detail Deleted Successfully.")
+        return super().form_valid(form)
+
+
+# ===================================================================
 # Salary Structure Views (Multi-page Interface)
 # ===================================================================
 class SalaryStructureListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
@@ -1534,117 +1602,152 @@ class SalaryAdvanceActionView(LoginRequiredMixin, PermissionRequiredMixin, View)
         return redirect('finance_salary_advance_detail', pk=advance.pk)
 
 
-class SalaryAdvanceDebtorsListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
-    """Lists all staff members with outstanding salary advance balances."""
+# ===================================================================
+# Staff Loan Views
+# ===================================================================
+class StaffLoanListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = StaffLoan
+    permission_required = 'finance.view_staffloan'
+    template_name = 'finance/staff_loan/index.html'
+    context_object_name = 'loans'
+    paginate_by = 15
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('staff__staff_profile__user').order_by('-request_date')
+
+
+class StaffLoanCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
+    model = StaffLoan
+    permission_required = 'finance.add_staffloan'
+    form_class = StaffLoanForm
+    template_name = 'finance/staff_loan/create.html'
+
+    def get_success_url(self):
+        messages.success(self.request, "Staff loan request submitted successfully.")
+        return reverse('finance_staff_loan_detail', kwargs={'pk': self.object.pk})
+
+
+class StaffLoanDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
+    model = StaffLoan
+    permission_required = 'finance.view_staffloan'
+    template_name = 'finance/staff_loan/detail.html'
+    context_object_name = 'loan'
+
+
+class StaffLoanActionView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = 'finance.change_staffloan'
+
+    def post(self, request, *args, **kwargs):
+        loan = get_object_or_404(StaffLoan, pk=self.kwargs.get('pk'))
+        action = request.POST.get('action')
+
+        if action == 'approve' and loan.status == 'pending':
+            loan.status = StaffLoan.Status.APPROVED
+            loan.approved_by = request.user
+            loan.approved_date = date.today()
+            loan.save()
+            messages.success(request, "Staff loan has been approved.")
+        elif action == 'reject' and loan.status == 'pending':
+            loan.status = StaffLoan.Status.REJECTED
+            loan.save()
+            messages.warning(request, "Staff loan has been rejected.")
+        elif action == 'disburse' and loan.status == 'approved':
+            loan.status = StaffLoan.Status.DISBURSED
+            loan.save()
+            messages.info(request, "Staff loan marked as disbursed.")
+        else:
+            messages.error(request, "Invalid action or status.")
+        return redirect('finance_staff_loan_detail', pk=loan.pk)
+
+
+class StaffLoanDebtorsListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = StaffModel
-    permission_required = 'finance.view_salaryadvance'
-    template_name = 'finance/salary_advance/debtors_list.html'
+    permission_required = 'finance.view_staffloan'
+    template_name = 'finance/staff_loan/debtors_list.html'
     context_object_name = 'debtors'
 
     def get_queryset(self):
-        # Find staff who have disbursed but not fully completed advances
-        queryset = StaffModel.objects.annotate(
-            total_advanced=Coalesce(
-                Sum('salary_advances__amount', filter=Q(salary_advances__status__in=['disbursed', 'completed'])),
-                Value(0), output_field=DecimalField()),
-            total_repaid=Coalesce(Sum('salary_advances__repaid_amount',
-                                      filter=Q(salary_advances__status__in=['disbursed', 'completed'])),
-                                  Value(0), output_field=DecimalField())
+        return StaffModel.objects.annotate(
+            total_loan=Coalesce(Sum('staff_loans__amount', filter=Q(staff_loans__status__in=['disbursed', 'completed'])), Value(0), output_field=DecimalField()),
+            total_repaid=Coalesce(Sum('staff_loans__repaid_amount', filter=Q(staff_loans__status__in=['disbursed', 'completed'])), Value(0), output_field=DecimalField())
         ).annotate(
-            total_due=F('total_advanced') - F('total_repaid')
-        ).filter(
-            total_due__gt=0
-        ).order_by('staff_profile__user__last_name')
-        return queryset
+            total_due=F('total_loan') - F('total_repaid')
+        ).filter(total_due__gt=0).order_by('staff_profile__user__last_name')
 
 
-class StaffDebtDetailView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Shows a breakdown of a staff's debt and provides a form for repayment."""
-    permission_required = 'finance.change_salaryadvance'
-    template_name = 'finance/salary_advance/staff_debt_detail.html'
+class StaffLoanDebtDetailView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Shows a breakdown of a staff's debt, repayment history, and a repayment form."""
+    permission_required = 'finance.change_staffloan'
+    template_name = 'finance/staff_loan/staff_debt_detail.html'
 
     def get(self, request, *args, **kwargs):
         staff = get_object_or_404(StaffModel, pk=self.kwargs.get('staff_pk'))
 
-        # Get all advances that are owing
-        outstanding_advances = SalaryAdvance.objects.filter(
+        # Get all loans that are currently owing
+        outstanding_loans = StaffLoan.objects.filter(
             staff=staff,
-            status=SalaryAdvance.Status.DISBURSED
+            status=StaffLoan.Status.DISBURSED
         ).order_by('request_date')
 
-        # Calculate total due
-        total_due = sum(advance.balance for advance in outstanding_advances)
+        # Calculate total amount due from outstanding loans
+        total_due = sum(loan.balance for loan in outstanding_loans)
 
-        form = SalaryAdvanceRepaymentForm()
+        # NEW: Get the history of all past repayment transactions
+        repayment_history = StaffLoanRepayment.objects.filter(
+            staff=staff
+        ).select_related('created_by').order_by('-payment_date', '-created_at')
+
+        # The form for making a new payment
+        form = StaffLoanRepaymentForm()
 
         context = {
             'staff': staff,
-            'outstanding_advances': outstanding_advances,
+            'outstanding_loans': outstanding_loans,
             'total_due': total_due,
+            'repayment_history': repayment_history,  # Add history to the context
             'form': form
         }
         return render(request, self.template_name, context)
 
 
 @transaction.atomic
-def record_salary_advance_repayment(request, staff_pk):
-    """Processes a repayment, applying it to the oldest debts first."""
+def record_staff_loan_repayment(request, staff_pk):
     if request.method != 'POST':
-        return redirect('finance_salary_advance_debtors')
+        return redirect('finance_staff_loan_debtors')
 
     staff = get_object_or_404(StaffModel, pk=staff_pk)
-    form = SalaryAdvanceRepaymentForm(request.POST)
+    form = StaffLoanRepaymentForm(request.POST)
 
     if form.is_valid():
         amount_paid = form.cleaned_data['amount_paid']
         payment_to_apply = amount_paid
 
-        # Log the repayment transaction
         repayment = form.save(commit=False)
         repayment.staff = staff
         repayment.created_by = request.user
         repayment.save()
 
-        # Get all outstanding advances for the staff, oldest first
-        outstanding_advances = SalaryAdvance.objects.filter(
-            staff=staff,
-            status=SalaryAdvance.Status.DISBURSED
-        ).order_by('request_date')
-
-        for advance in outstanding_advances:
-            if payment_to_apply <= 0:
-                break
-
-            balance_due = advance.balance
-            payment_for_this_advance = min(payment_to_apply, balance_due)
-
-            advance.repaid_amount += payment_for_this_advance
-            payment_to_apply -= payment_for_this_advance
-
-            # If advance is fully paid, mark as completed
-            if advance.balance <= 0:
-                advance.status = SalaryAdvance.Status.COMPLETED
-
-            advance.save()
-
-        messages.success(request, f"Repayment of {amount_paid} recorded successfully for {staff}.")
+        outstanding_loans = StaffLoan.objects.filter(staff=staff, status=StaffLoan.Status.DISBURSED).order_by('request_date')
+        for loan in outstanding_loans:
+            if payment_to_apply <= 0: break
+            payment_for_this_loan = min(payment_to_apply, loan.balance)
+            loan.repaid_amount += payment_for_this_loan
+            payment_to_apply -= payment_for_this_loan
+            if loan.balance <= 0:
+                loan.status = StaffLoan.Status.COMPLETED
+            loan.save()
+        messages.success(request, f"Repayment of {amount_paid} recorded for {staff}.")
     else:
         messages.error(request, "Invalid data submitted. Please check the form.")
-
-    return redirect('finance_staff_debt_detail', staff_pk=staff.pk)
+    return redirect('finance_staff_loan_debt_detail', staff_pk=staff.pk)
 
 
 @login_required
 @permission_required('finance.add_salaryrecord')
 def process_payroll_view(request):
-    """
-    An interactive view to manage the payroll for a specific month and year.
-    Lists all staff with active salary structures and allows for inline editing.
-    """
-    # 1. Determine the period to process from GET parameters or use current month/year
+    # This GET request logic is correct and does not need changes.
     current_year = datetime.now().year
     current_month = datetime.now().month
-
     try:
         year = int(request.GET.get('year', current_year))
         month = int(request.GET.get('month', current_month))
@@ -1652,49 +1755,63 @@ def process_payroll_view(request):
         year = current_year
         month = current_month
 
-    # 2. Get all staff who should be on the paysheet (i.e., have an active structure)
     staff_with_structures = StaffModel.objects.filter(salary_structure__is_active=True).select_related(
         'salary_structure')
-
-    # 3. For each staff member, ensure a SalaryRecord exists for the period.
-    # This automatically creates missing records, replacing the need for bulk generation.
     for staff in staff_with_structures:
         structure = staff.salary_structure
-        record, created = SalaryRecord.objects.get_or_create(
-            staff=staff,
-            year=year,
-            month=month,
-            # 'defaults' are only used if a new record is being created
-            defaults={
-                'basic_salary': structure.basic_salary,
-                'housing_allowance': structure.housing_allowance,
-                'transport_allowance': structure.transport_allowance,
-                'medical_allowance': structure.medical_allowance,
-                'other_allowances': structure.other_allowances,
-                'tax_amount': structure.tax_amount,
-                'pension_amount': structure.pension_amount,
-            }
-        )
+        total_advance_for_month = \
+        SalaryAdvance.objects.filter(staff=staff, status=SalaryAdvance.Status.DISBURSED, request_date__year=year,
+                                     request_date__month=month).aggregate(total=Sum('amount'))['total'] or Decimal(
+            '0.00')
+        record, created = SalaryRecord.objects.get_or_create(staff=staff, year=year, month=month,
+                                                             defaults={'basic_salary': structure.basic_salary,
+                                                                       'housing_allowance': structure.housing_allowance,
+                                                                       'transport_allowance': structure.transport_allowance,
+                                                                       'medical_allowance': structure.medical_allowance,
+                                                                       'other_allowances': structure.other_allowances,
+                                                                       'tax_amount': structure.tax_amount,
+                                                                       'pension_amount': structure.pension_amount,
+                                                                       'salary_advance_deduction': total_advance_for_month})
+        if not created and record.salary_advance_deduction != total_advance_for_month:
+            record.salary_advance_deduction = total_advance_for_month
+            record.save(update_fields=['salary_advance_deduction'])
 
-    # 4. Create a Formset. This is a collection of forms for our editable table.
     queryset = SalaryRecord.objects.filter(year=year, month=month, staff__in=staff_with_structures).select_related(
-        'staff')
+        'staff__staff_profile__user')
     PaysheetFormSet = modelformset_factory(SalaryRecord, form=PaysheetRowForm, extra=0)
 
+    # ==============================================================================
+    # ===== THIS IS THE NEW, CORRECTED LOGIC FOR SAVING THE FORM =====
+    # ==============================================================================
     if request.method == 'POST':
         formset = PaysheetFormSet(request.POST, queryset=queryset)
         if formset.is_valid():
-            # Save all the inline changes (bonus, deductions, notes, etc.)
-            formset.save()
 
-            # Handle the bulk "Mark as Paid" action
+            # We will now manually iterate through every form in the formset
+            # and save it explicitly. This bypasses the issue where Django
+            # thinks the pre-filled amount hasn't changed.
+            for form in formset.forms:
+                # Get the instance attached to the form
+                instance = form.instance
+                # Get the validated data from the submitted form
+                cleaned_data = form.cleaned_data
+
+                # Manually update the instance with all the data from the form fields
+                instance.bonus = cleaned_data.get('bonus', instance.bonus)
+                instance.other_deductions = cleaned_data.get('other_deductions', instance.other_deductions)
+                instance.amount_paid = cleaned_data.get('amount_paid', instance.amount_paid)
+                instance.notes = cleaned_data.get('notes', instance.notes)
+
+                # Save each instance with its updated data.
+                instance.save()
+
+            # 'Mark as Paid' logic can now run on the correctly saved data.
             paid_ids = request.POST.getlist('mark_as_paid')
             if paid_ids:
                 paid_records = SalaryRecord.objects.filter(id__in=paid_ids)
                 for record in paid_records:
-                    if not record.is_paid:  # Only update if not already paid
+                    if not record.is_paid:
                         record.is_paid = True
-                        # If amount_paid is still 0, assume full payment on bulk mark
                         if record.amount_paid == 0:
                             record.amount_paid = record.net_salary
                         record.paid_date = date.today()
@@ -1702,21 +1819,31 @@ def process_payroll_view(request):
                         record.save()
 
             messages.success(request, 'Paysheet saved successfully!')
-            # Redirect back to the same page with the same filters
             return redirect(reverse('finance_process_payroll') + f'?year={year}&month={month}')
         else:
-            messages.error(request, 'Please correct the errors below. Invalid data was submitted.')
-
+            messages.error(request, 'Please correct the errors below.')
     else:
-        # For a GET request, just display the formset with the current data
+        # The GET request logic and context calculation are correct.
         formset = PaysheetFormSet(queryset=queryset)
 
+    totals = queryset.aggregate(total_bonus=Sum('bonus'), total_advance=Sum('salary_advance_deduction'),
+                                total_other_deductions=Sum('other_deductions'))
+    total_net_salary = 0
+    total_amount_paid = 0
+    # We refresh the queryset to get the newly saved values for the totals
+    # This is important after a POST request, but doesn't hurt on a GET
+    for record in queryset.all():
+        total_net_salary += record.net_salary
+        if record.amount_paid > 0:
+            total_amount_paid += record.amount_paid
+        else:
+            total_amount_paid += record.net_salary
+
     context = {
-        'formset': formset,
-        'year': year,
-        'month': month,
+        'formset': formset, 'year': year, 'month': month,
         'years': range(2020, datetime.now().year + 2),
         'months': [(i, datetime(2000, i, 1).strftime('%B')) for i in range(1, 13)],
+        'totals': totals, 'total_net_salary': total_net_salary, 'total_amount_paid': total_amount_paid,
     }
     return render(request, 'finance/salary_record/process_payroll.html', context)
 
@@ -2439,7 +2566,7 @@ def finance_dashboard(request):
     ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
     # 4. Salary advance repayments
-    total_salary_repayments = SalaryAdvanceRepayment.objects.filter(
+    total_loan_repayments = StaffLoanRepayment.objects.filter(
         combined_filter
     ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
 
@@ -2690,3 +2817,55 @@ def finance_dashboard(request):
     }
 
     return render(request, 'finance/finance_dashboard.html', context)
+
+
+@login_required
+def my_salary_profile_view(request):
+    """
+    Displays the salary profile for the currently logged-in staff member.
+    Includes salary structure, bank details, and a filterable payslip history.
+    """
+    try:
+        user_staff_profile = request.user.staff_profile
+        staff = StaffModel.objects.get(staff_profile=user_staff_profile)
+    except ObjectDoesNotExist:  # Catches both DoesNotExist exceptions
+        messages.error(request, "You do not have a staff profile and cannot access this page.")
+        return render(request, 'finance/staff_profile/no_profile.html')
+
+    # Get the staff's salary structure
+    try:
+        salary_structure = staff.salary_structure
+    except ObjectDoesNotExist:
+        salary_structure = None
+
+    try:
+        bank_detail = staff.bank_details
+    except ObjectDoesNotExist:  # This will correctly catch the error if no details exist
+        bank_detail = None
+    # =======================================
+
+    # Handle filtering for the payslip history
+    payslips = SalaryRecord.objects.filter(staff=staff)
+    available_years = payslips.values_list('year', flat=True).distinct().order_by('-year')
+
+    selected_year = request.GET.get('year', '')
+    selected_month = request.GET.get('month', '')
+
+    if selected_year:
+        payslips = payslips.filter(year=selected_year)
+    if selected_month:
+        payslips = payslips.filter(month=selected_month)
+
+    payslips = payslips.order_by('-year', '-month')
+
+    context = {
+        'staff': staff,
+        'salary_structure': salary_structure,
+        'bank_detail': bank_detail,
+        'payslips': payslips,
+        'available_years': available_years,
+        'available_months': [(i, datetime(2000, i, 1).strftime('%B')) for i in range(1, 13)],
+        'selected_year': selected_year,
+        'selected_month': selected_month
+    }
+    return render(request, 'finance/staff_profile/salary_profile.html', context)

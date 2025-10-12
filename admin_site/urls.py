@@ -14,7 +14,7 @@ from admin_site.views import (
 
     # Class Roster/Info Views
     ClassSectionInfoDetailView, ClassSectionInfoUpdateView,
-    logout_view, login_view,
+    logout_view, login_view, change_password_view,
 )
 
 urlpatterns = [
@@ -22,6 +22,7 @@ urlpatterns = [
     path('activity-log/', ActivityLogView.as_view(), name='activity_log'),
     path('logout/', logout_view, name='logout'),
     path('login/', login_view, name='login'),
+    path('change-password/', change_password_view, name='change_password'),
 
     # Singleton URLs: No PK is needed as there's only one object.
     path('school-info/', SchoolInfoDetailView.as_view(), name='school_info_detail'),

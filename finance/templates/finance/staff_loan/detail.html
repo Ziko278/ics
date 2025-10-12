@@ -1,0 +1,159 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="pagetitle">
+  <h1>Staff Loan Details</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'finance_staff_loan_list' %}">Staff Loans</a></li>
+      <li class="breadcrumb-item active">Request from {{ loan.staff|title }}</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="row">
+    <!-- Left Column: Loan Details -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Loan Request Details</h5>
+
+                <div class="row mb-2 border-bottom pb-2">
+                    <div class="col-lg-4 col-md-5 fw-bold">Staff Member:</div>
+                    <div class="col-lg-8 col-md-7">{{ loan.staff|title }}</div>
+                </div>
+                <div class="row mb-2 border-bottom pb-2">
+                    <div class="col-lg-4 col-md-5 fw-bold">Request Date:</div>
+                    <div class="col-lg-8 col-md-7">{{ loan.request_date|date:"d M, Y" }}</div>
+                </div>
+                <div class="row mb-2 border-bottom pb-2">
+                    <div class="col-lg-4 col-md-5 fw-bold">Amount Requested:</div>
+                    <div class="col-lg-8 col-md-7"><strong>₦{{ loan.amount|intcomma }}</strong></div>
+                </div>
+                <div class="row mb-2 border-bottom pb-2">
+                    <div class="col-lg-4 col-md-5 fw-bold">Reason:</div>
+                    <div class="col-lg-8 col-md-7">{{ loan.reason|linebreaksbr }}</div>
+                </div>
+                 <div class="row mb-2 border-bottom pb-2">
+                    <div class="col-lg-4 col-md-5 fw-bold">Session / Term:</div>
+                    <div class="col-lg-8 col-md-7">{{ loan.session }} / {% if loan.term %}{{ loan.term.name|title }}{% endif %}</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-lg-4 col-md-5 fw-bold">Status:</div>
+                    <div class="col-lg-8 col-md-7">
+                        <span class="badge 
+                            {% if loan.status == 'approved' %}bg-info
+                            {% elif loan.status == 'disbursed' %}bg-primary
+                            {% elif loan.status == 'completed' %}bg-success
+                            {% elif loan.status == 'rejected' %}bg-danger
+                            {% else %}bg-warning text-dark{% endif %}">
+                            {{ loan.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+                {% if loan.approved_by %}
+                 <div class="row mb-2 mt-3">
+                    <div class="col-lg-4 col-md-5 text-muted">Approved By:</div>
+                    <div class="col-lg-8 col-md-7 text-muted">{{ loan.approved_by.staff_profile.staff.get_full_name|default:loan.approved_by.username }} on {{ loan.approved_date|date:"d M, Y" }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Actions -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Actions</h5>
+                <div class="d-grid gap-2">
+                    {% if loan.status == 'pending' %}
+                        <button type="button" class="btn btn-success confirm-action" 
+                                data-bs-toggle="modal" data-bs-target="#confirmationModal" 
+                                data-action="{% url 'finance_staff_loan_action' loan.pk %}" 
+                                data-message="Are you sure you want to APPROVE this staff loan request?"
+                                data-input-name="action" data-input-value="approve">
+                            <i class="bi bi-check-lg"></i> Approve
+                        </button>
+                        <button type="button" class="btn btn-danger confirm-action" 
+                                data-bs-toggle="modal" data-bs-target="#confirmationModal" 
+                                data-action="{% url 'finance_staff_loan_action' loan.pk %}" 
+                                data-message="Are you sure you want to REJECT this staff loan request?"
+                                data-input-name="action" data-input-value="reject">
+                            <i class="bi bi-x-lg"></i> Reject
+                        </button>
+                    {% elif loan.status == 'approved' %}
+                        <button type="button" class="btn btn-primary confirm-action" 
+                                data-bs-toggle="modal" data-bs-target="#confirmationModal" 
+                                data-action="{% url 'finance_staff_loan_action' loan.pk %}" 
+                                data-message="This will mark the loan as DISBURSED (paid to staff). Proceed?"
+                                data-input-name="action" data-input-value="disburse">
+                            <i class="bi bi-cash"></i> Mark as Disbursed
+                        </button>
+                    {% else %}
+                        <p class="text-muted">No actions are available for this request in its current state.</p>
+                    {% endif %}
+                    <a href="{% url 'finance_staff_loan_list' %}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back to List</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generic Confirmation Modal -->
+<div class="modal fade" id="confirmationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmationMessage">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="confirmationForm" method="POST" action="">
+                    {% csrf_token %}
+                    <!-- JS will add hidden inputs here -->
+                    <button type="submit" class="btn btn-primary">Confirm</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const confirmationModal = document.getElementById('confirmationModal');
+    if (confirmationModal) {
+        const form = document.getElementById('confirmationForm');
+        const message = document.getElementById('confirmationMessage');
+        confirmationModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            form.action = button.getAttribute('data-action');
+            message.textContent = button.getAttribute('data-message');
+
+            const inputName = button.getAttribute('data-input-name');
+            if (inputName) {
+                const inputValue = button.getAttribute('data-input-value');
+                let hiddenInput = form.querySelector('input[name="' + inputName + '"]');
+                if (!hiddenInput) {
+                    hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = inputName;
+                    form.appendChild(hiddenInput);
+                }
+                hiddenInput.value = inputValue;
+            }
+        });
+        confirmationModal.addEventListener('hidden.bs.modal', function() {
+            const extraInputs = form.querySelectorAll('input[type="hidden"]:not([name="csrfmiddlewaretoken"])');
+            extraInputs.forEach(input => input.remove());
+        });
+    }
+});
+</script>
+{% endblock %}

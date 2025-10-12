@@ -12,6 +12,10 @@ from .views import (
     PurchaseAdvanceListView, PurchaseAdvanceCreateView, PurchaseAdvanceDetailView, PurchaseAdvanceItemCreateView,
     PurchaseAdvanceItemDeleteView, AdvanceItemSearchAjaxView, PurchaseAdvanceStatusUpdateView, place_order_view,
     view_orders, order_detail, process_refund, api_student_search, api_item_search, api_barcode_lookup,
+    assignment_list_view, generate_collections_view, collection_job_status_view, collection_job_status_ajax,
+    student_collection_search_view, ajax_get_students_by_class, ajax_get_students_by_reg_no,
+    student_collection_dashboard_view, process_collection_view, create_direct_collection_view, create_assignment_view,
+    delete_assignment_view, edit_assignment_view,
 )
 
 
@@ -95,5 +99,26 @@ urlpatterns = [
     path('api/barcode-lookup/', api_barcode_lookup, name='api_barcode_lookup'),
     path('api/identify-fingerprint/', identify_student_by_fingerprint, name='identify_student_by_fingerprint'),
 
+    path('assignments/', assignment_list_view, name='assignment_list'),
+    path('assignments/create/', create_assignment_view, name='create_assignment'),
+    path('assignments/<int:assignment_pk>/edit/', edit_assignment_view, name='edit_assignment'),
+    path('assignments/<int:assignment_pk>/delete/', delete_assignment_view, name='delete_assignment'),
+    path('assignments/<int:assignment_pk>/generate/', generate_collections_view, name='generate_collections'),
+
+    # Job Monitoring
+    path('jobs/<uuid:job_id>/', collection_job_status_view, name='collection_job_status'),
+    path('jobs/<uuid:job_id>/ajax/', collection_job_status_ajax, name='collection_job_status_ajax'),
+
+    # Student Search
+    path('students/search/', student_collection_search_view, name='student_collection_search'),
+    path('students/ajax/by-class/', ajax_get_students_by_class, name='ajax_get_students_by_class'),
+    path('students/ajax/by-reg/', ajax_get_students_by_reg_no, name='ajax_get_students_by_reg_no'),
+
+    # Collection Management
+    path('students/<int:student_pk>/collections/', student_collection_dashboard_view,
+         name='student_collection_dashboard'),
+    path('collections/<int:collection_pk>/process/', process_collection_view, name='process_collection'),
+    path('student/<int:student_pk>/direct-purchase/', create_direct_collection_view,
+         name='create_direct_collection'),
 
 ]

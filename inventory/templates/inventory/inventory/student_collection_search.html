@@ -1,0 +1,202 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<textarea id="student_list_data" style="display: none;">{{ student_list_json }}</textarea>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Search Student to Manage Inventory Collections</h5>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="form-floating">
+                    <select class="form-select" id="id_student_class">
+                        <option value="">-------------</option>
+                        {% for class in class_list %}
+                        <option value="{{class.id}}">{{class.name|upper}}</option>
+                        {% endfor %}
+                    </select>
+                    <label>Select Class</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-floating">
+                    <select class="form-select" id="id_class_section">
+                        <option value="">-------------</option>
+                    </select>
+                    <label>Select Section</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-floating">
+                    <input type="search" id="id_student_name" class="form-control" placeholder="Student Name">
+                    <label>Search by Name</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-floating">
+                    <input type="search" id="id_student_number" class="form-control" placeholder="Registration Number">
+                    <label>Search by Reg. Number</label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Select Student: <span id="search_query_text" class="text-muted"></span></h5>
+        <div class="row">
+            <div class="col-md-6">
+                <ul class="list-group" id="student-search-results">
+                    <!-- AJAX results will be loaded here -->
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <div id="student-detail-panel" class="p-3 border rounded bg-light" style="display: none;">
+                    <p class="card-description text-center">STUDENT INFORMATION</p>
+                    <div class="row align-items-center">
+                        <div class="col-md-4 text-center">
+                            <img id="student-image" style="width:100px; height:100px; border-radius:50%; object-fit: cover;" src="{% static 'admin_site/images/default_image.jpg' %}">
+                        </div>
+                        <div class="col-md-8">
+                          <h6 id="student-fullname" class="mb-1"></h6>
+                          <p id="student-reg-no" class="mb-1 text-muted"></p>
+                          <p id="student-class" class="mb-1 text-muted"></p>
+                          <p id="student-gender" class="mb-2 text-muted"></p>
+                          <a id="proceed-button" class="btn btn-primary" href="#">View Collections</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('id_student_class');
+    const sectionSelect = document.getElementById('id_class_section');
+    const nameInput = document.getElementById('id_student_name');
+    const regNoInput = document.getElementById('id_student_number');
+    const searchResultsList = document.getElementById('student-search-results');
+    const searchQueryText = document.getElementById('search_query_text');
+    
+    const detailPanel = document.getElementById('student-detail-panel');
+    const studentImage = document.getElementById('student-image');
+    const studentFullname = document.getElementById('student-fullname');
+    const studentRegNo = document.getElementById('student-reg-no');
+    const studentClassEl = document.getElementById('student-class');
+    const studentGender = document.getElementById('student-gender');
+    const proceedButton = document.getElementById('proceed-button');
+
+    // Parse student data
+    const studentDataRaw = JSON.parse(document.getElementById('student_list_data').value);
+    const students = {};
+    const classData = {};
+
+    studentDataRaw.forEach(student => {
+        students[student.pk] = student.fields;
+    });
+    
+    const classList = JSON.parse('{{ class_list_json|escapejs }}');
+    classList.forEach(cls => {
+        classData[cls.id] = cls.sections;
+    });
+
+    function updateSections() {
+        const selectedClassId = classSelect.value;
+        sectionSelect.innerHTML = '<option value="">----------</option>';
+        if (selectedClassId && classData[selectedClassId]) {
+            classData[selectedClassId].forEach(section => {
+                const option = document.createElement('option');
+                option.value = section.id;
+                option.textContent = section.name.toUpperCase();
+                sectionSelect.appendChild(option);
+            });
+        }
+    }
+
+    function fetchStudentsByClass() {
+        const classId = classSelect.value;
+        const sectionId = sectionSelect.value;
+        if (!classId || !sectionId) return;
+
+        const url = `{% url 'ajax_get_students_by_class' %}?class_pk=${classId}&section_pk=${sectionId}`;
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                searchResultsList.innerHTML = data.html;
+                searchQueryText.textContent = `${classSelect.options[classSelect.selectedIndex].text} ${sectionSelect.options[sectionSelect.selectedIndex].text}`;
+            });
+    }
+
+    function fetchStudentsByRegNo() {
+        const regNo = regNoInput.value.trim();
+        if (regNo.length < 2) return;
+        
+        const url = `{% url 'ajax_get_students_by_reg_no' %}?reg_no=${regNo}`;
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                searchResultsList.innerHTML = data.html;
+                searchQueryText.textContent = regNo;
+            });
+    }
+
+    function searchStudentsByName() {
+        const query = nameInput.value.toLowerCase().trim();
+        if (!query) {
+            searchResultsList.innerHTML = '';
+            return;
+        }
+        
+        let html = '';
+        const queryParts = query.split(' ').filter(p => p);
+
+        for (const [pk, fields] of Object.entries(students)) {
+            const fullName = `${fields.first_name || ''} ${fields.middle_name || ''} ${fields.last_name || ''}`.toLowerCase();
+            if (queryParts.every(part => fullName.includes(part))) {
+                 html += `<li class="list-group-item list-group-item-action select-student" style="cursor: pointer;" data-student-id="${pk}">${fullName.toUpperCase()} (${fields.registration_number})</li>`;
+            }
+        }
+        searchResultsList.innerHTML = html || '<li class="list-group-item list-group-item-danger">No students found.</li>';
+        searchQueryText.textContent = query;
+    }
+
+    function showStudentDetails(studentId) {
+        const student = students[studentId];
+        if (!student) return;
+
+        studentFullname.textContent = `${student.first_name} ${student.middle_name || ''} ${student.last_name}`.toUpperCase();
+        studentRegNo.textContent = `Reg No: ${student.registration_number}`;
+        studentClassEl.textContent = `${student.student_class_name} ${student.class_section_name}`;
+        studentGender.textContent = `Gender: ${student.gender}`;
+
+        if (student.image) {
+            studentImage.src = student.image;
+        } else {
+            studentImage.src = "{% static 'admin_site/images/default_image.jpg' %}";
+        }
+        
+        proceedButton.href = `/admin/inventory/student/${studentId}/collections/`;
+        detailPanel.style.display = 'block';
+    }
+
+    // Event Listeners
+    classSelect.addEventListener('change', updateSections);
+    sectionSelect.addEventListener('change', fetchStudentsByClass);
+    regNoInput.addEventListener('keyup', fetchStudentsByRegNo);
+    nameInput.addEventListener('keyup', searchStudentsByName);
+
+    searchResultsList.addEventListener('click', function(e) {
+        if (e.target && e.target.classList.contains('select-student')) {
+            const studentId = e.target.getAttribute('data-student-id');
+            showStudentDetails(studentId);
+        }
+    });
+
+    updateSections();
+});
+</script>
+{% endblock %}

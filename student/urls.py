@@ -4,7 +4,8 @@ from student.views import StudentSettingDetailView, StudentSettingUpdateView, St
     ParentCreateView, ParentDetailView, ParentUpdateView, ParentDeleteView, StudentListView, StudentCreateView, \
     StudentUpdateView, StudentDeleteView, StudentDetailView, change_student_status, select_class_for_export_view, \
     export_class_list_view, capture_fingerprint, identify_student_by_fingerprint, SelectParentView, ParentSearchView, \
-    ClassStudentSelectView, GetClassSectionsView, delete_fingerprint, test_scanner_connection
+    ClassStudentSelectView, GetClassSectionsView, delete_fingerprint, test_scanner_connection, \
+    parent_student_upload_view, import_batch_detail_view, download_parent_credentials, download_all_parent_credentials
 
 urlpatterns = [
     # Student Settings URLs (Singleton)
@@ -29,6 +30,10 @@ urlpatterns = [
     path('student/select-parent/', SelectParentView.as_view(), name='select_parent'),
     path('api/parent/search/', ParentSearchView.as_view(), name='parent_search_api'),
     path('api/get-class-sections/', GetClassSectionsView.as_view(), name='get_class_sections'),
+    path('import/parent-student/', parent_student_upload_view, name='parent_student_upload'),
+    path('import/batch/<str:batch_id>/', import_batch_detail_view, name='import_batch_detail'),
+    path('import/batch/<str:batch_id>/download-credentials/', download_parent_credentials, name='download_parent_credentials'),
+    path('import/download-all-credentials/', download_all_parent_credentials, name='download_all_parent_credentials'),
 
     # Student Status Action URL
     path('<int:pk>/change-status/<str:status>/', change_student_status, name='change_student_status'),

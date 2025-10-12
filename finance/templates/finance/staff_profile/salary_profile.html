@@ -1,0 +1,121 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class.row>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="card-title">My Salary Profile</h4>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-cash-stack me-2"></i>Salary Structure</h5>
+                <hr>
+                {% if salary_structure %}
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between"><span>Basic Salary:</span> <strong>₦{{ salary_structure.basic_salary|floatformat:2|intcomma }}</strong></li>
+                        <li class="list-group-item d-flex justify-content-between"><span>Allowances:</span> <strong>₦{{ salary_structure.housing_allowance|add:salary_structure.transport_allowance|add:salary_structure.medical_allowance|add:salary_structure.other_allowances|floatformat:2|intcomma }}</strong></li>
+                        <li class="list-group-item d-flex justify-content-between"><span>Gross Salary:</span> <strong>₦{{ salary_structure.gross_salary|floatformat:2|intcomma }}</strong></li>
+                        <li class="list-group-item d-flex justify-content-between"><span>Deductions (Tax/Pension):</span> <span class="text-danger">-₦{{ salary_structure.total_deductions|floatformat:2|intcomma }}</span></li>
+                        <li class="list-group-item d-flex justify-content-between fs-5"><span>Net Monthly Salary:</span> <strong class="text-success">₦{{ salary_structure.net_salary|floatformat:2|intcomma }}</strong></li>
+                    </ul>
+                {% else %}
+                    <div class="alert alert-warning" role="alert">
+                        Your salary structure has not been set up yet. Please contact the administration.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-bank me-2"></i>Bank Account Details</h5>
+                <hr>
+                {% if bank_detail %}
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item"><strong>Bank:</strong> {{ bank_detail.bank_name|title }}</li>
+                        <li class="list-group-item"><strong>Account Name:</strong> {{ bank_detail.account_name|title }}</li>
+                        <li class="list-group-item"><strong>Account Number:</strong> {{ bank_detail.account_number }}</li>
+                    </ul>
+                {% else %}
+                    <div class="alert alert-warning" role="alert">
+                       Your bank details have not been added. Please contact the administration to update your profile.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-receipt-cutoff me-2"></i>Payslip History</h5>
+                
+                <div class="card my-3 bg-light">
+                    <div class="card-body py-2">
+                        <form method="get" class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label small">Filter by Year</label>
+                                <select name="year" class="form-select form-select-sm">
+                                    <option value="">All Years</option>
+                                    {% for y in available_years %}<option value="{{ y }}" {% if y|stringformat:"s" == selected_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small">Filter by Month</label>
+                                <select name="month" class="form-select form-select-sm">
+                                    <option value="">All Months</option>
+                                    {% for num, name in available_months %}<option value="{{ num }}" {% if num|stringformat:"s" == selected_month %}selected{% endif %}>{{ name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-funnel"></i></button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Period</th>
+                                <th class="text-end">Gross Salary</th>
+                                <th class="text-end">Total Deductions</th>
+                                <th class="text-end">Net Salary</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payslip in payslips %}
+                            <tr>
+                                <td>{{ payslip.month_name }} {{ payslip.year }}</td>
+                                <td class="text-end">₦{{ payslip.gross_salary|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-danger">-₦{{ payslip.total_deductions|floatformat:2|intcomma }}</td>
+                                <td class="text-end fw-bold">₦{{ payslip.net_salary|floatformat:2|intcomma }}</td>
+                                <td class="text-center">
+                                    {% if payslip.payment_status == "Paid" %}
+                                        <span class="badge bg-success">{{ payslip.payment_status }}</span>
+                                    {% elif payslip.payment_status == "Partially Paid" %}
+                                        <span class="badge bg-warning text-dark">{{ payslip.payment_status }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ payslip.payment_status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">No payslip records found matching your filters.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

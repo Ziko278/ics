@@ -41,25 +41,36 @@ class ParentModel(models.Model):
     """
     Represents a parent or guardian, with their own contact info and user account.
     """
-
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     parent_id = models.CharField(max_length=100, unique=True, blank=True)
+
+    # NEW: Track Excel PID for import matching
+    excel_pid = models.CharField(max_length=50, blank=True, null=True, db_index=True,
+                                 help_text="PID from Excel import file")
+    # NEW: Track which import batch this parent came from
+    import_batch_id = models.CharField(max_length=100, blank=True, null=True, db_index=True,
+                                       help_text="Unique identifier for import batch")
+
     email = models.EmailField(max_length=100, unique=True, blank=True, null=True)
     mobile = models.CharField(max_length=20, blank=True, null=True)
-
-    # Optional fields from your example
     occupation = models.CharField(max_length=100, null=True, blank=True)
     residential_address = models.CharField(max_length=255, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        # Ensure unique excel_pid within an import batch
+        indexes = [
+            models.Index(fields=['excel_pid', 'import_batch_id']),
+        ]
+
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
     def number_of_wards(self):
-        return self.students.count()
+        return self.wards.count()
 
     def save(self, *args, **kwargs):
         if not self.parent_id:
@@ -98,7 +109,7 @@ class ParentProfileModel(models.Model):
 
 class StudentModel(models.Model):
     """
-    Represents a student, now linked to a parent.
+    Represents a student, linked to a parent.
     """
 
     class Gender(models.TextChoices):
@@ -117,16 +128,25 @@ class StudentModel(models.Model):
     gender = models.CharField(max_length=10, choices=Gender.choices)
     image = models.FileField(blank=True, null=True, upload_to='images/student_images')
 
-    # Crucial link to the parent
-    parent = models.ForeignKey(ParentModel, on_delete=models.PROTECT, related_name='wards')
+    # NEW: Track which import batch this student came from
+    import_batch_id = models.CharField(max_length=100, blank=True, null=True, db_index=True,
+                                       help_text="Unique identifier for import batch")
 
-    student_class = models.ForeignKey(ClassesModel, null=True, on_delete=models.SET_NULL)
-    class_section = models.ForeignKey(ClassSectionModel, null=True, on_delete=models.SET_NULL)
+    parent = models.ForeignKey('ParentModel', on_delete=models.PROTECT, related_name='wards')
+    student_class = models.ForeignKey('admin_site.ClassesModel', null=True, blank=True, on_delete=models.SET_NULL)
+    class_section = models.ForeignKey('admin_site.ClassSectionModel', null=True, blank=True, on_delete=models.SET_NULL)
     status = models.CharField(max_length=15, choices=Status.choices, default=Status.ACTIVE)
 
-    created_by = models.ForeignKey(StaffModel, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey('human_resource.StaffModel', on_delete=models.SET_NULL,
+                                   null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['first_name', 'last_name', 'parent']),
+            models.Index(fields=['import_batch_id']),
+        ]
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
@@ -155,6 +175,40 @@ class StudentModel(models.Model):
 
     def is_fingerprint_enrolled(self):
         return self.fingerprints.all().count() > 0
+
+
+# Add this model to track imports
+class ImportBatchModel(models.Model):
+    """Track import batches for auditing and re-import handling."""
+
+    batch_id = models.CharField(max_length=100, unique=True, db_index=True)
+    parent_file_name = models.CharField(max_length=255)
+    student_file_name = models.CharField(max_length=255)
+
+    parents_created = models.IntegerField(default=0)
+    parents_updated = models.IntegerField(default=0)
+    students_created = models.IntegerField(default=0)
+    students_updated = models.IntegerField(default=0)
+
+    status = models.CharField(max_length=20, choices=[
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ], default='processing')
+
+    error_message = models.TextField(blank=True, null=True)
+
+    imported_by = models.ForeignKey('human_resource.StaffModel', on_delete=models.SET_NULL,
+                                    null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Import Batch'
+        verbose_name_plural = 'Import Batches'
+
+    def __str__(self):
+        return f"Import {self.batch_id} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
 
 
 class StudentWalletModel(models.Model):

@@ -1,0 +1,45 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="card">
+    <div class="card-header">
+        <h4 class="card-title">Staff Loan Debtors</h4>
+        <p class="card-description">List of all staff members with outstanding staff loan balances.</p>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Staff Name</th>
+                        <th>Total Loan</th>
+                        <th>Total Repaid</th>
+                        <th>Balance Due</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for debtor in debtors %}
+                    <tr>
+                        <td>{{ debtor|title }} ({{debtor.staff_id|upper}})</td>
+                        <td>₦{{ debtor.total_loan|intcomma }}</td>
+                        <td>₦{{ debtor.total_repaid|intcomma }}</td>
+                        <td class="fw-bold text-danger">₦{{ debtor.total_due|intcomma }}</td>
+                        <td>
+                            <a href="{% url 'finance_staff_loan_debt_detail' debtor.pk %}" class="btn btn-sm btn-primary">
+                                View Details & Repay
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center">No staff members are currently owing.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

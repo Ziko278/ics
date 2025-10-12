@@ -15,10 +15,13 @@ from finance.views import (
     SalaryStructureListView, StaffBankDetailDeleteView, SalaryStructureCreateView, SalaryStructureDetailView,
     SalaryStructureUpdateView, SalaryStructureDeleteView, SalaryAdvanceListView, SalaryAdvanceCreateView,
     SalaryAdvanceDetailView, SalaryAdvanceActionView, process_payroll_view, payroll_dashboard_view,
-    export_payroll_to_excel, SalaryAdvanceDebtorsListView, StaffDebtDetailView, record_salary_advance_repayment,
+    export_payroll_to_excel,
     DepositPaymentSelectStudentView, deposit_get_class_students, deposit_get_class_students_by_reg_number,
     deposit_payment_list_view, pending_deposit_payment_list_view, deposit_create_view, confirm_payment_view,
     decline_payment_view, deposit_detail_view, InvoiceReceiptView, FeePaymentListView, finance_dashboard, fee_dashboard,
+    SchoolBankDetailListView, SchoolBankDetailUpdateView, SchoolBankDetailCreateView, SchoolBankDetailDeleteView,
+    StaffLoanListView, StaffLoanCreateView, StaffLoanDetailView, StaffLoanActionView, StaffLoanDebtorsListView,
+    StaffLoanDebtDetailView, record_staff_loan_repayment, my_salary_profile_view,
 )
 
 urlpatterns = [
@@ -85,6 +88,7 @@ urlpatterns = [
     # Action URLs for individual payments
     path('finance/student-payments/<int:pk>/revert/', FeePaymentRevertView.as_view(), name='finance_fee_payment_revert'),
     path('finance/student-payments/<int:pk>/receipt/', FeePaymentReceiptView.as_view(), name='finance_fee_payment_receipt'),
+    path('finance/student-payments/<int:pk>/receipt/', FeePaymentReceiptView.as_view(), name='finance_fee_payment_receipt'),
 
 
     path("expense-categories/", ExpenseCategoryListView.as_view(), name="expense_category_index"),
@@ -117,6 +121,11 @@ urlpatterns = [
     path('finance/staff-bank/<int:pk>/delete/', StaffBankDetailDeleteView.as_view(),
          name='finance_staff_bank_detail_delete'),
 
+    path('finance/school-bank/', SchoolBankDetailListView.as_view(), name='finance_school_bank_detail_list'),
+    path('finance/school-bank/create/', SchoolBankDetailCreateView.as_view(), name='finance_school_bank_detail_create'),
+    path('finance/school-bank/<int:pk>/update/', SchoolBankDetailUpdateView.as_view(), name='finance_school_bank_detail_update'),
+    path('finance/school-bank/<int:pk>/delete/', SchoolBankDetailDeleteView.as_view(), name='finance_school_bank_detail_delete'),
+
     # --- Salary Structure URLs (Multi-page Interface) ---
     path('finance/salary-structures/', SalaryStructureListView.as_view(), name='finance_salary_structure_list'),
     path('finance/salary-structures/create/', SalaryStructureCreateView.as_view(),
@@ -134,15 +143,22 @@ urlpatterns = [
     path('finance/salary-advances/<int:pk>/', SalaryAdvanceDetailView.as_view(), name='finance_salary_advance_detail'),
     path('finance/salary-advances/<int:pk>/action/', SalaryAdvanceActionView.as_view(),
          name='finance_salary_advance_action'),
-    path('salary-advance/debtors/', SalaryAdvanceDebtorsListView.as_view(), name='finance_salary_advance_debtors'),
-    path('salary-advance/staff/<int:staff_pk>/', StaffDebtDetailView.as_view(), name='finance_staff_debt_detail'),
-    path('salary-advance/staff/<int:staff_pk>/repay/', record_salary_advance_repayment, name='finance_record_repayment'),
 
+    # --- Staff Loan URLs ---
+    path('finance/staff-loans/', StaffLoanListView.as_view(), name='finance_staff_loan_list'),
+    path('finance/staff-loans/create/', StaffLoanCreateView.as_view(), name='finance_staff_loan_create'),
+    path('finance/staff-loans/<int:pk>/', StaffLoanDetailView.as_view(), name='finance_staff_loan_detail'),
+    path('finance/staff-loans/<int:pk>/action/', StaffLoanActionView.as_view(), name='finance_staff_loan_action'),
+    path('staff-loans/debtors/', StaffLoanDebtorsListView.as_view(), name='finance_staff_loan_debtors'),
+    path('staff-loans/staff/<int:staff_pk>/', StaffLoanDebtDetailView.as_view(), name='finance_staff_loan_debt_detail'),
+    path('staff-loans/staff/<int:staff_pk>/repay/', record_staff_loan_repayment, name='finance_record_loan_repayment'),
 
     # --- Salary Record (Paysheet) URLs ---
     path('finance/payroll/process/', process_payroll_view, name='finance_process_payroll'),
     path('finance/payroll/dashboard/', payroll_dashboard_view, name='finance_payroll_dashboard'),
     path('finance/payroll/export/<int:year>/<int:month>/', export_payroll_to_excel, name='finance_export_payroll'),
+
+    path('my-profile/salary/', my_salary_profile_view, name='staff_salary_profile'),
 
     path('deposit/select-student', DepositPaymentSelectStudentView.as_view(), name='deposit_select_student'),
     path('deposit/get-class-student', deposit_get_class_students, name='deposit_get_class_students'),

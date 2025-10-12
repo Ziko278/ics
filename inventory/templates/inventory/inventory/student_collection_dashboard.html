@@ -1,0 +1,422 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="row">
+    <div class="col-md-12">
+        <!-- Student Info Card -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-2 text-center">
+                        {% if student.image %}
+                        <img src="{{ student.image.url }}" alt="{{ student.first_name }}"
+                             style="width:100px; height:100px; border-radius:50%; object-fit:cover;">
+                        {% else %}
+                        <img src="{% static 'admin_site/images/default_image.jpg' %}" alt="Default"
+                             style="width:100px; height:100px; border-radius:50%; object-fit:cover;">
+                        {% endif %}
+                    </div>
+                    <div class="col-md-8">
+                        <h4>{{ student.first_name }} {{ student.middle_name }} {{ student.last_name }}</h4>
+                        <p class="mb-1"><strong>Reg No:</strong> {{ student.registration_number }}</p>
+                        <p class="mb-1"><strong>Class:</strong> {{ student.student_class.name }} {{ student.class_section.name }}</p>
+                        <p class="mb-1"><strong>Gender:</strong> {{ student.gender|title }}</p>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="{% url 'student_collection_search' %}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Search
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assigned Collections Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-box-seam"></i> Assigned Collections
+                    <span class="badge bg-primary">{{ collections.count }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if collections %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Session/Term</th>
+                                <th>Assigned</th>
+                                <th>Collected</th>
+                                <th>Outstanding</th>
+                                <th>Status</th>
+                                <th>Payment</th>
+                                <th>Collection Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for collection in collections %}
+                            <tr>
+                                <td>
+                                    <strong>{{ collection.assignment.item.name }}</strong><br>
+                                    <small class="text-muted">{{ collection.assignment.item.get_unit_display }}</small>
+                                </td>
+                                <td>
+                                    {{ collection.assignment.session.name }}<br>
+                                    <small>{{ collection.assignment.term.name }}</small>
+                                </td>
+                                <td>{{ collection.quantity_assigned }}</td>
+                                <td>{{ collection.quantity_collected }}</td>
+                                <td>
+                                    {% if collection.outstanding_quantity > 0 %}
+                                        <span class="badge bg-warning">{{ collection.outstanding_quantity }}</span>
+                                    {% else %}
+                                        <span class="badge bg-success">0</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if collection.status == 'pending' %}
+                                        <span class="badge bg-warning">Pending</span>
+                                    {% elif collection.status == 'collected' %}
+                                        <span class="badge bg-success">Collected</span>
+                                    {% elif collection.status == 'partially_collected' %}
+                                        <span class="badge bg-info">Partial</span>
+                                    {% elif collection.status == 'cancelled' %}
+                                        <span class="badge bg-danger">Cancelled</span>
+                                    {% elif collection.status == 'returned' %}
+                                        <span class="badge bg-secondary">Returned</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if collection.payment_required %}
+                                        {% if collection.payment_completed %}
+                                            <span class="badge bg-success">
+                                                Paid: ₦{{ collection.amount_paid }}
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Payment Required</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary">Free</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if collection.collection_date %}
+                                        {{ collection.collection_date|date:"d M Y" }}
+                                    {% else %}
+                                        <span class="text-muted">Not collected</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if collection.outstanding_quantity > 0 %}
+                                        <button class="btn btn-sm btn-primary"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#collectModal{{ collection.pk }}">
+                                            Collect
+                                        </button>
+                                    {% endif %}
+
+                                    {% if collection.payment_required and not collection.payment_completed %}
+                                        <button class="btn btn-sm btn-success"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#paymentModal{{ collection.pk }}">
+                                            Mark Paid
+                                        </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+
+                            <!-- Collection Modal -->
+                            <div class="modal fade" id="collectModal{{ collection.pk }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form method="POST" action="{% url 'process_collection' collection.pk %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="collect">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Collect: {{ collection.assignment.item.name }}</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p><strong>Outstanding Quantity:</strong> {{ collection.outstanding_quantity }}</p>
+                                                <p><strong>Available in Store:</strong> {{ collection.assignment.item.store_quantity }}</p>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label">Quantity to Collect</label>
+                                                    <input type="number"
+                                                           name="quantity_collected"
+                                                           class="form-control"
+                                                           step="0.01"
+                                                           max="{{ collection.outstanding_quantity }}"
+                                                           required>
+                                                </div>
+
+                                                {% if collection.payment_required and not collection.payment_completed %}
+                                                    <div class="alert alert-warning">
+                                                        <i class="bi bi-exclamation-triangle"></i>
+                                                        Payment must be completed before collection.
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary"
+                                                        {% if collection.payment_required and not collection.payment_completed %}disabled{% endif %}>
+                                                    Process Collection
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Payment Modal -->
+                            <div class="modal fade" id="paymentModal{{ collection.pk }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form method="POST" action="{% url 'process_collection' collection.pk %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="mark_paid">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Record Payment</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p><strong>Item:</strong> {{ collection.assignment.item.name }}</p>
+                                                <p><strong>Quantity:</strong> {{ collection.quantity_assigned }}</p>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label">Amount Paid (₦)</label>
+                                                    <input type="number"
+                                                           name="amount_paid"
+                                                           class="form-control"
+                                                           step="0.01"
+                                                           required>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-success">Record Payment</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No assigned collections for this student yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Direct Purchases History Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-cart"></i> Direct Purchases History
+                    <span class="badge bg-success">{{ direct_purchases.count }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if direct_purchases %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Quantity</th>
+                                <th>Unit Price</th>
+                                <th>Total</th>
+                                <th>Paid</th>
+                                <th>Balance</th>
+                                <th>Date</th>
+<!--                                <th>Sold By</th>-->
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for purchase in direct_purchases %}
+                            <tr>
+                                <td>
+                                    <strong>{{ purchase.item.name }}</strong><br>
+                                    <small class="text-muted">{{ purchase.item.get_unit_display }}</small>
+                                </td>
+                                <td>{{ purchase.quantity }}</td>
+                                <td>₦{{ purchase.unit_price }}</td>
+                                <td>₦{{ purchase.total_amount }}</td>
+                                <td>₦{{ purchase.amount_paid }}</td>
+                                <td>
+                                    {% if purchase.balance > 0 %}
+                                        <span class="badge bg-danger">₦{{ purchase.balance }}</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Paid</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ purchase.sale_date|date:"d M Y" }}</td>
+<!--                                <td>-->
+<!--                                    {% if purchase.sold_by %}-->
+<!--                                        {{ purchase.sold_by }}-->
+<!--                                    {% else %}-->
+<!--                                        <span class="text-muted">-</span>-->
+<!--                                    {% endif %}-->
+<!--                                </td>-->
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No direct purchases recorded.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Direct Purchase/Collection Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-plus-circle"></i> New Direct Purchase
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Process direct purchase for items not in assigned collections.</p>
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#directPurchaseModal">
+                    <i class="bi bi-cart-plus"></i> New Direct Purchase
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Direct Purchase Modal -->
+<div class="modal fade" id="directPurchaseModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'create_direct_collection' student.pk %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Direct Purchase/Collection</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Item <span class="text-danger">*</span></label>
+                        <select name="item" class="form-select" id="directItemSelect" required>
+                            <option value="">-- Select Item --</option>
+                            {% for item in available_items %}
+                            <option value="{{ item.pk }}"
+                                    data-price="{{ item.current_selling_price }}"
+                                    data-stock="{{ item.store_quantity }}"
+                                    data-unit="{{ item.get_unit_display }}">
+                                {{ item.name }} ({{ item.get_unit_display }}) - ₦{{ item.current_selling_price }}
+                                [Stock: {{ item.store_quantity }}]
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Quantity <span class="text-danger">*</span></label>
+                                <input type="number"
+                                       name="quantity"
+                                       id="directQuantity"
+                                       class="form-control"
+                                       step="0.01"
+                                       min="0.01"
+                                       required>
+                                <small class="text-muted" id="stockInfo"></small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Amount Paid (₦) <span class="text-danger">*</span></label>
+                                <input type="number"
+                                       name="amount_paid"
+                                       id="directAmount"
+                                       class="form-control"
+                                       step="0.01"
+                                       required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Payment Method</label>
+                        <select name="payment_method" class="form-select">
+                            <option value="Cash">Cash</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="POS">POS</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="alert alert-info" id="totalInfo" style="display:none;">
+                        <strong>Total Amount:</strong> ₦<span id="calculatedTotal">0.00</span><br>
+                        <strong>Balance:</strong> ₦<span id="calculatedBalance">0.00</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Process Purchase</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemSelect = document.getElementById('directItemSelect');
+    const quantityInput = document.getElementById('directQuantity');
+    const amountInput = document.getElementById('directAmount');
+    const stockInfo = document.getElementById('stockInfo');
+    const totalInfo = document.getElementById('totalInfo');
+    const calculatedTotal = document.getElementById('calculatedTotal');
+    const calculatedBalance = document.getElementById('calculatedBalance');
+
+    function updateCalculations() {
+        const selectedOption = itemSelect.options[itemSelect.selectedIndex];
+        if (!selectedOption.value) return;
+
+        const price = parseFloat(selectedOption.dataset.price);
+        const stock = parseFloat(selectedOption.dataset.stock);
+        const quantity = parseFloat(quantityInput.value) || 0;
+        const paid = parseFloat(amountInput.value) || 0;
+
+        stockInfo.textContent = `Available: ${stock} ${selectedOption.dataset.unit}`;
+
+        if (quantity > stock) {
+            stockInfo.classList.add('text-danger');
+            stockInfo.textContent += ' - Insufficient stock!';
+        } else {
+            stockInfo.classList.remove('text-danger');
+        }
+
+        const total = (price * quantity).toFixed(2);
+        const balance = (total - paid).toFixed(2);
+
+        calculatedTotal.textContent = total;
+        calculatedBalance.textContent = balance;
+        totalInfo.style.display = 'block';
+
+        if (!amountInput.value) {
+            amountInput.value = total;
+            calculatedBalance.textContent = '0.00';
+        }
+    }
+
+    itemSelect.addEventListener('change', updateCalculations);
+    quantityInput.addEventListener('input', updateCalculations);
+    amountInput.addEventListener('input', updateCalculations);
+});
+</script>
+{% endblock %}

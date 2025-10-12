@@ -42,8 +42,8 @@ class StaffModel(models.Model):
 
     staff_id = models.CharField(max_length=100, unique=True, blank=True)
     image = models.FileField(upload_to='images/staff_images', blank=True, null=True)
-    mobile = models.CharField(max_length=20, blank=True, default='')
-    email = models.EmailField(max_length=100, blank=True, default='')
+    mobile = models.CharField(max_length=20, blank=True, null=True, default='')
+    email = models.EmailField(max_length=100, blank=True, null=True, default='')
     gender = models.CharField(max_length=10, choices=Gender.choices)
     group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=30, choices=[('active', 'ACTIVE'), ('inactive', 'INACTIVE')], default='active')
@@ -55,37 +55,41 @@ class StaffModel(models.Model):
         return f"{self.first_name} {self.last_name}"
 
     def save(self, *args, **kwargs):
-        # Generate a unique staff ID only on the first save
+        # Extract the skip flag
+        skip_user_sync = kwargs.pop('skip_user_sync', False)
+
+        # Check if this is a new record
+        is_new = self.pk is None
+
+        # Generate staff_id if needed
         if not self.staff_id:
             self.staff_id = self.generate_unique_staff_id()
 
-        # Call the original save method first to ensure an ID is assigned
+        # Save to database
         super().save(*args, **kwargs)
 
-        # Safely update the associated user account after saving
+        # Don't sync users for new records or when explicitly skipped
+        if skip_user_sync or is_new:
+            return
+
+        # Only sync for existing staff updates
         try:
             profile = self.staff_profile
             user = profile.user
 
-            # Sync email and group
             user.email = self.email
             user.first_name = self.first_name
             user.last_name = self.last_name
             user.save()
 
             if self.group:
-                # Clear existing groups and add the new one for simplicity
                 user.groups.clear()
                 self.group.user_set.add(user)
 
         except ObjectDoesNotExist:
-            # This can happen if the staff profile was not yet created.
-            # It will be handled by the logic that creates the StaffProfileModel.
-            logger.info(
-                f"Staff Profile for {self.email} not found during StaffModel save. It will be created separately.")
+            pass
         except Exception as e:
-            logger.error(f"An unexpected error occurred while syncing user profile for {self.email}: {e}",
-                         exc_info=True)
+            logger.error(f"Error syncing user for staff {self}: {e}", exc_info=True)
 
     @transaction.atomic
     def generate_unique_staff_id(self):
@@ -129,4 +133,12 @@ class StaffProfileModel(models.Model):
 
     def __str__(self):
         return self.user.username
+
+    def delete(self, *args, **kwargs):
+        """
+        Override delete to ensure User is deleted when Profile is deleted.
+        """
+        user = self.user
+        super().delete(*args, **kwargs)
+        user.delete()
 

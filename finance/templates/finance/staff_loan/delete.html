@@ -1,0 +1,27 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Salary Advance Request</h4>
+            
+            <p>You are about to permanently delete the salary advance request from:</p>
+            <h5 class="text-center my-3"><em>"{{ advance.staff.staff_profile.user.get_full_name|title }}"</em></h5>
+            <p class="text-center text-muted">Amount: ₦{{ advance.amount|intcomma }} | Date: {{ advance.request_date|date:"d M, Y" }}</p>
+
+            <div class="alert alert-danger">
+                <strong>Warning:</strong> This action is permanent and cannot be undone.
+            </div>
+            
+            <p>Are you sure you want to proceed?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete Request</button>
+                <a class="btn btn-secondary" href="{% url 'finance_salary_advance_detail' advance.pk %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

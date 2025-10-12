@@ -3,6 +3,7 @@ from cafeteria.views import (
     MealListView, MealCreateView, MealUpdateView, MealDeleteView,
     CafeteriaSettingDetailView, CafeteriaSettingCreateView, CafeteriaSettingUpdateView,
     MealCollectionLiveView, MealCollectionHistoryView, StudentSearchForMealAjaxView, RecordMealAjaxView,
+    paid_cafeteria_students_report, export_paid_students_pdf, export_paid_students_excel,
 )
 
 urlpatterns = [
@@ -24,5 +25,9 @@ urlpatterns = [
     path('cafeteria/ajax/search-student/', StudentSearchForMealAjaxView.as_view(),
          name='cafeteria_ajax_search_student'),
     path('cafeteria/ajax/record-meal/', RecordMealAjaxView.as_view(), name='cafeteria_ajax_record_meal'),
+
+    path('reports/paid-students/', paid_cafeteria_students_report, name='cafeteria_paid_students_report'),
+    path('reports/paid-students/pdf/', export_paid_students_pdf, name='cafeteria_export_pdf'),
+    path('reports/paid-students/excel/', export_paid_students_excel, name='cafeteria_export_excel'),
 
 ]

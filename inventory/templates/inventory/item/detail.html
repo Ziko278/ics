@@ -27,7 +27,7 @@
              <a title="Delete Item" href="{% url 'inventory_item_delete' item.pk %}" class="btn btn-danger">
                 <i class="bi bi-trash"></i> Delete
              </a>
-             <a onclick="window.history.back()" title="Go Back" style="float:right" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back to List</a>
+             <a href="{% url 'inventory_item_list' %}" title="Go Back" style="float:right" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back to List</a>
         </div>
     </div>
 </div>
@@ -230,6 +230,8 @@
                                 <option value="expired">Expired</option>
                                 <option value="adjustment">Stock Adjustment</option>
                                 <option value="wastage">Wastage</option>
+                                <option value="cafeteria">Cafeteria</option>
+                                <option value="boarding house store">Boarding House Store</option>
                             </select>
                         </div>
                         <div class="col-md-6">

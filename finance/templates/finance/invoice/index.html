@@ -33,7 +33,7 @@
                         </select>
                     </div>
                     <div class="col-xl-2 col-md-6">
-                        <label class="form-label">Term</label>
+                        <label class="form-label">Quarter</label>
                         <select name="term" class="form-select form-select-sm" onchange="this.form.submit()">
                             {% for term in terms %}
                             <option value="{{ term.pk }}" {% if selected_term.pk == term.pk %}selected{% endif %}>

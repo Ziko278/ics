@@ -1,0 +1,216 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="row">
+    <div class="col-md-10 offset-md-1">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Create New Assignment</h5>
+                <a href="{% url 'assignment_list' %}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Assignments
+                </a>
+            </div>
+            <div class="card-body">
+                {% if messages %}
+                    {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+
+                <form method="POST" id="assignmentForm">
+                    {% csrf_token %}
+                    
+                    <div class="row">
+                        <!-- Item Selection -->
+                        <div class="col-md-6 mb-3">
+                            <label for="item" class="form-label">Select Item <span class="text-danger">*</span></label>
+                            <select name="item" id="item" class="form-select" required>
+                                <option value="">-- Select Item --</option>
+                                {% for item in items %}
+                                <option value="{{ item.pk }}" 
+                                        data-stock="{{ item.store_quantity }}"
+                                        data-unit="{{ item.get_unit_display }}">
+                                    {{ item.name }} ({{ item.get_unit_display }}) - Stock: {{ item.store_quantity }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Quantity per Student -->
+                        <div class="col-md-6 mb-3">
+                            <label for="quantity_per_student" class="form-label">Quantity per Student <span class="text-danger">*</span></label>
+                            <input type="number" 
+                                   name="quantity_per_student" 
+                                   id="quantity_per_student" 
+                                   class="form-control" 
+                                   step="0.01" 
+                                   min="0.01" 
+                                   required>
+                            <small class="text-muted" id="unitDisplay"></small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- Gender Filter -->
+                        <div class="col-md-4 mb-3">
+                            <label for="gender" class="form-label">Gender</label>
+                            <select name="gender" id="gender" class="form-select">
+                                <option value="both" selected>Both</option>
+                                <option value="male">Male Only</option>
+                                <option value="female">Female Only</option>
+                            </select>
+                        </div>
+
+                        <!-- Type Filter -->
+                        <div class="col-md-4 mb-3">
+                            <label for="type" class="form-label">School Type</label>
+                            <select name="type" id="type" class="form-select">
+                                <option value="">All Types</option>
+                                <option value="pri">Primary Only</option>
+                                <option value="sec">Secondary Only</option>
+                                <option value="mix">General</option>
+                            </select>
+                        </div>
+
+                        <!-- Free/Paid -->
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label d-block">Status</label>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="is_free" id="is_free" checked>
+                                <label class="form-check-label" for="is_free">
+                                    Free Item
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="is_mandatory" id="is_mandatory">
+                                <label class="form-check-label" for="is_mandatory">
+                                    Mandatory
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Class Selection -->
+                    <div class="mb-3">
+                        <label class="form-label">Assign to Classes (Leave empty for all classes)</label>
+                        <div class="card">
+                            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                                <div class="row">
+                                    {% for class in classes %}
+                                    <div class="col-md-4 col-sm-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" 
+                                                   type="checkbox" 
+                                                   name="student_classes" 
+                                                   value="{{ class.pk }}" 
+                                                   id="class_{{ class.pk }}">
+                                            <label class="form-check-label" for="class_{{ class.pk }}">
+                                                {{ class.name }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <small class="text-muted">Select specific classes or leave empty to assign to all eligible students</small>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes (Optional)</label>
+                        <textarea name="notes" id="notes" class="form-control" rows="3" placeholder="Add any additional notes or instructions..."></textarea>
+                    </div>
+
+                    <!-- Summary Box -->
+                    <div class="alert alert-info" id="assignmentSummary" style="display: none;">
+                        <h6 class="mb-2">Assignment Summary:</h6>
+                        <ul class="mb-0">
+                            <li><strong>Item:</strong> <span id="summaryItem">-</span></li>
+                            <li><strong>Quantity/Student:</strong> <span id="summaryQty">-</span></li>
+                            <li><strong>Available Stock:</strong> <span id="summaryStock">-</span></li>
+                            <li><strong>Gender:</strong> <span id="summaryGender">-</span></li>
+                            <li><strong>Type:</strong> <span id="summaryType">-</span></li>
+                            <li><strong>Status:</strong> <span id="summaryStatus">-</span></li>
+                        </ul>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{% url 'assignment_list' %}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Create Assignment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemSelect = document.getElementById('item');
+    const quantityInput = document.getElementById('quantity_per_student');
+    const genderSelect = document.getElementById('gender');
+    const typeSelect = document.getElementById('type');
+    const isFreeCheck = document.getElementById('is_free');
+    const isMandatoryCheck = document.getElementById('is_mandatory');
+    const unitDisplay = document.getElementById('unitDisplay');
+    const summaryBox = document.getElementById('assignmentSummary');
+
+    function updateSummary() {
+        const selectedOption = itemSelect.options[itemSelect.selectedIndex];
+        
+        if (!selectedOption.value) {
+            summaryBox.style.display = 'none';
+            return;
+        }
+
+        const itemName = selectedOption.text.split('(')[0].trim();
+        const unit = selectedOption.dataset.unit;
+        const stock = selectedOption.dataset.stock;
+        const quantity = quantityInput.value || '0';
+
+        document.getElementById('summaryItem').textContent = itemName;
+        document.getElementById('summaryQty').textContent = `${quantity} ${unit}`;
+        document.getElementById('summaryStock').textContent = `${stock} ${unit}`;
+        document.getElementById('summaryGender').textContent = genderSelect.options[genderSelect.selectedIndex].text;
+        document.getElementById('summaryType').textContent = typeSelect.options[typeSelect.selectedIndex].text || 'All Types';
+        
+        let status = [];
+        if (isFreeCheck.checked) status.push('Free');
+        else status.push('Paid');
+        if (isMandatoryCheck.checked) status.push('Mandatory');
+        else status.push('Optional');
+        document.getElementById('summaryStatus').textContent = status.join(', ');
+
+        unitDisplay.textContent = `Unit: ${unit}`;
+        summaryBox.style.display = 'block';
+    }
+
+    itemSelect.addEventListener('change', updateSummary);
+    quantityInput.addEventListener('input', updateSummary);
+    genderSelect.addEventListener('change', updateSummary);
+    typeSelect.addEventListener('change', updateSummary);
+    isFreeCheck.addEventListener('change', updateSummary);
+    isMandatoryCheck.addEventListener('change', updateSummary);
+
+    // Form validation
+    document.getElementById('assignmentForm').addEventListener('submit', function(e) {
+        const selectedOption = itemSelect.options[itemSelect.selectedIndex];
+        const stock = parseFloat(selectedOption.dataset.stock);
+        
+        if (stock <= 0) {
+            e.preventDefault();
+            alert('Selected item has no stock in store. Please choose another item or restock first.');
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}

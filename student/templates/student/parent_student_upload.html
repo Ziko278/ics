@@ -1,0 +1,146 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-upload"></i> Import Parents & Students
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Display messages -->
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <!-- Upload Instructions -->
+                    <div class="alert alert-info">
+                        <h5><i class="fas fa-info-circle"></i> Instructions</h5>
+                        <ul class="mb-0">
+                            <li>Upload both parent and student Excel files together</li>
+                            <li>Parent file must contain: PID, Last Name, First Name, Email, Mobile</li>
+                            <li>Student file must contain: PID, First Name, Last Name, Gender, Class, Arm</li>
+                            <li>Files will be processed in the background</li>
+                            <li>Duplicate entries will be updated based on the import batch ID</li>
+                        </ul>
+                    </div>
+
+                    <!-- Upload Form -->
+                    <form method="post" enctype="multipart/form-data" class="mt-4">
+                        {% csrf_token %}
+
+                        <div class="form-group">
+                            <label for="{{ form.parent_file.id_for_label }}">
+                                <strong>{{ form.parent_file.label }}</strong>
+                            </label>
+                            {{ form.parent_file }}
+                            <small class="form-text text-muted">{{ form.parent_file.help_text }}</small>
+                            {% if form.parent_file.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.parent_file.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="{{ form.student_file.id_for_label }}">
+                                <strong>{{ form.student_file.label }}</strong>
+                            </label>
+                            {{ form.student_file }}
+                            <small class="form-text text-muted">{{ form.student_file.help_text }}</small>
+                            {% if form.student_file.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.student_file.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary btn-lg btn-block">
+                                <i class="fas fa-cloud-upload-alt"></i> Upload & Process Files
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Recent Imports -->
+            {% if recent_imports %}
+            <div class="card mt-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history"></i> Recent Imports
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Batch ID</th>
+                                    <th>Date</th>
+                                    <th>Parents</th>
+                                    <th>Students</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for batch in recent_imports %}
+                                <tr>
+                                    <td><code>{{ batch.batch_id }}</code></td>
+                                    <td>{{ batch.created_at|date:"M d, Y H:i" }}</td>
+                                    <td>
+                                        <span class="badge text-success">{{ batch.parents_created }} created</span>
+                                        {% if batch.parents_updated > 0 %}
+                                        <span class="badge text-info">{{ batch.parents_updated }} updated</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge text-success">{{ batch.students_created }} created</span>
+                                        {% if batch.students_updated > 0 %}
+                                        <span class="badge text-info">{{ batch.students_updated }} updated</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if batch.status == 'completed' %}
+                                            <span class="badge text-success">Completed</span>
+                                        {% elif batch.status == 'processing' %}
+                                            <span class="badge text-warning">Processing</span>
+                                        {% else %}
+                                            <span class="badge text-danger">Failed</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'import_batch_detail' batch.batch_id %}"
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

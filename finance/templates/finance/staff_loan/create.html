@@ -1,0 +1,52 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                 <h5 class="card-title">New Loan Request</h5>
+                 <a href="{% url 'finance_staff_loan_list' %}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back to List</a>
+            </div>
+            <p class="card-description">
+                Use this form to request a loan. The request will be sent to the administration for approval.
+            </p>
+
+            <form method="POST" class="row g-3">
+                {% csrf_token %}
+
+
+                <div class="col-md-12">
+                    <label for="{{ form.staff.id_for_label }}" class="form-label">Staff Member <span class="text-danger">*</span></label>
+                    {{ form.staff }}
+                     {% if form.staff.errors %}<div class="invalid-feedback d-block">{{ form.staff.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="col-md-6">
+                    <label for="{{ form.amount.id_for_label }}" class="form-label">Amount Requested (₦) <span class="text-danger">*</span></label>
+                    {{ form.amount }}
+                     {% if form.amount.errors %}<div class="invalid-feedback d-block">{{ form.amount.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="col-md-6">
+                    <label for="{{ form.request_date.id_for_label }}" class="form-label">Date of Request <span class="text-danger">*</span></label>
+                    {{ form.request_date }}
+                     {% if form.request_date.errors %}<div class="invalid-feedback d-block">{{ form.request_date.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="col-12">
+                    <label for="{{ form.reason.id_for_label }}" class="form-label">Reason for Request <span class="text-danger">*</span></label>
+                    {{ form.reason }}
+                     {% if form.reason.errors %}<div class="invalid-feedback d-block">{{ form.reason.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="text-start mt-3">
+                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                    <a href="{% url 'finance_staff_loan_list' %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -6,7 +6,7 @@
     <div class="row">
         <div class="col-lg-12">
             <div class="row">
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="card info-card sales-card">
                         <div class="card-body">
                             <h5 class="card-title">{{ academic_info.session }}
@@ -24,7 +24,7 @@
                     </div>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="card info-card revenue-card">
                         <div class="card-body">
                             <h5 class="card-title">Students <span>| Active</span></h5>
@@ -41,7 +41,7 @@
                     </div>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="card info-card sales-card">
                         <div class="card-body">
                             <h5 class="card-title">Staff <span>| Total</span></h5>
@@ -58,41 +58,7 @@
                     </div>
                 </div>
 
-                <div class="col-md-4">
-                    <div class="card info-card customers-card">
-                        <div class="card-body">
-                            <h5 class="card-title">Sales <span>| Today</span></h5>
-                            <div class="d-flex align-items-center">
-                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-success text-white">
-                                    <i class="bi bi-cart-check"></i>
-                                </div>
-                                <div class="ps-3">
-                                    <h6>₦{{ total_sales_today|floatformat:2|intcomma }}</h6>
-                                    <span class="text small pt-1 fw-bold">Today's Revenue</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="card info-card sales-card">
-                        <div class="card-body">
-                            <h5 class="card-title">Profit <span>| Today</span></h5>
-                            <div class="d-flex align-items-center">
-                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-info text-white">
-                                    <i class="bi bi-graph-up-arrow"></i>
-                                </div>
-                                <div class="ps-3">
-                                    <h6>₦{{ total_profit_today|floatformat:2|intcomma }}</h6>
-                                    <span class="text small pt-1 fw-bold">Net Profit</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="card info-card revenue-card">
                         <div class="card-body">
                             <h5 class="card-title">Stock Alert <span>| Low Stock</span></h5>

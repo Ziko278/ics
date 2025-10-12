@@ -1,8 +1,11 @@
+import hashlib
 import logging
 import io
 import json
 import base64
-
+from datetime import datetime
+from .tasks import process_parent_student_upload
+from django.core.files.storage import FileSystemStorage
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -19,10 +22,12 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView
 )
-
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 from admin_site.models import ClassesModel, ClassSectionModel
-from .models import StudentModel, ParentModel, StudentSettingModel, FingerprintModel
-from .forms import StudentForm, ParentForm, StudentSettingForm
+from .models import StudentModel, ParentModel, StudentSettingModel, FingerprintModel, ImportBatchModel
+from .forms import StudentForm, ParentForm, StudentSettingForm, ParentStudentUploadForm
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +47,7 @@ class StudentSettingDetailView(LoginRequiredMixin, PermissionRequiredMixin, Temp
 
 class StudentSettingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = StudentSettingModel
-    permission_required = 'student.add_studentsettingmodel'
+    permission_required = 'student.change_studentsettingmodel'
     form_class = StudentSettingForm
     template_name = 'student/setting/create.html'
 
@@ -73,7 +78,7 @@ class StudentSettingUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Upda
 # -------------------------
 class ParentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = ParentModel
-    permission_required = 'student.view_parentmodel'
+    permission_required = 'student.view_studentmodel'
     template_name = 'student/parent/index.html'
     context_object_name = "parent_list"
     queryset = ParentModel.objects.all().order_by('first_name')
@@ -81,7 +86,7 @@ class ParentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class ParentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = ParentModel
-    permission_required = 'student.add_parentmodel'
+    permission_required = 'student.add_studentmodel'
     form_class = ParentForm
     template_name = 'student/parent/create.html'
 
@@ -96,14 +101,14 @@ class ParentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
 
 class ParentDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = ParentModel
-    permission_required = 'student.view_parentmodel'
+    permission_required = 'student.view_studentmodel'
     template_name = 'student/parent/detail.html'
     context_object_name = "parent"
 
 
 class ParentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = ParentModel
-    permission_required = 'student.change_parentmodel'
+    permission_required = 'student.add_studentmodel'
     form_class = ParentForm
     template_name = 'student/parent/edit.html'
     context_object_name = "parent"
@@ -115,7 +120,7 @@ class ParentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
 
 class ParentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = ParentModel
-    permission_required = 'student.delete_parentmodel'
+    permission_required = 'student.delete_studentmodel'
     template_name = 'student/parent/delete.html'
     context_object_name = "parent"
 
@@ -131,7 +136,7 @@ class ClassStudentSelectView(LoginRequiredMixin, PermissionRequiredMixin, Templa
     """
     Displays a form for the user to select a class and section to view.
     """
-    permission_required = 'student.view_studentmodel'
+    permission_required = 'student.add_studentmodel'
     template_name = 'student/student/select_class.html'
 
     def get_context_data(self, **kwargs):
@@ -339,7 +344,7 @@ class ParentSearchView(LoginRequiredMixin, PermissionRequiredMixin, View):
     An API endpoint that returns a JSON list of parents matching a search query.
     This is called by JavaScript from the SelectParentView template.
     """
-    permission_required = 'student.view_parentmodel'
+    permission_required = 'student.add_studentmodel'
 
     def get(self, request, *args, **kwargs):
         query = request.GET.get('q', '').strip()
@@ -406,7 +411,6 @@ def get_client_ip(request):
     else:
         ip = request.META.get('REMOTE_ADDR')
     return ip
-
 
 
 @csrf_exempt
@@ -682,3 +686,443 @@ def test_scanner_connection(request):
         'message': 'Scanner connection test endpoint ready',
         'instructions': 'Use JavaScript SDK to test actual scanner connection'
     })
+
+
+def generate_import_batch_id(parent_filename, student_filename):
+    """Generate a unique batch ID based on filenames and timestamp."""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # Create a hash of both filenames for uniqueness
+    hash_input = f"{parent_filename}_{student_filename}_{timestamp}"
+    file_hash = hashlib.md5(hash_input.encode()).hexdigest()[:8]
+
+    return f"IMP_{timestamp}_{file_hash}"
+
+
+@login_required
+def parent_student_upload_view(request):
+    """
+    Handles the file upload form for both parent and student files.
+    Initiates background processing task.
+    """
+    # Import the form here instead of at the top
+
+    if request.method == 'POST':
+        form = ParentStudentUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            parent_file = request.FILES['parent_file']
+            student_file = request.FILES['student_file']
+
+            # Save files to disk
+            fs = FileSystemStorage()
+
+            parent_filename = fs.save(f"imports/parents/{parent_file.name}", parent_file)
+            parent_file_path = fs.path(parent_filename)
+
+            student_filename = fs.save(f"imports/students/{student_file.name}", student_file)
+            student_file_path = fs.path(student_filename)
+
+            # Generate unique batch ID
+            batch_id = generate_import_batch_id(parent_file.name, student_file.name)
+
+            # Create import batch record
+            from .models import ImportBatchModel
+            import_batch = ImportBatchModel.objects.create(
+                batch_id=batch_id,
+                parent_file_name=parent_file.name,
+                student_file_name=student_file.name,
+                imported_by=request.user.staff_profile.staff if hasattr(request.user, 'staff_profile') else None,
+                status='processing'
+            )
+
+            # Dispatch background task
+            from .tasks import process_parent_student_upload
+            process_parent_student_upload.delay(
+                parent_file_path,
+                student_file_path,
+                batch_id
+            )
+
+            messages.success(
+                request,
+                f'Files uploaded successfully! Import batch ID: {batch_id}. '
+                'The data is being processed in the background. '
+                'You will be notified when processing is complete.'
+            )
+            return redirect('parent_student_upload')
+    else:
+        # Import here too for GET requests
+        form = ParentStudentUploadForm()
+
+    # Get recent imports for display
+    from .models import ImportBatchModel
+    recent_imports = ImportBatchModel.objects.all()[:10]
+
+    context = {
+        'form': form,
+        'recent_imports': recent_imports,
+    }
+    return render(request, 'student/parent_student_upload.html', context)
+
+
+@login_required
+def import_batch_detail_view(request, batch_id):
+    """View details of a specific import batch."""
+
+    batch = get_object_or_404(ImportBatchModel, batch_id=batch_id)
+
+    # Get parents and students from this batch
+    from .models import ParentModel, StudentModel
+
+    parents = ParentModel.objects.filter(import_batch_id=batch_id).select_related('parent_profile')
+    students = StudentModel.objects.filter(import_batch_id=batch_id).select_related(
+        'parent', 'student_class', 'class_section'
+    )
+
+    context = {
+        'batch': batch,
+        'parents': parents,
+        'students': students,
+    }
+    return render(request, 'student/import_batch_detail.html', context)
+
+
+@login_required
+def download_parent_credentials(request, batch_id):
+    """
+    Download parent login credentials as Excel file for a specific import batch.
+    """
+    batch = get_object_or_404(ImportBatchModel, batch_id=batch_id)
+
+    # Get all parents from this batch with their profiles
+    parents = ParentModel.objects.filter(
+        import_batch_id=batch_id
+    ).select_related('parent_profile__user').order_by('parent_id')
+
+    # Create workbook and worksheet
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = 'Parent Login Credentials'
+
+    # Define styles
+    header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF', size=12)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    center_alignment = Alignment(horizontal='center', vertical='center')
+
+    # Add title
+    sheet.merge_cells('A1:H1')
+    title_cell = sheet['A1']
+    title_cell.value = f'PARENT PORTAL LOGIN CREDENTIALS'
+    title_cell.font = Font(bold=True, size=14, color='366092')
+    title_cell.alignment = center_alignment
+
+    # Add batch info
+    sheet.merge_cells('A2:H2')
+    info_cell = sheet['A2']
+    info_cell.value = f'Import Batch: {batch_id} | Generated: {datetime.now().strftime("%B %d, %Y at %I:%M %p")}'
+    info_cell.font = Font(size=10, italic=True)
+    info_cell.alignment = center_alignment
+
+    # Add empty row
+    sheet.append([])
+
+    # Define headers
+    headers = [
+        'S/N',
+        'Parent ID',
+        'Full Name',
+        'Username',
+        'Password',
+        'Email',
+        'Mobile',
+        'Number of Wards'
+    ]
+
+    # Write headers (row 4)
+    for col_num, header in enumerate(headers, 1):
+        cell = sheet.cell(row=4, column=col_num)
+        cell.value = header
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+        cell.alignment = center_alignment
+
+    # Write parent data
+    row_num = 5
+    for index, parent in enumerate(parents, 1):
+        # Get credentials
+        username = ''
+        password = ''
+
+        if hasattr(parent, 'parent_profile') and parent.parent_profile:
+            username = parent.parent_profile.user.username
+            password = parent.parent_profile.default_password
+
+        # Prepare row data
+        row_data = [
+            index,  # S/N
+            parent.parent_id,
+            f"{parent.first_name} {parent.last_name}",
+            username if username else 'NO LOGIN',
+            password if password else 'N/A',
+            parent.email if parent.email else '—',
+            parent.mobile if parent.mobile else '—',
+            parent.number_of_wards()
+        ]
+
+        # Write row
+        for col_num, value in enumerate(row_data, 1):
+            cell = sheet.cell(row=row_num, column=col_num)
+            cell.value = value
+            cell.border = border
+
+            # Center align S/N and Number of Wards
+            if col_num in [1, 8]:
+                cell.alignment = center_alignment
+
+            # Highlight rows without login
+            if username == '':
+                cell.fill = PatternFill(start_color='FFF4E6', end_color='FFF4E6', fill_type='solid')
+
+        row_num += 1
+
+    # Add summary section
+    row_num += 1
+    sheet.merge_cells(f'A{row_num}:H{row_num}')
+    summary_cell = sheet.cell(row=row_num, column=1)
+    summary_cell.value = 'SUMMARY'
+    summary_cell.font = Font(bold=True, size=11, color='366092')
+    summary_cell.alignment = center_alignment
+
+    row_num += 1
+    summary_data = [
+        ['Total Parents:', parents.count()],
+        ['With Login Access:', parents.filter(parent_profile__isnull=False).count()],
+        ['Without Login:', parents.filter(parent_profile__isnull=True).count()],
+    ]
+
+    for label, value in summary_data:
+        sheet.cell(row=row_num, column=1).value = label
+        sheet.cell(row=row_num, column=1).font = Font(bold=True)
+        sheet.cell(row=row_num, column=2).value = value
+        row_num += 1
+
+    # Add instructions section
+    row_num += 2
+    sheet.merge_cells(f'A{row_num}:H{row_num}')
+    instructions_cell = sheet.cell(row=row_num, column=1)
+    instructions_cell.value = 'INSTRUCTIONS FOR PARENTS'
+    instructions_cell.font = Font(bold=True, size=11, color='366092')
+    instructions_cell.alignment = center_alignment
+
+    row_num += 1
+    instructions = [
+        '1. Visit the parent portal at: [Your School Portal URL]',
+        '2. Enter your Username and Password as shown above',
+        '3. For security, please change your password after first login',
+        '4. If you experience any issues, contact the school administration',
+        '5. Keep your login credentials confidential'
+    ]
+
+    for instruction in instructions:
+        sheet.cell(row=row_num, column=1).value = instruction
+        sheet.merge_cells(f'A{row_num}:H{row_num}')
+        row_num += 1
+
+    # Adjust column widths
+    column_widths = {
+        'A': 8,  # S/N
+        'B': 15,  # Parent ID
+        'C': 25,  # Full Name
+        'D': 15,  # Username
+        'E': 15,  # Password
+        'F': 30,  # Email
+        'G': 20,  # Mobile
+        'H': 18,  # Number of Wards
+    }
+
+    for col_letter, width in column_widths.items():
+        sheet.column_dimensions[col_letter].width = width
+
+    # Freeze header rows
+    sheet.freeze_panes = 'A5'
+
+    # Prepare response
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+    filename = f'Parent_Credentials_{batch_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # Save workbook to response
+    workbook.save(response)
+
+    return response
+
+
+@login_required
+def download_all_parent_credentials(request):
+    """
+    Download ALL parent login credentials as Excel file (all batches).
+    """
+    # Get all parents with profiles, ordered by parent_id
+    parents = ParentModel.objects.select_related(
+        'parent_profile__user'
+    ).order_by('parent_id')
+
+    # Create workbook and worksheet
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = 'All Parent Credentials'
+
+    # Define styles
+    header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF', size=12)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    center_alignment = Alignment(horizontal='center', vertical='center')
+
+    # Add title
+    sheet.merge_cells('A1:I1')
+    title_cell = sheet['A1']
+    title_cell.value = f'ALL PARENT PORTAL LOGIN CREDENTIALS'
+    title_cell.font = Font(bold=True, size=14, color='366092')
+    title_cell.alignment = center_alignment
+
+    # Add generation info
+    sheet.merge_cells('A2:I2')
+    info_cell = sheet['A2']
+    info_cell.value = f'Generated: {datetime.now().strftime("%B %d, %Y at %I:%M %p")}'
+    info_cell.font = Font(size=10, italic=True)
+    info_cell.alignment = center_alignment
+
+    # Add empty row
+    sheet.append([])
+
+    # Define headers
+    headers = [
+        'S/N',
+        'Parent ID',
+        'Full Name',
+        'Username',
+        'Password',
+        'Email',
+        'Mobile',
+        'Number of Wards',
+        'Import Batch'
+    ]
+
+    # Write headers (row 4)
+    for col_num, header in enumerate(headers, 1):
+        cell = sheet.cell(row=4, column=col_num)
+        cell.value = header
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+        cell.alignment = center_alignment
+
+    # Write parent data
+    row_num = 5
+    for index, parent in enumerate(parents, 1):
+        # Get credentials
+        username = ''
+        password = ''
+
+        if hasattr(parent, 'parent_profile') and parent.parent_profile:
+            username = parent.parent_profile.user.username
+            password = parent.parent_profile.default_password
+
+        # Prepare row data
+        row_data = [
+            index,  # S/N
+            parent.parent_id,
+            f"{parent.first_name} {parent.last_name}",
+            username if username else 'NO LOGIN',
+            password if password else 'N/A',
+            parent.email if parent.email else '—',
+            parent.mobile if parent.mobile else '—',
+            parent.number_of_wards(),
+            parent.import_batch_id if parent.import_batch_id else 'Manual Entry'
+        ]
+
+        # Write row
+        for col_num, value in enumerate(row_data, 1):
+            cell = sheet.cell(row=row_num, column=col_num)
+            cell.value = value
+            cell.border = border
+
+            # Center align S/N and Number of Wards
+            if col_num in [1, 8]:
+                cell.alignment = center_alignment
+
+            # Highlight rows without login
+            if username == '':
+                cell.fill = PatternFill(start_color='FFF4E6', end_color='FFF4E6', fill_type='solid')
+
+        row_num += 1
+
+    # Add summary
+    row_num += 1
+    sheet.merge_cells(f'A{row_num}:I{row_num}')
+    summary_cell = sheet.cell(row=row_num, column=1)
+    summary_cell.value = 'SUMMARY'
+    summary_cell.font = Font(bold=True, size=11, color='366092')
+    summary_cell.alignment = center_alignment
+
+    row_num += 1
+    summary_data = [
+        ['Total Parents:', parents.count()],
+        ['With Login Access:', parents.filter(parent_profile__isnull=False).count()],
+        ['Without Login:', parents.filter(parent_profile__isnull=True).count()],
+    ]
+
+    for label, value in summary_data:
+        sheet.cell(row=row_num, column=1).value = label
+        sheet.cell(row=row_num, column=1).font = Font(bold=True)
+        sheet.cell(row=row_num, column=2).value = value
+        row_num += 1
+
+    # Adjust column widths
+    column_widths = {
+        'A': 8,  # S/N
+        'B': 15,  # Parent ID
+        'C': 25,  # Full Name
+        'D': 15,  # Username
+        'E': 15,  # Password
+        'F': 30,  # Email
+        'G': 20,  # Mobile
+        'H': 18,  # Number of Wards
+        'I': 25,  # Import Batch
+    }
+
+    for col_letter, width in column_widths.items():
+        sheet.column_dimensions[col_letter].width = width
+
+    # Freeze header rows
+    sheet.freeze_panes = 'A5'
+
+    # Prepare response
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+    filename = f'All_Parent_Credentials_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # Save workbook to response
+    workbook.save(response)
+
+    return response
+
+

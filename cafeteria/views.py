@@ -1,20 +1,24 @@
+import csv
 from datetime import date
 
+from django.contrib.auth.decorators import login_required
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
+from django.template.loader import get_template
 from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView
-from django.shortcuts import redirect, get_object_or_404
+from django.shortcuts import redirect, get_object_or_404, render
 
-from admin_site.models import SessionModel, TermModel, SchoolSettingModel
+from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel
 from cafeteria.models import MealModel, CafeteriaSettingModel, MealCollectionModel
 from cafeteria.forms import MealForm, CafeteriaSettingForm
-from finance.models import InvoiceModel
+from finance.models import InvoiceModel, InvoiceItemModel
 from human_resource.models import StaffModel, StaffProfileModel
 from student.models import StudentModel
+from xhtml2pdf import pisa
 
 
 # ===================================================================
@@ -337,4 +341,130 @@ class MealCollectionHistoryView(LoginRequiredMixin, PermissionRequiredMixin, Lis
             context['selected_term'] = get_object_or_404(TermModel, pk=selected_term_id)
 
         return context
+
+
+# ==============================================================================
+# HELPER FUNCTION (to avoid repeating code)
+# ==============================================================================
+def get_paid_cafeteria_students(class_id=None, section_id=None):
+    """
+    A reusable function to query for students who have paid the cafeteria fee.
+    Returns a queryset of StudentModel.
+    """
+    # 1. Get current settings and the designated cafeteria fee
+    school_settings = SchoolSettingModel.objects.first()
+    cafeteria_settings = CafeteriaSettingModel.objects.first()
+
+    if not (school_settings and cafeteria_settings and cafeteria_settings.cafeteria_fee):
+        # Return an empty queryset if settings are incomplete
+        return StudentModel.objects.none()
+
+    cafeteria_fee_id = cafeteria_settings.cafeteria_fee.id
+    current_session = school_settings.session
+    current_term = school_settings.term
+
+    # 2. Find all invoice items for the cafeteria fee in the current period that have been paid.
+    # We consider it "paid" if any amount has been paid towards that specific line item.
+    paid_invoice_items = InvoiceItemModel.objects.filter(
+        invoice__session=current_session,
+        invoice__term=current_term,
+        fee_master__fee_id=cafeteria_fee_id,
+        amount_paid__gt=0
+    ).select_related('invoice__student')
+
+    # 3. Get a unique list of student IDs from those paid items
+    student_ids = paid_invoice_items.values_list('invoice__student_id', flat=True).distinct()
+
+    # 4. Fetch the final list of students
+    students = StudentModel.objects.filter(
+        id__in=student_ids
+    ).select_related('student_class', 'class_section').order_by('student_class__name', 'last_name', 'first_name')
+
+    # 5. Apply class and section filters if provided
+    if class_id:
+        students = students.filter(student_class_id=class_id)
+    if section_id:
+        students = students.filter(class_section_id=section_id)
+
+    return students
+
+
+# ==============================================================================
+# MAIN VIEW
+# ==============================================================================
+@login_required
+def paid_cafeteria_students_report(request):
+    """
+    Displays a filterable list of students who have paid the cafeteria fee.
+    """
+    class_id = request.GET.get('class')
+    section_id = request.GET.get('section')
+
+    students = get_paid_cafeteria_students(class_id, section_id)
+
+    # Check if settings are configured before showing the page
+    cafeteria_settings = CafeteriaSettingModel.objects.first()
+    if not cafeteria_settings or not cafeteria_settings.cafeteria_fee:
+        messages.warning(request, "Cafeteria settings are incomplete. Please assign a 'Cafeteria Fee' in the settings.")
+
+    context = {
+        'students': students,
+        'class_list': ClassesModel.objects.all(),
+        'selected_class_id': class_id,
+        'selected_section_id': section_id,
+    }
+    return render(request, 'cafeteria/report/paid_students_report.html', context)
+
+
+# ==============================================================================
+# EXPORT VIEWS
+# ==============================================================================
+@login_required
+def export_paid_students_pdf(request):
+    """Exports the filtered list of paid students to a PDF file."""
+    class_id = request.GET.get('class')
+    section_id = request.GET.get('section')
+
+    students = get_paid_cafeteria_students(class_id, section_id)
+
+    template_path = 'cafeteria/report/pdf_template.html'
+    context = {'students': students}
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="cafeteria_paid_students.pdf"'
+
+    template = get_template(template_path)
+    html = template.render(context)
+
+    pisa_status = pisa.CreatePDF(html, dest=response)
+    if pisa_status.err:
+        return HttpResponse('We had some errors <pre>' + html + '</pre>')
+    return response
+
+
+@login_required
+def export_paid_students_excel(request):
+    """Exports the filtered list of paid students to an Excel (CSV) file."""
+    class_id = request.GET.get('class')
+    section_id = request.GET.get('section')
+
+    students = get_paid_cafeteria_students(class_id, section_id)
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="cafeteria_paid_students.csv"'
+
+    writer = csv.writer(response)
+    # Write header row
+    writer.writerow(['Student Name', 'Student ID', 'Gender', 'Class'])
+
+    # Write data rows
+    for student in students:
+        writer.writerow([
+            f"{student.first_name} {student.last_name}",
+            student.registration_number,
+            student.get_gender_display(),
+            student.student_class.name if student.student_class else 'N/A'
+        ])
+
+    return response
 

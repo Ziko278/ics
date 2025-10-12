@@ -6,13 +6,14 @@ from django import forms
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
+from django.db.models import Sum
 from django.forms import inlineformset_factory
 
 from admin_site.models import TermModel, ClassesModel, SessionModel, SchoolSettingModel, ClassSectionModel
 from finance.models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePaymentModel, FeeModel, \
     FeeGroupModel, FeeMasterModel, InvoiceGenerationJob, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryStructure, SalaryAdvance, \
-    SalaryRecord, SalaryAdvanceRepayment, StudentFundingModel
+    SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan
 from human_resource.models import StaffModel
 from inventory.models import PurchaseOrderModel
 
@@ -20,6 +21,7 @@ from inventory.models import PurchaseOrderModel
 # Helpers
 MAX_AMOUNT = Decimal('999999999.99')
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB - adjust as needed
+
 
 def validate_file_size(f):
     if not f:
@@ -245,9 +247,10 @@ class FeePaymentForm(forms.ModelForm):
 
     class Meta:
         model = FeePaymentModel
-        fields = ['amount', 'payment_mode', 'date', 'reference', 'notes']
+        fields = ['amount', 'payment_mode', 'date', 'reference', 'notes', 'bank_account']
         widgets = {
             'amount': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+            'bank_account': forms.Select(attrs={'class': 'form-select form-select-sm'}),
             'payment_mode': forms.Select(attrs={'class': 'form-select form-select-sm'}),
             'date': forms.DateInput(attrs={'class': 'form-control form-control-sm', 'type': 'date'}),
             'reference': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
@@ -521,6 +524,32 @@ class StaffBankDetailForm(forms.ModelForm):
 
 
 # ===================================================================
+# School Bank Detail Form
+# ===================================================================
+class SchoolBankDetailForm(forms.ModelForm):
+    """Form for creating and updating staff bank details."""
+
+    class Meta:
+        model = SchoolBankDetail
+        fields = ['bank_name', 'account_number', 'account_name', 'is_active']
+        widgets = {
+            'bank_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'account_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'account_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def clean_account_number(self):
+        account_number = self.cleaned_data.get('account_number')
+        if not account_number:
+            raise ValidationError("Account number is required.")
+        account_number = re.sub(r'[^\d]', '', account_number)
+        if not (10 <= len(account_number) <= 20):
+            raise ValidationError("Account number must be between 10 and 20 digits.")
+        return account_number
+
+
+# ===================================================================
 # Salary Structure Form
 # ===================================================================
 class SalaryStructureForm(forms.ModelForm):
@@ -559,8 +588,10 @@ class SalaryStructureForm(forms.ModelForm):
 # ===================================================================
 # Salary Advance Form (New)
 # ===================================================================
+# finance/forms.py
+
 class SalaryAdvanceForm(forms.ModelForm):
-    """Form for staff to request a salary advance."""
+    """Form for staff to request a salary advance with validation."""
 
     class Meta:
         model = SalaryAdvance
@@ -574,26 +605,105 @@ class SalaryAdvanceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['staff'].queryset = StaffModel.objects.filter()
+        # It's good practice to prefetch related user data for the dropdown
+        self.fields['staff'].queryset = StaffModel.objects.select_related(
+            'staff_profile__user'
+        ).order_by('staff_profile__user__first_name', 'staff_profile__user__last_name')
+
+    def clean(self):
+        """
+        Adds validation for salary structure existence and monthly advance limits.
+        """
+        cleaned_data = super().clean()
+        staff = cleaned_data.get('staff')
+        amount = cleaned_data.get('amount')
+        request_date = cleaned_data.get('request_date')
+
+        # First, ensure the required fields for validation are present.
+        if not all([staff, amount, request_date]):
+            # If basic field validation (e.g., required=True) failed, stop here.
+            return cleaned_data
+
+        # Basic check that was in your clean_amount()
+        if amount <= 0:
+            self.add_error('amount', "Advance amount must be a positive number.")
+            # No need to proceed if the amount is invalid
+            return cleaned_data
+
+        # === Main Validation Logic ===
+
+        # 1. Staff must have an active salary structure.
+        try:
+            structure = staff.salary_structure
+            if not structure.is_active:
+                raise ValidationError(
+                    "This staff member does not have an active salary structure and cannot request an advance.")
+        except StaffModel.salary_structure.RelatedObjectDoesNotExist:
+            raise ValidationError("This staff member's salary profile is not set up. Cannot request an advance.")
+
+        # 2. Requested amount cannot exceed the monthly limit.
+        net_salary = structure.net_salary
+
+        # Sum all non-rejected/completed advances for the same month.
+        advances_this_month = SalaryAdvance.objects.filter(
+            staff=staff,
+            request_date__year=request_date.year,
+            request_date__month=request_date.month,
+            status__in=[SalaryAdvance.Status.PENDING, SalaryAdvance.Status.APPROVED, SalaryAdvance.Status.DISBURSED]
+        )
+
+        # If editing an existing advance, exclude it from the calculation.
+        if self.instance and self.instance.pk:
+            advances_this_month = advances_this_month.exclude(pk=self.instance.pk)
+
+        total_already_taken = advances_this_month.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        max_allowed = net_salary - total_already_taken
+
+        if amount > max_allowed:
+            # This raises a non-field error that will appear at the top of the form.
+            raise ValidationError(
+                f"Amount exceeds the limit for {request_date.strftime('%B')}. "
+                f"Net Salary: ₦{net_salary:,.2f}, "
+                f"Already Taken: ₦{total_already_taken:,.2f}. "
+                f"You can request up to ₦{max_allowed:,.2f}."
+            )
+
+        return cleaned_data
+
+
+# finance/forms.py
+
+class StaffLoanForm(forms.ModelForm):
+    """Form for staff to request a loan."""
+    class Meta:
+        model = StaffLoan
+        fields = ['staff', 'amount', 'reason', 'repayment_plan', 'request_date']
+        widgets = {
+            'staff': forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'repayment_plan': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'request_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['staff'].queryset = StaffModel.objects.select_related(
+            'staff_profile__user'
+        ).order_by('staff_profile__user__first_name')
 
     def clean_amount(self):
         amount = self.cleaned_data.get('amount')
         if not amount or amount <= 0:
-            raise ValidationError("Advance amount must be a positive number.")
-
-        # Optional: Add logic to prevent advances over a certain limit
-        # staff = self.cleaned_data.get('staff')
-        # if staff and staff.salary_structure:
-        #     if amount > staff.salary_structure.net_salary:
-        #         raise ValidationError("Advance cannot exceed the staff member's net salary.")
-
+            raise ValidationError("Loan amount must be a positive number.")
         return amount
 
 
-class SalaryAdvanceRepaymentForm(forms.ModelForm):
-    """Form to record a repayment for a salary advance."""
+class StaffLoanRepaymentForm(forms.ModelForm):
+    """Form to record a repayment for a staff loan."""
     class Meta:
-        model = SalaryAdvanceRepayment
+        model = StaffLoanRepayment
         fields = ['amount_paid', 'payment_date']
         widgets = {
             'amount_paid': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Enter amount paid'}),
@@ -611,13 +721,24 @@ class PaysheetRowForm(forms.ModelForm):
 
     class Meta:
         model = SalaryRecord
-        fields = ['bonus', 'other_deductions', 'notes', 'amount_paid']
+        fields = ['bonus', 'other_deductions', 'salary_advance_deduction', 'notes', 'amount_paid']
         widgets = {
+            'salary_advance_deduction': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
             'bonus': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
             'other_deductions': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
             'notes': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
             'amount_paid': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # THIS IS THE CRITICAL LOGIC THAT SETS THE DEFAULT 'Amount Paid'
+        # It checks if the database value is 0, and if so,
+        # it pre-fills the form field with the net_salary.
+        if self.instance and self.instance.pk:
+            if self.instance.amount_paid == Decimal('0.00'):
+                self.initial['amount_paid'] = self.instance.net_salary
 
 
 class StudentFundingForm(forms.ModelForm):

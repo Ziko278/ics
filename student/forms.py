@@ -162,3 +162,43 @@ class StudentForm(forms.ModelForm):
             if image.content_type not in allowed_types:
                 raise ValidationError("Please upload a valid image file (JPEG, PNG).")
         return image
+
+
+class ParentStudentUploadForm(forms.Form):
+    """Form for uploading parent and student Excel files together."""
+
+    parent_file = forms.FileField(
+        label='Parent Excel File',
+        help_text='Upload the Excel file containing parent information',
+        widget=forms.FileInput(attrs={
+            'accept': '.xlsx,.xls',
+            'class': 'form-control'
+        })
+    )
+
+    student_file = forms.FileField(
+        label='Student Excel File',
+        help_text='Upload the Excel file containing student information',
+        widget=forms.FileInput(attrs={
+            'accept': '.xlsx,.xls',
+            'class': 'form-control'
+        })
+    )
+
+    def clean_parent_file(self):
+        file = self.cleaned_data.get('parent_file')
+        if file:
+            if not file.name.endswith(('.xlsx', '.xls')):
+                raise forms.ValidationError('Only Excel files (.xlsx, .xls) are allowed.')
+            if file.size > 10 * 1024 * 1024:
+                raise forms.ValidationError('File size must not exceed 10MB.')
+        return file
+
+    def clean_student_file(self):
+        file = self.cleaned_data.get('student_file')
+        if file:
+            if not file.name.endswith(('.xlsx', '.xls')):
+                raise forms.ValidationError('Only Excel files (.xlsx, .xls) are allowed.')
+            if file.size > 10 * 1024 * 1024:
+                raise forms.ValidationError('File size must not exceed 10MB.')
+        return file

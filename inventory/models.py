@@ -396,6 +396,8 @@ class StockOutModel(models.Model):
         EXPIRED = 'expired', 'Expired'
         ADJUSTMENT = 'adjustment', 'Stock Adjustment'
         WASTAGE = 'wastage', 'Wastage'
+        CAFETERIA = 'cafeteria', 'Cafeteria'
+        BOARDING = 'boarding house store', 'Boarding House Store'
 
     class LocationChoices(models.TextChoices):
         STORE = 'store', 'Store'
@@ -498,12 +500,6 @@ class StockTransferItemModel(models.Model):
 class InventoryAssignmentModel(models.Model):
     """Assign inventory items to classes/students for collection"""
 
-    TERM_CHOICES = [
-        ('1st term', '1st Term'),
-        ('2nd term', '2nd Term'),
-        ('3rd term', '3rd Term')
-    ]
-
     GENDER_CHOICES = [
         ('male', 'Male'),
         ('female', 'Female'),
@@ -527,7 +523,7 @@ class InventoryAssignmentModel(models.Model):
 
     # When and conditions
     session = models.ForeignKey(SessionModel, on_delete=models.CASCADE, blank=True, null=True)
-    term = models.CharField(max_length=20, choices=TERM_CHOICES)
+    term = models.ForeignKey(TermModel, on_delete=models.CASCADE, blank=True, null=True)
     is_mandatory = models.BooleanField(default=False, help_text="Must all eligible students collect?")
 
     # Fee integration (if item must be paid for)
@@ -919,3 +915,140 @@ class PurchaseReportItemModel(models.Model):
 
     def __str__(self):
         return f"{self.item_description} - {self.quantity_bought} bought"
+
+
+class CollectionGenerationJob(models.Model):
+    """Track background jobs for generating inventory collections"""
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        IN_PROGRESS = 'in_progress', 'In Progress'
+        SUCCESS = 'success', 'Success'
+        FAILURE = 'failure', 'Failure'
+
+    # Job identification
+    job_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    assignment = models.ForeignKey(
+        'InventoryAssignmentModel',
+        on_delete=models.CASCADE,
+        related_name='generation_jobs'
+    )
+
+    # Progress tracking
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING
+    )
+    total_students = models.IntegerField(default=0)
+    processed_students = models.IntegerField(default=0)
+    created_collections = models.IntegerField(default=0)
+    skipped_students = models.IntegerField(default=0)
+
+    # Error handling
+    error_message = models.TextField(blank=True, null=True)
+
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        verbose_name = "Collection Generation Job"
+        verbose_name_plural = "Collection Generation Jobs"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Job {self.job_id} - {self.assignment.item.name} ({self.get_status_display()})"
+
+    @property
+    def progress_percentage(self):
+        """Calculate progress percentage"""
+        if self.total_students == 0:
+            return 0
+        return int((self.processed_students / self.total_students) * 100)
+
+    @property
+    def duration(self):
+        """Calculate job duration"""
+        if self.started_at and self.completed_at:
+            return (self.completed_at - self.started_at).total_seconds()
+        return None
+
+
+# ================== DIRECT SALES MODEL ==================
+class DirectSaleModel(models.Model):
+    """
+    Track direct sales/purchases to students
+    (items not part of any assignment)
+    """
+
+    # Who and what
+    student = models.ForeignKey(StudentModel, on_delete=models.CASCADE, related_name='direct_purchases')
+    item = models.ForeignKey(ItemModel, on_delete=models.CASCADE, related_name='direct_sales')
+
+    # Transaction details
+    quantity = models.DecimalField(max_digits=10, decimal_places=2,
+                                   validators=[MinValueValidator(Decimal('0.01'))])
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+
+    # Payment status
+    payment_completed = models.BooleanField(default=True)
+    payment_method = models.CharField(max_length=50, blank=True, null=True,
+                                      help_text="Cash, Transfer, etc.")
+
+    # Session/Term tracking
+    session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL,
+                                blank=True, null=True)
+    term = models.ForeignKey(TermModel, on_delete=models.SET_NULL,
+                             blank=True, null=True)
+
+    # Staff and notes
+    sold_by = models.ForeignKey(StaffModel, on_delete=models.SET_NULL,
+                                null=True, blank=True,
+                                help_text="Staff who processed the sale")
+    notes = models.TextField(blank=True, null=True)
+
+    # Audit
+    sale_date = models.DateField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL,
+                                   null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Direct Sale"
+        verbose_name_plural = "Direct Sales"
+        ordering = ['-sale_date', '-created_at']
+
+    def save(self, *args, **kwargs):
+        # Auto-calculate total if not set
+        if not self.total_amount:
+            self.total_amount = self.quantity * self.unit_price
+
+        # Auto-set session and term if not provided
+        if not self.session or not self.term:
+            setting = SchoolSettingModel.objects.first()
+            if setting:
+                if not self.session:
+                    self.session = setting.session
+                if not self.term:
+                    self.term = setting.term
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.student} - {self.item.name} ({self.quantity}) - {self.sale_date}"
+
+    @property
+    def balance(self):
+        """Outstanding balance"""
+        return self.total_amount - self.amount_paid

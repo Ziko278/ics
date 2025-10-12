@@ -1,0 +1,140 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Cafeteria Paid Students Report</h5>
+                <p class="card-description">
+                    View a list of students who have paid the cafeteria fee for the current term.
+                </p>
+
+                <div class="card my-3 bg-light">
+                    <div class="card-body py-2">
+                        <form method="GET" class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label for="id_student_class" class="form-label small">Filter by Class</label>
+                                <select class="form-select form-select-sm" id="id_student_class" name="class">
+                                    <option value="">-- All Classes --</option>
+                                    {% for class in class_list %}
+                                        <option value="{{ class.id }}" {% if class.id|stringformat:"s" == selected_class_id %}selected{% endif %}>
+                                            {{ class.name|upper }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="col-md-5">
+                                <label for="id_class_section" class="form-label small">Filter by Section</label>
+                                <select class="form-select form-select-sm" id="id_class_section" name="section">
+                                    <option value="">-- All Sections --</option>
+                                    </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-funnel"></i> Filter</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                {% if students %}
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <p class="mb-0">Found <strong>{{ students.count }}</strong> student(s).</p>
+                    <div>
+                        <a href="{% url 'cafeteria_export_pdf' %}?class={{ selected_class_id|default:'' }}&section={{ selected_section_id|default:'' }}" class="btn btn-danger btn-sm">
+                            <i class="bi bi-file-earmark-pdf"></i> Export to PDF
+                        </a>
+                        <a href="{% url 'cafeteria_export_excel' %}?class={{ selected_class_id|default:'' }}&section={{ selected_section_id|default:'' }}" class="btn btn-success btn-sm">
+                            <i class="bi bi-file-earmark-excel"></i> Export to Excel
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Student Name</th>
+                                <th>Student ID</th>
+                                <th>Gender</th>
+                                <th>Class</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students %}
+                            <tr>
+                                <td>{{ forloop.counter }}</td>
+                                <td>{{ student.first_name }} {{ student.last_name }}</td>
+                                <td>{{ student.registration_number }}</td>
+                                <td>{{ student.get_gender_display }}</td>
+                                <td>{{ student.student_class.name|default:'N/A' }} {{ student.class_section.name|default:'' }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    No students found matching your criteria.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('id_student_class');
+    const sectionSelect = document.getElementById('id_class_section');
+
+    classSelect.addEventListener('change', async function() {
+        const classId = this.value;
+
+        // Reset and disable the section dropdown
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.disabled = true;
+
+        if (!classId) {
+            sectionSelect.innerHTML = '<option value="">-- Select a Class First --</option>';
+            return;
+        }
+
+        try {
+            // Fetch the sections for the selected class from our API endpoint
+            const response = await fetch(`/admin/student/api/get-class-sections/?class_id=${classId}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch sections');
+            }
+            const sections = await response.json();
+
+            // Clear the dropdown again before populating
+            sectionSelect.innerHTML = '<option value="">-- Select a Section --</option>';
+
+            if (sections.length > 0) {
+                sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section.id;
+                    option.textContent = section.name.toUpperCase();
+                    sectionSelect.appendChild(option);
+                });
+                // Enable the dropdown only if there are sections
+                sectionSelect.disabled = false;
+            } else {
+                sectionSelect.innerHTML = '<option value="">-- No Sections Available --</option>';
+            }
+        } catch (error) {
+            console.error('Error fetching sections:', error);
+            sectionSelect.innerHTML = '<option value="">-- Error Loading Sections --</option>';
+        }
+    });
+});
+</script>
+
+{% endblock %}

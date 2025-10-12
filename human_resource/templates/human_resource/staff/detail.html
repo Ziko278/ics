@@ -45,7 +45,7 @@
                 </div>
                 <div class="row mt-2">
                     <div class="col-lg-3 col-md-4 label fw-bold">Email</div>
-                    <div class="col-lg-9 col-md-8">{{ staff.email|lower }}</div>
+                    <div class="col-lg-9 col-md-8">{{ staff.email|default:"Not Provided" }}</div>
                 </div>
                 <div class="row mt-2">
                     <div class="col-lg-3 col-md-4 label fw-bold">Mobile</div>
@@ -67,6 +67,7 @@
                     <div class="col-lg-9 col-md-8">
                         {% if staff.staff_profile %}
                             <span class="badge bg-primary">Username: {{ staff.staff_profile.user.username }}</span>
+                            <span class="badge bg-primary">Default Password: {{ staff.staff_profile.default_password }}</span>
                             <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#confirmUpdateLoginModal">Reset Password</button>
                         {% else %}
                              <span class="badge bg-secondary">No Login Account</span>

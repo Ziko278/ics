@@ -60,7 +60,7 @@ class StaffForm(forms.ModelForm):
     def clean_email(self):
         email = self.cleaned_data.get('email')
         if not email:
-            raise ValidationError("Email address is required.")
+            return
 
         email = email.lower().strip()
         qs = StaffModel.objects.filter(email__iexact=email)
@@ -74,7 +74,7 @@ class StaffForm(forms.ModelForm):
     def clean_mobile(self):
         mobile = self.cleaned_data.get('mobile')
         if not mobile:
-            raise ValidationError("Mobile number is required.")
+            return
 
         # Standardize by removing spaces and keeping '+' if present
         mobile = re.sub(r'[^\d+]', '', mobile)

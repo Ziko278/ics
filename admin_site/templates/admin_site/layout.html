@@ -132,7 +132,7 @@
                     </li>
 
                     <li>
-                        <a class="dropdown-item d-flex align-items-center" href="#">
+                        <a class="dropdown-item d-flex align-items-center" href="{% url 'change_password' %}">
                             <i class="bi bi-gear"></i>
                             <span>Change Password</span>
                         </a>
@@ -198,58 +198,70 @@
         {% endif %}
 
 
-        {% if 'student.add_studentmodel' in perms or 'student.view_studentmodel' in perms %}
-        <li class="nav-item">
-            <a class="nav-link collapsed" data-bs-target="#stud" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-journal-bookmark-fill"></i><span>Student</span><i
-                    class="bi bi-chevron-down ms-auto"></i>
-            </a>
-            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="stud">
-                {% if 'student.add_studentmodel' in perms %}
-                <li>
-                    <a href="{% url 'select_parent' %}">
-                        <i class="bi bi-circle"></i><span>Register Student</span>
-                    </a>
-                </li>
-                {% endif %}
+        {% if 'student.add_studentmodel' in perms or 'student.view_studentmodel' in perms or 'student.view_studentsettingmodel' in perms %}
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#stud" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-journal-bookmark-fill"></i><span>Student</span><i
+                        class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="stud">
 
-                {% if 'student.view_studentmodel' in perms %}
-                <li>
-                    <a href="{% url 'student_index' %}">
-                        <i class="bi bi-circle"></i><span>View Students</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="{% url 'student_select_class' %}">
-                        <i class="bi bi-circle"></i><span>Class Students</span>
-                    </a>
-                </li>
-                {% endif %}
-                {% if 'student.add_parentmodel' in perms %}
-                <li>
-                    <a href="{% url 'parent_create' %}">
-                        <i class="bi bi-circle"></i><span>Add Parent</span>
-                    </a>
-                </li>
-                {% endif %}
-                {% if 'student.view_parentmodel' in perms %}
-                <li>
-                    <a href="{% url 'parent_index' %}">
-                        <i class="bi bi-circle"></i><span>View Parents</span>
-                    </a>
-                </li>
-                {% endif %}
-                {% if 'student.change_studentsettingmodel' in perms %}
-                <li>
-                    <a href="{% url 'setting_detail' %}">
-                        <i class="bi bi-circle"></i><span>Setting</span>
-                    </a>
-                </li>
-                {% endif %}
+                    {% if 'student.add_studentmodel' in perms %}
+                    <li>
+                        <a href="{% url 'select_parent' %}">
+                            <i class="bi bi-circle"></i><span>Register Student</span>
+                        </a>
+                    </li>
+                    {% endif %}
 
-            </ul>
-        </li>
-        {% endif %}
+                    {% if 'student.view_studentmodel' in perms %}
+                    <li>
+                        <a href="{% url 'student_index' %}">
+                            <i class="bi bi-circle"></i><span>View Students</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{% url 'student_select_class' %}">
+                            <i class="bi bi-circle"></i><span>Class Students</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if 'student.add_studentmodel' in perms %}
+                    <li>
+                        <a href="{% url 'parent_student_upload' %}">
+                            <i class="bi bi-circle"></i><span>Data Upload</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if 'student.add_studentmodel' in perms %}
+                    <li>
+                        <a href="{% url 'parent_create' %}">
+                            <i class="bi bi-circle"></i><span>Register Parent</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if 'student.view_studentmodel' in perms %}
+                    <li>
+                        <a href="{% url 'parent_index' %}">
+                            <i class="bi bi-circle"></i><span>View Parents</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if 'student.view_studentsettingmodel' in perms %}
+                    <li>
+                        <a href="{% url 'setting_detail' %}">
+                            <i class="bi bi-circle"></i><span>Setting</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                </ul>
+            </li>
+            {% endif %}
 
         {% if 'inventory.view_itemmodel' in perms or 'inventory.view_stockinmodel' in perms or 'inventory.view_purchaseordermodel' in perms %}
         <li class="nav-item">
@@ -261,7 +273,7 @@
                 {% if 'inventory.view_itemmodel' in perms %}
                  <li>
                     <a href="{% url 'inventory_item_list' %}">
-                        <i class="bi bi-circle"></i><span>Product</span>
+                        <i class="bi bi-circle"></i><span>Items</span>
                     </a>
                 </li>
                 {% endif %}
@@ -324,6 +336,38 @@
                     </a>
                 </li>
                 {% endif %}
+
+            </ul>
+        </li>
+        {% endif %}
+
+        {% if 'inventory.view_itemmodel' in perms or 'inventory.view_stockinmodel' in perms or 'inventory.view_purchaseordermodel' in perms %}
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-target="#acad2" data-bs-toggle="collapse" href="#">
+                <i class="ri-book-mark-fill"></i><span>Inventory Collection</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul class="nav-content collapse" data-bs-parent="#sidebar-nav" id="acad2">
+
+                <!-- Assignment Management -->
+                <li>
+                    <a href="{% url 'assignment_list' %}">
+                        <i class="bi bi-circle"></i><span>Manage Assignments</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'create_assignment' %}">
+                        <i class="bi bi-circle"></i><span>Create New Assignment</span>
+                    </a>
+                </li>
+
+                <!-- Student Collections -->
+                <li>
+                    <a href="{% url 'student_collection_search' %}">
+                        <i class="bi bi-circle"></i><span>Student Collections</span>
+                    </a>
+                </li>
+
 
             </ul>
         </li>
@@ -501,8 +545,13 @@
                     </a>
                 </li>
                 <li>
-                    <a href="{% url 'finance_salary_advance_debtors' %}">
-                        <i class="bi bi-circle"></i><span>Salary Advance Debtors</span>
+                    <a href="{% url 'finance_staff_loan_list' %}">
+                        <i class="bi bi-circle"></i><span>Staff Loans</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_staff_loan_debtors' %}">
+                        <i class="bi bi-circle"></i><span>Staff Loan Debtors</span>
                     </a>
                 </li>
                 {% endif %}
@@ -524,6 +573,11 @@
                 <li>
                     <a href="{% url 'finance_staff_bank_detail_list' %}">
                         <i class="bi bi-circle"></i><span>Bank Accounts</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'staff_salary_profile' %}">
+                        <i class="bi bi-circle"></i><span>My Salary Profile</span>
                     </a>
                 </li>
                 {% endif %}
@@ -558,28 +612,10 @@
                     </a>
                 </li>
                 {% endif %}
-            </ul>
-        </li>
-        {% endif %}
-
-
-        {% if 'admin_site.view_classesmodel' in perms or 'admin_site.view_classsectionmodel' in perms %}
-        <li class="nav-item">
-            <a class="nav-link collapsed" data-bs-target="#sb_att" data-bs-toggle="collapse" href="#">
-                <i class="bi bi-alarm"></i><span>Setup</span><i class="bi bi-chevron-down ms-auto"></i>
-            </a>
-            <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="sb_att">
-                {% if 'admin_site.view_classesmodel' in perms %}
+                {% if 'cafeteria.change_cafeteriasettingmodel' in perms %}
                 <li>
-                    <a href="{% url 'class_index' %}">
-                        <i class="bi bi-circle"></i><span>Classes</span>
-                    </a>
-                </li>
-                {% endif %}
-                {% if 'admin_site.view_classsectionmodel' in perms %}
-                <li>
-                    <a href="{% url 'class_section_index' %}">
-                        <i class="bi bi-circle"></i><span>Class Sections</span>
+                    <a href="{% url 'cafeteria_paid_students_report' %}">
+                        <i class="bi bi-circle"></i><span>Eligible Student</span>
                     </a>
                 </li>
                 {% endif %}
@@ -667,6 +703,28 @@
                 <li>
                     <a href="{% url 'school_setting_detail' %}">
                         <i class="bi bi-circle"></i><span>School Setting</span>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if 'admin_site.view_classesmodel' in perms %}
+                <li>
+                    <a href="{% url 'finance_school_bank_detail_list' %}">
+                        <i class="bi bi-circle"></i><span>School Bank Accounts</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if 'admin_site.view_classesmodel' in perms %}
+                <li>
+                    <a href="{% url 'class_index' %}">
+                        <i class="bi bi-circle"></i><span>Classes</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if 'admin_site.view_classsectionmodel' in perms %}
+                <li>
+                    <a href="{% url 'class_section_index' %}">
+                        <i class="bi bi-circle"></i><span>Class Sections</span>
                     </a>
                 </li>
                 {% endif %}

@@ -1,0 +1,28 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Delete School Bank Detail</h4>
+            <p>Are you sure you want to permanently delete the bank detail for <strong>{{ school_bank_detail.account_name|title }}</strong>?</p>
+
+            <ul class="list-group mb-3">
+                <li class="list-group-item"><strong>Bank:</strong> {{ school_bank_detail.bank_name|title }}</li>
+                <li class="list-group-item"><strong>Account Number:</strong> {{ school_bank_detail.account_number }}</li>
+                <li class="list-group-item"><strong>Account Name:</strong> {{ school_bank_detail.account_name|title }}</li>
+            </ul>
+
+            <div class="alert alert-danger">
+                <strong>Warning:</strong> This action cannot be undone. This bank detail will be permanently removed from the system.
+            </div>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Proceed with Deletion</button>
+            </form>
+            <a class="btn btn-secondary" href="{% url 'finance_school_bank_detail_list' %}"> Cancel</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

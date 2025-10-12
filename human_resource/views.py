@@ -5,10 +5,13 @@ import string
 from django.core.files.storage import FileSystemStorage
 from django.db import transaction, IntegrityError
 from django.db.models import Count
+from django.db.transaction import non_atomic_requests
+from django.http import HttpResponseRedirect
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
 from django.contrib.auth.models import User, Group, Permission
+from django.utils.decorators import method_decorator
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView
 )
@@ -90,67 +93,115 @@ class StaffListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         return StaffModel.objects.all().order_by('first_name')
 
 
+@method_decorator(non_atomic_requests, name='dispatch')
 class StaffCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = StaffModel
     permission_required = 'human_resource.add_staffmodel'
     form_class = StaffForm
     template_name = 'human_resource/staff/create.html'
-    success_message = 'Staff Successfully Registered'
 
     def get_success_url(self):
+        # self.object is set in form_valid before redirecting
         return reverse('staff_detail', kwargs={'pk': self.object.pk})
+
+    def _send_credentials_and_set_messages(self, staff, username, password):
+        """
+        Handles sending email and setting the appropriate success/warning message.
+        This method is only called after the database transaction is successful.
+        """
+        # Only attempt to send an email if one was provided.
+        if staff.email:
+            if _send_credentials_email(staff, username, password):
+                messages.success(self.request,
+                                 f"Staff '{staff}' created and credentials sent to {staff.email}.")
+            else:
+                messages.warning(self.request,
+                                 f"Staff '{staff}' created, but failed to send credentials via email.")
+        else:
+            # If no email, just show a success message without mentioning credentials.
+            messages.success(self.request, f"Staff '{staff}' created successfully (no email provided for credentials).")
 
     def form_valid(self, form):
         """
-        Create the Staff instance, then create the associated User and StaffProfile.
+        Creates Staff, User, and Profile in a transaction.
+        Sends email after successful commit.
         """
         try:
+            # Use atomic block for database operations only
             with transaction.atomic():
-                # First, save the StaffModel instance to get an ID
-                staff_instance = form.save()
+                # Prepare the staff instance
+                staff_instance = form.save(commit=False)
 
-                # Now, create the User account
+                # Generate staff_id if needed
+                if not staff_instance.staff_id:
+                    staff_instance.staff_id = staff_instance.generate_unique_staff_id()
+
                 username = staff_instance.staff_id
+
+                # Check if username already exists
+                if User.objects.filter(username=username).exists():
+                    raise ValueError(f"Username {username} already exists")
+
+                # Check if email already exists
+                if staff_instance.email and User.objects.filter(email=staff_instance.email).exists():
+                    raise ValueError(f"Email {staff_instance.email} already exists")
+
+                # Generate password
                 password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
-                user, created = User.objects.get_or_create(
-                    email=staff_instance.email,
-                    defaults={'username': username, 'first_name': staff_instance.first_name,
-                              'last_name': staff_instance.last_name}
-                )
-                if created:
-                    user.set_password(password)
-                    user.save()
+                # Create user
+                user_fields = {
+                    'username': username,
+                    'password': password,
+                    'first_name': staff_instance.first_name,
+                    'last_name': staff_instance.staff_id,
+                }
+                if staff_instance.email:
+                    user_fields['email'] = staff_instance.email
 
-                # Link User to Staff via StaffProfileModel
+                user = User.objects.create_user(**user_fields)
+
+                # Save staff with skip flag
+                staff_instance.save(skip_user_sync=True)
+
+                # Create profile
                 StaffProfileModel.objects.create(
                     user=user,
                     staff=staff_instance,
-                    default_password=password  # Save password temporarily if email fails
+                    default_password=password
                 )
 
-                # Add user to selected group
+                # Add to group
                 if staff_instance.group:
                     staff_instance.group.user_set.add(user)
 
-                # Attempt to send email
-                if _send_credentials_email(staff_instance, username, password):
-                    messages.success(self.request,
-                                     f"Staff '{staff_instance}' created and credentials sent to {staff_instance.email}.")
-                else:
-                    messages.warning(self.request,
-                                     f"Staff '{staff_instance}' created, but failed to send credentials email.")
-
-                # Use self.object for the redirect in get_success_url
+                # Set for redirect
                 self.object = staff_instance
-                return super().form_valid(form)
 
-        except IntegrityError:
-            messages.error(self.request, "A user with this email or username (staff ID) may already exist.")
+            # Transaction committed successfully - now send email
+            self._send_credentials_and_set_messages(staff_instance, username, password)
+            return HttpResponseRedirect(self.get_success_url())
+
+        except ValueError as e:
+            # Custom validation errors
+            messages.error(self.request, str(e))
             return self.form_invalid(form)
+
+        except IntegrityError as e:
+            # Database constraint violations
+            logger.exception("IntegrityError during staff creation")
+            if 'username' in str(e).lower():
+                messages.error(self.request, f"Staff ID already exists in the system.")
+            elif 'email' in str(e).lower():
+                messages.error(self.request, "Email address already exists in the system.")
+            else:
+                messages.error(self.request, "A database error occurred. Please check for duplicates.")
+            return self.form_invalid(form)
+
         except Exception as e:
-            logger.exception("Error during staff and user creation.")
-            messages.error(self.request, f"An unexpected error occurred: {e}")
+            # Catch-all for other errors
+            logger.exception("Unexpected error during staff creation")
+            messages.error(self.request, f"An unexpected error occurred: {str(e)}")
             return self.form_invalid(form)
 
 
@@ -236,7 +287,7 @@ def generate_staff_login(request, pk):
 
         with transaction.atomic():
             username = staff.staff_id
-            password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+            password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 
             # Create the user, handling potential username clashes
             try:
@@ -295,7 +346,8 @@ def update_staff_login(request, pk):
 def disable_staff(request, pk):
     staff = get_object_or_404(StaffModel, pk=pk)
     staff.status = 'inactive'
-    staff.save()
+    staff.save(skip_user_sync=True)  # Add this flag
+
     try:
         user = staff.staff_profile.user
         user.is_active = False
@@ -303,6 +355,7 @@ def disable_staff(request, pk):
         messages.success(request, f"'{staff}' and their user account have been disabled.")
     except StaffProfileModel.DoesNotExist:
         messages.success(request, f"'{staff}' has been disabled (no user account found).")
+
     return redirect('staff_detail', pk=pk)
 
 
@@ -311,7 +364,8 @@ def disable_staff(request, pk):
 def enable_staff(request, pk):
     staff = get_object_or_404(StaffModel, pk=pk)
     staff.status = 'active'
-    staff.save()
+    staff.save(skip_user_sync=True)  # Add this flag
+
     try:
         user = staff.staff_profile.user
         user.is_active = True
@@ -319,6 +373,7 @@ def enable_staff(request, pk):
         messages.success(request, f"'{staff}' and their user account have been enabled.")
     except StaffProfileModel.DoesNotExist:
         messages.success(request, f"'{staff}' has been enabled (no user account found).")
+
     return redirect('staff_detail', pk=pk)
 
 
@@ -422,24 +477,31 @@ class GroupDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
 
 
 @login_required
-@permission_required("auth.change_group", raise_exception=True)
+@permission_required("auth.add_group", raise_exception=True)
 def group_permission_view(request, pk):
     group = get_object_or_404(Group, pk=pk)
     if request.method == 'POST':
-        permission_ids = request.POST.getlist('permissions')
+        permissions = request.POST.getlist('permissions[]')
+        permission_list = []
+        for permission_code in permissions:
+            permission = Permission.objects.filter(codename=permission_code).first()
+            if permission:
+                permission_list.append(permission.id)
         try:
-            group.permissions.set(permission_ids)
-            messages.success(request, f"Permissions for group '{group.name}' updated successfully.")
-        except Exception as e:
-            logger.exception(f"Failed to update permissions for group ID {pk}")
-            messages.error(request, f"An error occurred: {e}")
-        return redirect('group_index')
+            group.permissions.set(permission_list)
+            messages.success(request, 'Group Permission Successfully Updated')
+        except Exception:
+            logger.exception("Failed updating group permissions for group id=%s", pk)
+            messages.error(request, "Failed to update group permissions. Contact admin.")
+        return redirect(reverse('group_index'))
 
     context = {
         'group': group,
+        'permission_codenames': group.permissions.all().values_list('codename', flat=True),
         'permission_list': Permission.objects.all(),
     }
     return render(request, 'human_resource/group/permission.html', context)
+
 
 
 # -------------------------

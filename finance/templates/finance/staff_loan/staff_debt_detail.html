@@ -1,0 +1,100 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="row">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Debt Breakdown for {{ staff.staff_profile.user.get_full_name|title }}</h4>
+                <p class="card-description">Total Amount Due: <strong class="text-danger">₦{{ total_due|floatformat:2|intcomma }}</strong></p>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Request Date</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Repaid</th>
+                                <th class="text-end">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for loan in outstanding_loans %}
+                            <tr>
+                                <td>{{ loan.request_date|date:"d M, Y" }}</td>
+                                <td class="text-end">₦{{ loan.amount|floatformat:2|intcomma }}</td>
+                                <td class="text-end">₦{{ loan.repaid_amount|floatformat:2|intcomma }}</td>
+                                <td class="text-end fw-bold">₦{{ loan.balance|floatformat:2|intcomma }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-3">No outstanding loans.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4 class="card-title">Repayment History</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Payment Date</th>
+                                <th class="text-end">Amount Paid</th>
+                                <th>Recorded By</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for repayment in repayment_history %}
+                            <tr>
+                                <td>{{ repayment.payment_date|date:"d M, Y" }}</td>
+                                <td class="text-end">₦{{ repayment.amount_paid|floatformat:2|intcomma }}</td>
+                                <td>{{ repayment.created_by.get_full_name|default:'N/A' }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="3" class="text-center text-muted py-3">No repayments have been recorded yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Record Repayment</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'finance_record_loan_repayment' staff.pk %}">
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label for="{{ form.amount_paid.id_for_label }}" class="form-label">Amount Paid <span class="text-danger">*</span></label>
+                        {{ form.amount_paid }}
+                        {% if form.amount_paid.errors %}<div class="invalid-feedback d-block">{{ form.amount_paid.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.payment_date.id_for_label }}" class="form-label">Payment Date <span class="text-danger">*</span></label>
+                        {{ form.payment_date }}
+                        {% if form.payment_date.errors %}<div class="invalid-feedback d-block">{{ form.payment_date.errors.0 }}</div>{% endif %}
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        Record Payment
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

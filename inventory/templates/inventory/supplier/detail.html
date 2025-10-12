@@ -1,4 +1,5 @@
 {% extends 'admin_site/layout.html' %}
+{% load humanize %}
 {% block 'main' %}
 
 <div class="pagetitle">
@@ -30,15 +31,15 @@
         <div class="card-body">
              <div class="row">
                 <div class="col-lg-6 col-md-4 label fw-bold">Total Supplied:</div>
-                <div class="col-lg-6 col-md-8">₦{{ supplier.get_total_supplied_amount|floatformat:2 }}</div>
+                <div class="col-lg-6 col-md-8">₦{{ supplier.get_total_supplied_amount|floatformat:2|intcomma }}</div>
               </div>
               <div class="row">
                 <div class="col-lg-6 col-md-4 label fw-bold">Total Paid:</div>
-                <div class="col-lg-6 col-md-8">₦{{ supplier.get_total_paid_amount|floatformat:2 }}</div>
+                <div class="col-lg-6 col-md-8">₦{{ supplier.get_total_paid_amount|floatformat:2|intcomma }}</div>
               </div>
                <div class="row">
                 <div class="col-lg-6 col-md-4 label fw-bold">Balance Owed:</div>
-                <div class="col-lg-6 col-md-8"><span class="badge bg-danger">₦{{ supplier.balance_owed|floatformat:2 }}</span></div>
+                <div class="col-lg-6 col-md-8"><span class="badge bg-danger">₦{{ supplier.balance_owed|floatformat:2|intcomma }}</span></div>
               </div>
         </div>
       </div>
@@ -98,7 +99,7 @@
                          <tr>
                              <td><a href="#">{{ po.order_number }}</a></td>
                              <td>{{ po.order_date|date:"d M, Y" }}</td>
-                             <td>₦{{ po.total_amount|floatformat:2 }}</td>
+                             <td>₦{{ po.total_amount|floatformat:2|intcomma }}</td>
                              <td><span class="badge bg-info">{{ po.get_status_display }}</span></td>
                              <td><a href="{% url 'inventory_po_detail' po.pk %}" class="btn btn-sm btn-outline-primary">View</a></td>
                          </tr>
@@ -124,7 +125,7 @@
                          {% for payment in payments %}
                          <tr>
                              <td>{{ payment.payment_date|date:"d M, Y" }}</td>
-                             <td>₦{{ payment.amount|floatformat:2 }}</td>
+                             <td>₦{{ payment.amount|floatformat:2|intcomma }}</td>
                              <td>{{ payment.payment_method|title }}</td>
                          </tr>
                           {% empty %}

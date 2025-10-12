@@ -59,6 +59,29 @@
                                                 </ul>
                                             </div>
                                         </div>
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Student Setting Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Student Setting
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_studentsettingmodel"
+                                                            {% if "view_studentsettingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Update Student Setting
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_studentsettingmodel"
+                                                            {% if "change_studentsettingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                        </div>
 
                                     </div>
                                 </div>
@@ -170,12 +193,101 @@
                             </div>
 
                             <div class="accordion-item">
+                                <h2 class="accordion-header" id="flush-finance2-permission">
+                                    <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse32" aria-expanded="false" aria-controls="flush-collapseOne">
+                                        Fee Collection Permissions
+                                    </button>
+                                </h2>
+                                <div id="flush-collapse32" class="accordion-collapse collapse" aria-labelledby="finance-permission" data-bs-parent="#accordionFlushExample">
+                                    <div class="accordion-body">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Finance Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Fund Student Wallet
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_studentfundingmodel"
+                                                            {% if "add_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        View Student Funding
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_studentfundingmodel"
+                                                            {% if "view_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Confirm Student Funding by Parent
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_studentfundingmodel"
+                                                            {% if "change_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion-item">
                                 <h2 class="accordion-header" id="flush-sale-permission">
                                     <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse4" aria-expanded="false" aria-controls="flush-collapseOne">
                                         Sales Permissions
                                     </button>
                                 </h2>
                                 <div id="flush-collapse4" class="accordion-collapse collapse" aria-labelledby="sale-permission" data-bs-parent="#accordionFlushExample">
+                                    <div class="accordion-body">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Sales Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Place Orders
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_salemodel"
+                                                            {% if "add_salemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        View Orders
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_salemodel"
+                                                            {% if "view_salemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        View Statistics
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_salemodel"
+                                                            {% if "change_salemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+
+
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="flush-sale0-permission">
+                                    <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse40" aria-expanded="false" aria-controls="flush-collapseOne">
+                                        Cafeteria Permissions
+                                    </button>
+                                </h2>
+                                <div id="flush-collapse40" class="accordion-collapse collapse" aria-labelledby="sale-permission" data-bs-parent="#accordionFlushExample">
                                     <div class="accordion-body">
                                         <div class="card">
                                             <div class="card-body">

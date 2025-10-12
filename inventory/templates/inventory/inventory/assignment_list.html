@@ -1,0 +1,329 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Inventory Assignments</h5>
+                <div>
+                    <a href="{% url 'create_assignment' %}" class="btn btn-success me-2">
+                        <i class="bi bi-plus-circle"></i> New Assignment
+                    </a>
+                    <a href="{% url 'student_collection_search' %}" class="btn btn-primary">
+                        <i class="bi bi-people"></i> Manage Collections
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if messages %}
+                    {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+
+                {% if assignments %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Qty/Student</th>
+                                <th>Classes</th>
+                                <th>Gender</th>
+
+                                <th>Session/Quarter</th>
+                                <th>Collections</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for assignment in assignments %}
+                            <tr>
+                                <td>
+                                    <strong>{{ assignment.item.name }}</strong><br>
+                                    <small class="text-muted">{{ assignment.item.get_unit_display }}</small>
+                                </td>
+                                <td>{{ assignment.quantity_per_student }}</td>
+                                <td>
+                                    {% if assignment.student_classes.all %}
+                                        {% for class in assignment.student_classes.all %}
+                                            <span class="badge bg-secondary">{{ class.name }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">All Classes</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if assignment.gender == 'both' %}
+                                        <span class="badge bg-info">Both</span>
+                                    {% elif assignment.gender == 'male' %}
+                                        <span class="badge bg-primary">Male</span>
+                                    {% elif assignment.gender == 'female' %}
+                                        <span class="badge" style="background-color: #e83e8c;">Female</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {{ assignment.session }}<br>
+                                    <small>{{ assignment.term.name }}</small>
+                                </td>
+                                <td>
+                                    {% if assignment.is_free %}
+                                        <span class="badge bg-success">Free</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">Paid</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-info"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#collectionsModal{{ assignment.pk }}">
+                                        <i class="bi bi-list"></i>
+                                        {{ assignment.collections.count }} Collections
+                                    </button>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        {% if assignment.item.store_quantity > 0 %}
+                                            <a href="{% url 'generate_collections' assignment.pk %}"
+                                               class="btn btn-sm btn-primary"
+                                               onclick="return confirm('Generate collections for all eligible students for {{ assignment.item.name }}?')">
+                                                <i class="bi bi-gear"></i> Generate
+                                            </a>
+                                        {% else %}
+                                            <button class="btn btn-sm btn-secondary" disabled title="No stock in store">
+                                                <i class="bi bi-x-circle"></i> No Stock
+                                            </button>
+                                        {% endif %}
+
+                                        <a href="{% url 'edit_assignment' assignment.pk %}"
+                                           class="btn btn-sm btn-warning"
+                                           title="Edit Assignment">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+
+                                        <button class="btn btn-sm btn-danger"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#deleteModal{{ assignment.pk }}"
+                                                title="Deactivate Assignment">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- Collections Summary Modal -->
+                            <div class="modal fade" id="collectionsModal{{ assignment.pk }}" tabindex="-1">
+                                <div class="modal-dialog modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Collections: {{ assignment.item.name }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="row mb-3">
+                                                <div class="col-md-3">
+                                                    <div class="card bg-light">
+                                                        <div class="card-body text-center">
+                                                            <h4>{{ assignment.collections.count }}</h4>
+                                                            <small class="text-muted">Total</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <div class="card bg-warning">
+                                                        <div class="card-body text-center">
+                                                            <h4>{{ assignment.collections.filter.count }}</h4>
+                                                            <small>Pending</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <div class="card bg-success text-white">
+                                                        <div class="card-body text-center">
+                                                            <h4>{{ assignment.collections.filter.count }}</h4>
+                                                            <small>Collected</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <div class="card bg-info text-white">
+                                                        <div class="card-body text-center">
+                                                            <h4>{{ assignment.collections.filter.count }}</h4>
+                                                            <small>Partial</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <h6>Recent Collections (Last 10)</h6>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Student</th>
+                                                            <th>Reg No</th>
+                                                            <th>Status</th>
+                                                            <th>Collected</th>
+                                                            <th>Date</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for collection in assignment.collections.all|slice:":10" %}
+                                                        <tr>
+                                                            <td>{{ collection.student.first_name }} {{ collection.student.last_name }}</td>
+                                                            <td>{{ collection.student.registration_number }}</td>
+                                                            <td>
+                                                                {% if collection.status == 'pending' %}
+                                                                    <span class="badge bg-warning">Pending</span>
+                                                                {% elif collection.status == 'collected' %}
+                                                                    <span class="badge bg-success">Collected</span>
+                                                                {% elif collection.status == 'partially_collected' %}
+                                                                    <span class="badge bg-info">Partial</span>
+                                                                {% elif collection.status == 'cancelled' %}
+                                                                    <span class="badge bg-danger">Cancelled</span>
+                                                                {% elif collection.status == 'returned' %}
+                                                                    <span class="badge bg-secondary">Returned</span>
+                                                                {% endif %}
+                                                            </td>
+                                                            <td>{{ collection.quantity_collected }}/{{ collection.quantity_assigned }}</td>
+                                                            <td>
+                                                                {% if collection.collection_date %}
+                                                                    {{ collection.collection_date|date:"d M Y" }}
+                                                                {% else %}
+                                                                    <span class="text-muted">-</span>
+                                                                {% endif %}
+                                                            </td>
+                                                        </tr>
+                                                        {% empty %}
+                                                        <tr>
+                                                            <td colspan="5" class="text-center text-muted">
+                                                                No collections yet. Click "Generate" to create collections.
+                                                            </td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Delete Confirmation Modal -->
+                            <div class="modal fade" id="deleteModal{{ assignment.pk }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Deactivate Assignment</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <p>Are you sure you want to deactivate the assignment for <strong>{{ assignment.item.name }}</strong>?</p>
+                                            <p class="text-muted">This will hide the assignment but won't delete existing collections.</p>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <form method="POST" action="{% url 'delete_assignment' assignment.pk %}" style="display: inline;">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-danger">Deactivate</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No inventory assignments found.
+                    <a href="{% url 'create_assignment' %}" class="alert-link">Create your first assignment</a>
+                    to distribute items to students.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Recent Generation Jobs Card -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Recent Generation Jobs</h5>
+            </div>
+            <div class="card-body">
+                {% with recent_jobs=CollectionGenerationJob.objects.all|slice:":10" %}
+                {% if recent_jobs %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>Assignment</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th>Created/Collections</th>
+                                <th>Created At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in recent_jobs %}
+                            <tr>
+                                <td><code>{{ job.job_id|truncatechars:12 }}</code></td>
+                                <td>{{ job.assignment.item.name }}</td>
+                                <td>
+                                    {% if job.status == 'pending' %}
+                                        <span class="badge bg-secondary">Pending</span>
+                                    {% elif job.status == 'in_progress' %}
+                                        <span class="badge bg-primary">In Progress</span>
+                                    {% elif job.status == 'success' %}
+                                        <span class="badge bg-success">Success</span>
+                                    {% elif job.status == 'failure' %}
+                                        <span class="badge bg-danger">Failure</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 20px; width: 100px;">
+                                        <div class="progress-bar" 
+                                             style="width: {{ job.progress_percentage }}%"
+                                             role="progressbar">
+                                            {{ job.progress_percentage }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success">{{ job.created_collections }}</span> /
+                                    <span class="badge bg-warning">{{ job.skipped_students }}</span>
+                                    <br>
+                                    <small class="text-muted">Created / Skipped</small>
+                                </td>
+                                <td>{{ job.created_at|date:"d M Y H:i" }}</td>
+                                <td>
+                                    <a href="{% url 'collection_job_status' job.job_id %}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No generation jobs yet. Generate collections from an assignment to see job history.</p>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,3 +1,4 @@
+import calendar
 import logging
 import uuid
 from decimal import Decimal
@@ -83,17 +84,14 @@ class StudentFundingModel(models.Model):
         super().save(*args, **kwargs)
 
 
-
-
 # ===================================================================
 # Fee Structure Setup Models (The "Price List")
 # ===================================================================
-
 class FeeModel(models.Model):
     """Defines a single type of fee (e.g., Tuition, PTA Levy, Bus Fee)."""
 
     class FeeOccurrence(models.TextChoices):
-        TERMLY = 'termly', 'Termly'
+        TERMLY = 'quaterly', 'Quaterly'
         ANNUALLY = 'annually', 'Annually'
         ONE_TIME = 'one_time', 'One Time'
 
@@ -254,6 +252,7 @@ class FeePaymentModel(models.Model):
         FAILED = 'failed', 'Failed'
 
     invoice = models.ForeignKey(InvoiceModel, on_delete=models.PROTECT, related_name='payments')
+    bank_account = models.ForeignKey('SchoolBankDetail', on_delete=models.PROTECT)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_mode = models.CharField(max_length=20, choices=PaymentMode.choices)
     date = models.DateField(default=timezone.now)
@@ -500,7 +499,23 @@ class StaffBankDetail(models.Model):
         verbose_name = "Staff Bank Detail"
 
     def __str__(self):
-        return f"{self.staff.staff_profile.user.get_full_name()} - {self.bank_name}"
+        return f"{self.staff.__str__()} - {self.bank_name}"
+
+
+class SchoolBankDetail(models.Model):
+    """Stores the bank details for the school."""
+    bank_name = models.CharField(max_length=100)
+    account_number = models.CharField(max_length=20, unique=True)
+    account_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Staff Bank Detail"
+
+    def __str__(self):
+        return f"{self.bank_name} - {self.account_number}"
 
 
 class SalaryStructure(models.Model):
@@ -554,8 +569,8 @@ class SalaryAdvance(models.Model):
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
         APPROVED = 'approved', 'Approved'
-        DISBURSED = 'disbursed', 'Disbursed (Owing)'  # Now indicates an active debt
-        COMPLETED = 'completed', 'Completed (Paid Off)'  # New status for paid debts
+        DISBURSED = 'disbursed', 'Disbursed'  # Now indicates an active debt
+        COMPLETED = 'completed', 'Completed'  # New status for paid debts
         REJECTED = 'rejected', 'Rejected'
 
     staff = models.ForeignKey(StaffModel, on_delete=models.CASCADE, related_name='salary_advances')
@@ -591,10 +606,54 @@ class SalaryAdvance(models.Model):
         return f"Salary Advance for {self.staff}"
 
 
-# NEW: Model to record every single repayment transaction
-class SalaryAdvanceRepayment(models.Model):
-    """Logs each individual repayment made by a staff member."""
-    staff = models.ForeignKey(StaffModel, on_delete=models.CASCADE, related_name='salary_repayments')
+# finance/models.py
+
+class StaffLoan(models.Model):
+    """Tracks loan requests for staff, with manual repayment."""
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        APPROVED = 'approved', 'Approved'
+        DISBURSED = 'disbursed', 'Disbursed'  # An active debt
+        COMPLETED = 'completed', 'Completed'  # Debt fully paid
+        REJECTED = 'rejected', 'Rejected'
+
+    staff = models.ForeignKey(StaffModel, on_delete=models.CASCADE, related_name='staff_loans')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField()
+    repayment_plan = models.TextField(blank=True, null=True, help_text="e.g., How the staff intends to repay.")
+    request_date = models.DateField(default=timezone.now)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    repaid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    # Auditing fields
+    session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL, null=True, blank=True)
+    term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='approved_staff_loans')
+    approved_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def balance(self):
+        """Calculates the outstanding balance for this loan."""
+        return self.amount - self.repaid_amount
+
+    def save(self, *args, **kwargs):
+        if self.session is None or self.term is None:
+            setting = SchoolSettingModel.objects.first()
+            if setting:
+                if self.session is None: self.session = setting.session
+                if self.term is None: self.term = setting.term
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Loan of {self.amount} for {self.staff}"
+
+
+class StaffLoanRepayment(models.Model):
+    """Logs each individual repayment made by a staff member against their loans."""
+    staff = models.ForeignKey(StaffModel, on_delete=models.CASCADE, related_name='loan_repayments')
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
     payment_date = models.DateField(default=timezone.now)
 
@@ -613,7 +672,7 @@ class SalaryAdvanceRepayment(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Repayment of {self.amount_paid} for {self.staff}"
+        return f"Loan Repayment of {self.amount_paid} for {self.staff}"
 
 
 class SalaryRecord(models.Model):
@@ -639,6 +698,8 @@ class SalaryRecord(models.Model):
     bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     other_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0,
                                            help_text="e.g., salary advance repayment")
+    salary_advance_deduction = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
     notes = models.CharField(max_length=255, blank=True, null=True)
 
     # Payment Tracking
@@ -667,7 +728,7 @@ class SalaryRecord(models.Model):
 
     @property
     def total_deductions(self):
-        return self.tax_amount + self.pension_amount + self.other_deductions
+        return self.tax_amount + self.pension_amount + self.salary_advance_deduction + self.other_deductions
 
     @property
     def net_salary(self):
@@ -685,9 +746,15 @@ class SalaryRecord(models.Model):
             return "Partially Paid"
         return "Pending"
 
+    @property
+    def month_name(self):
+        """Returns the full name of the month."""
+        if self.month:
+            return calendar.month_name[self.month]
+        return ""
+
     def __str__(self):
         return f"Payslip for {self.staff.staff_profile.user.get_full_name()} - {self.month}/{self.year}"
-
 
 
 class SupplierPaymentModel(models.Model):

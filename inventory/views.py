@@ -1,6 +1,7 @@
+import json
 import logging
 from decimal import Decimal
-
+from .tasks import generate_collections_task
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
@@ -16,12 +17,13 @@ from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView, FormView
 from django.shortcuts import redirect, render, get_object_or_404
 
-from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ActivityLogModel
+from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ActivityLogModel, ClassesModel
 from human_resource.models import StaffProfileModel
 from student.models import StudentModel, StudentWalletModel
 from .models import CategoryModel, SupplierModel, ItemModel, PurchaseOrderModel, StockInModel, StockInItemModel, \
     PurchaseOrderItemModel, StockOutModel, StockTransferModel, PurchaseAdvanceModel, PurchaseAdvanceItemModel, \
-    SaleItemModel, SaleModel
+    SaleItemModel, SaleModel, InventoryAssignmentModel, InventoryCollectionModel, CollectionGenerationJob, \
+    DirectSaleModel
 from .forms import CategoryForm, SupplierForm, ItemUpdateForm, ItemCreateForm, ManualStockInForm, StockInFromPOFormSet, \
     StockInSelectionForm, StockOutForm, PurchaseOrderCreateForm, PurchaseOrderItemForm, StockTransferCreateForm, \
     PurchaseAdvanceItemForm, PurchaseAdvanceCreateForm
@@ -1549,6 +1551,450 @@ def api_barcode_lookup(request):
         })
     except ItemModel.DoesNotExist:
         pass
-    print('lllllllllllll')
 
     return JsonResponse({'success': False, 'message': 'Barcode not found'})
+
+
+@login_required
+def assignment_list_view(request):
+    """View all inventory assignments and initiate collection generation"""
+    assignments = InventoryAssignmentModel.objects.filter(
+        is_active=True
+    ).select_related('item', 'session', 'term').prefetch_related('student_classes')
+
+    context = {
+        'assignments': assignments,
+    }
+    return render(request, 'inventory/inventory/assignment_list.html', context)
+
+
+@login_required
+def create_assignment_view(request):
+    """Create a new inventory assignment"""
+    if request.method == 'POST':
+        try:
+            # Get form data
+            item_id = request.POST.get('item')
+            quantity_per_student = Decimal(request.POST.get('quantity_per_student'))
+            gender = request.POST.get('gender', 'both')
+            type_choice = request.POST.get('type', '')
+            is_mandatory = request.POST.get('is_mandatory') == 'on'
+            is_free = request.POST.get('is_free') == 'on'
+            notes = request.POST.get('notes', '')
+
+            # Get selected classes
+            selected_classes = request.POST.getlist('student_classes')
+
+            # Get item
+            item = get_object_or_404(ItemModel, pk=item_id)
+
+            # Create assignment
+            assignment = InventoryAssignmentModel.objects.create(
+                item=item,
+                quantity_per_student=quantity_per_student,
+                gender=gender,
+                type=type_choice if type_choice else None,
+                is_mandatory=is_mandatory,
+                is_free=is_free,
+                notes=notes,
+                created_by=request.user
+            )
+
+            # Add selected classes
+            if selected_classes:
+                assignment.student_classes.set(selected_classes)
+
+            messages.success(
+                request,
+                f"Assignment created successfully for '{item.name}'"
+            )
+            return redirect('assignment_list')
+
+        except Exception as e:
+            messages.error(request, f"Error creating assignment: {str(e)}")
+            return redirect('create_assignment')
+
+    # GET request - show form
+    items = ItemModel.objects.filter(
+        is_active=True,
+        location__in=['store', 'both']
+    ).select_related('category').order_by('name')
+
+    classes = ClassesModel.objects.all().order_by('name')
+
+    context = {
+        'items': items,
+        'classes': classes,
+    }
+    return render(request, 'inventory/inventory/create_assignment.html', context)
+
+
+@login_required
+def edit_assignment_view(request, assignment_pk):
+    """Edit an existing assignment"""
+    assignment = get_object_or_404(InventoryAssignmentModel, pk=assignment_pk)
+
+    if request.method == 'POST':
+        try:
+            assignment.quantity_per_student = Decimal(request.POST.get('quantity_per_student'))
+            assignment.gender = request.POST.get('gender', 'both')
+            assignment.type = request.POST.get('type', '') or None
+            assignment.is_mandatory = request.POST.get('is_mandatory') == 'on'
+            assignment.is_free = request.POST.get('is_free') == 'on'
+            assignment.notes = request.POST.get('notes', '')
+            assignment.updated_by = request.user
+
+            # Update classes
+            selected_classes = request.POST.getlist('student_classes')
+            if selected_classes:
+                assignment.student_classes.set(selected_classes)
+            else:
+                assignment.student_classes.clear()
+
+            assignment.save()
+
+            messages.success(request, "Assignment updated successfully")
+            return redirect('assignment_list')
+
+        except Exception as e:
+            messages.error(request, f"Error updating assignment: {str(e)}")
+
+    classes = ClassesModel.objects.all().order_by('name')
+
+    context = {
+        'assignment': assignment,
+        'classes': classes,
+    }
+    return render(request, 'inventory/inventory/edit_assignment.html', context)
+
+
+@login_required
+def delete_assignment_view(request, assignment_pk):
+    """Deactivate an assignment"""
+    assignment = get_object_or_404(InventoryAssignmentModel, pk=assignment_pk)
+
+    if request.method == 'POST':
+        assignment.is_active = False
+        assignment.updated_by = request.user
+        assignment.save()
+
+        messages.success(request, f"Assignment for '{assignment.item.name}' deactivated successfully")
+        return redirect('assignment_list')
+
+    return redirect('assignment_list')
+
+
+@login_required
+def generate_collections_view(request, assignment_pk):
+    """Initiate background job to generate collections for an assignment"""
+    assignment = get_object_or_404(InventoryAssignmentModel, pk=assignment_pk)
+
+    # Check if item has stock in store
+    if assignment.item.store_quantity <= 0:
+        messages.error(
+            request,
+            f"Cannot generate collections. '{assignment.item.name}' has no stock in store."
+        )
+        return redirect('assignment_list')
+
+    # Create a job record
+    job = CollectionGenerationJob.objects.create(
+        assignment=assignment,
+        created_by=request.user
+    )
+
+    # Trigger the Celery task
+    generate_collections_task.delay(job.pk)
+
+    messages.success(
+        request,
+        f"Collection generation started for '{assignment.item.name}'. "
+        f"Job ID: {job.job_id}"
+    )
+    return redirect('collection_job_status', job_id=job.job_id)
+
+
+# ==================== JOB MONITORING VIEWS ====================
+
+@login_required
+def collection_job_status_view(request, job_id):
+    """Monitor the progress of a collection generation job"""
+    job = get_object_or_404(CollectionGenerationJob, job_id=job_id)
+
+    context = {
+        'job': job,
+    }
+    return render(request, 'inventory/inventory/collection_job_status.html', context)
+
+
+@login_required
+def collection_job_status_ajax(request, job_id):
+    """AJAX endpoint to get real-time job progress"""
+    job = get_object_or_404(CollectionGenerationJob, job_id=job_id)
+
+    data = {
+        'status': job.status,
+        'progress_percentage': job.progress_percentage,
+        'total_students': job.total_students,
+        'processed_students': job.processed_students,
+        'created_collections': job.created_collections,
+        'skipped_students': job.skipped_students,
+        'error_message': job.error_message,
+    }
+    return JsonResponse(data)
+
+
+# ==================== STUDENT SEARCH VIEWS ====================
+
+@login_required
+def student_collection_search_view(request):
+    """Search page to find students and access their collections"""
+    # Get all classes for dropdown
+    class_list = ClassesModel.objects.all().prefetch_related('section')
+
+    # Serialize class data with sections
+    class_list_data = []
+    for cls in class_list:
+        class_list_data.append({
+            'id': cls.id,
+            'name': cls.name,
+            'sections': [
+                {'id': sec.id, 'name': sec.name}
+                for sec in cls.section.all()
+            ]
+        })
+
+    # Get all students for client-side search
+    students = StudentModel.objects.filter(
+        status='active'
+    ).select_related('student_class', 'class_section')
+
+    # Serialize student data
+    student_data = []
+    for student in students:
+        student_data.append({
+            'pk': student.pk,
+            'fields': {
+                'first_name': student.first_name,
+                'last_name': student.last_name,
+                'registration_number': student.registration_number,
+                'gender': student.gender,
+                'student_class_name': student.student_class.name if student.student_class else '',
+                'class_section_name': student.class_section.name if student.class_section else '',
+                'image': student.image.url if student.image else '',
+            }
+        })
+
+    context = {
+        'class_list': class_list,
+        'class_list_json': json.dumps(class_list_data),
+        'student_list_json': json.dumps(student_data),
+    }
+    return render(request, 'inventory/inventory/student_collection_search.html', context)
+
+
+# ==================== AJAX SEARCH ENDPOINTS ====================
+
+@login_required
+def ajax_get_students_by_class(request):
+    """AJAX: Get students by class and section"""
+    class_pk = request.GET.get('class_pk')
+    section_pk = request.GET.get('section_pk')
+
+    if not class_pk or not section_pk:
+        return JsonResponse({'error': 'Missing parameters'}, status=400)
+
+    students = StudentModel.objects.filter(
+        student_class_id=class_pk,
+        class_section_id=section_pk,
+        status='active'
+    ).order_by('first_name', 'last_name')
+
+    html = ''
+    for student in students:
+        full_name = f"{student.first_name} {student.middle_name or ''} {student.last_name}".strip()
+        html += f'''
+        <li class="list-group-item list-group-item-action select-student" 
+            style="cursor: pointer;" 
+            data-student-id="{student.pk}">
+            {full_name} ({student.registration_number})
+        </li>
+        '''
+
+    if not html:
+        html = '<li class="list-group-item list-group-item-danger">No students found.</li>'
+
+    return JsonResponse({'html': html})
+
+
+@login_required
+def ajax_get_students_by_reg_no(request):
+    """AJAX: Search students by registration number"""
+    reg_no = request.GET.get('reg_no', '').strip()
+
+    if len(reg_no) < 2:
+        return JsonResponse({'html': ''})
+
+    students = StudentModel.objects.filter(
+        registration_number__icontains=reg_no,
+        status='active'
+    ).order_by('first_name', 'last_name')[:20]
+
+    html = ''
+    for student in students:
+        full_name = f"{student.first_name} {student.middle_name or ''} {student.last_name}".strip()
+        html += f'''
+        <li class="list-group-item list-group-item-action select-student" 
+            style="cursor: pointer;" 
+            data-student-id="{student.pk}">
+            {full_name} ({student.registration_number})
+        </li>
+        '''
+
+    if not html:
+        html = '<li class="list-group-item list-group-item-danger">No students found.</li>'
+
+    return JsonResponse({'html': html})
+
+
+# ==================== COLLECTION MANAGEMENT VIEWS ====================
+
+@login_required
+def student_collection_dashboard_view(request, student_pk):
+    """View a student's inventory collections"""
+    student = get_object_or_404(StudentModel, pk=student_pk)
+
+    # Get all collections for this student
+    collections = InventoryCollectionModel.objects.filter(
+        student=student
+    ).select_related(
+        'assignment__item',
+        'assignment__session',
+        'assignment__term',
+        'collected_by_staff'
+    ).order_by('-created_at')
+
+    # Get available items in store for direct purchase
+    available_items = ItemModel.objects.filter(
+        location__in=['store', 'both'],
+        store_quantity__gt=0,
+        is_active=True
+    ).select_related('category')
+
+    direct_purchases = DirectSaleModel.objects.filter(
+        student=student
+    ).select_related('item', 'session', 'term', 'sold_by').order_by('-sale_date')
+
+    context = {
+        'student': student,
+        'collections': collections,
+        'available_items': available_items,
+        'direct_purchases': direct_purchases,
+    }
+    return render(request, 'inventory/inventory/student_collection_dashboard.html', context)
+
+
+@login_required
+def process_collection_view(request, collection_pk):
+    """Process/update a collection (mark as collected, partial collection, etc.)"""
+    collection = get_object_or_404(InventoryCollectionModel, pk=collection_pk)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'collect':
+            quantity_to_collect = Decimal(request.POST.get('quantity_collected', 0))
+
+            # Validate quantity
+            if quantity_to_collect <= 0:
+                messages.error(request, "Quantity must be greater than zero.")
+                return redirect('student_collection_dashboard', student_pk=collection.student.pk)
+
+            if quantity_to_collect > collection.outstanding_quantity:
+                messages.error(request, "Quantity exceeds outstanding amount.")
+                return redirect('student_collection_dashboard', student_pk=collection.student.pk)
+
+            # Check store stock
+            if collection.assignment.item.store_quantity < quantity_to_collect:
+                messages.error(
+                    request,
+                    f"Insufficient stock in store. Available: {collection.assignment.item.store_quantity}"
+                )
+                return redirect('student_collection_dashboard', student_pk=collection.student.pk)
+
+            # Check payment if required
+            if collection.payment_required and not collection.payment_completed:
+                messages.error(request, "Payment must be completed before collection.")
+                return redirect('student_collection_dashboard', student_pk=collection.student.pk)
+
+            # Process collection
+            collection.quantity_collected += quantity_to_collect
+            collection.collection_date = timezone.now().date()
+            collection.collected_by_staff = request.user.staffmodel if hasattr(request.user, 'staffmodel') else None
+            collection.save()
+
+            # Reduce store stock
+            item = collection.assignment.item
+            item.store_quantity -= quantity_to_collect
+            item.save(update_fields=['store_quantity'])
+
+            messages.success(
+                request,
+                f"Collected {quantity_to_collect} {item.get_unit_display()} of {item.name}"
+            )
+
+        elif action == 'mark_paid':
+            amount_paid = Decimal(request.POST.get('amount_paid', 0))
+            collection.amount_paid = amount_paid
+            collection.payment_completed = True
+            collection.save(update_fields=['amount_paid', 'payment_completed'])
+            messages.success(request, "Payment recorded successfully.")
+
+        return redirect('student_collection_dashboard', student_pk=collection.student.pk)
+
+    return redirect('student_collection_dashboard', student_pk=collection.student.pk)
+
+
+@login_required
+def create_direct_collection_view(request, student_pk):
+    """Allow student to purchase/collect items not assigned to them - STANDALONE PURCHASE"""
+    student = get_object_or_404(StudentModel, pk=student_pk)
+
+    if request.method == 'POST':
+        item_pk = request.POST.get('item')
+        quantity = Decimal(request.POST.get('quantity', 0))
+        amount_paid = Decimal(request.POST.get('amount_paid', 0))
+        payment_method = request.POST.get('payment_method', 'Cash')
+
+        item = get_object_or_404(ItemModel, pk=item_pk)
+
+        # Validate stock
+        if item.store_quantity < quantity:
+            messages.error(request, "Insufficient stock in store.")
+            return redirect('student_collection_dashboard', student_pk=student_pk)
+
+        # Create a DirectSale record (NOT an assignment or collection)
+        direct_sale = DirectSaleModel.objects.create(
+            student=student,
+            item=item,
+            quantity=quantity,
+            unit_price=item.current_selling_price,
+            total_amount=item.current_selling_price * quantity,
+            amount_paid=amount_paid,
+            payment_completed=(amount_paid >= item.current_selling_price * quantity),
+            payment_method=payment_method,
+            sold_by=request.user.staffmodel if hasattr(request.user, 'staffmodel') else None,
+            created_by=request.user
+        )
+
+        # Reduce stock
+        item.store_quantity -= quantity
+        item.save(update_fields=['store_quantity'])
+
+        messages.success(
+            request,
+            f"Direct purchase processed: {quantity} {item.get_unit_display()} of {item.name} for ₦{amount_paid}"
+        )
+        return redirect('student_collection_dashboard', student_pk=student_pk)
+
+    return redirect('student_collection_dashboard', student_pk=student_pk)

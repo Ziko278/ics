@@ -51,7 +51,7 @@
                         {% endif %}
                     </td>
                     <td>{{ batch.get_location_display }}</td>
-                    <td>{{ batch.created_by.staff_profile.staff|default:batch.created_by.username }}</td>
+                    <td>{{ batch.created_by.staff_profile.staff }}</td>
                     <td class="text-center">
                         <a title="View Details" href="{% url 'inventory_stock_in_detail' batch.pk %}" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
                     </td>

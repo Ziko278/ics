@@ -62,7 +62,7 @@
             <div class="row mt-5">
                 <div class="col-6 text-center">
                     <hr class="mx-auto" style="width: 80%;">
-                    <p><strong>Issued By:</strong> {{ payment.confirmed_by.staff_profile.staff.get_full_name|default:payment.confirmed_by.username }}</p>
+                    <p><strong>Issued By:</strong> {{ payment.confirmed_by }}</p>
                 </div>
                 <div class="col-6 text-center">
                      <hr class="mx-auto" style="width: 80%;">
@@ -73,7 +73,7 @@
 
         <div class="text-center mt-4 no-print">
             <button class="btn btn-primary" onclick="window.print();"><i class="bi bi-printer"></i> Print Receipt</button>
-            <a href="javascript:history.back()" class="btn btn-secondary">Go Back</a>
+            <a onclick="window.close()" class="btn btn-secondary">Go Back</a>
         </div>
     </div>
 </body>
