@@ -96,116 +96,35 @@ class StaffListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         return StaffModel.objects.all().order_by('first_name')
 
 
-@method_decorator(non_atomic_requests, name='dispatch')
+@method_decorator(transaction.non_atomic_requests, name='dispatch')
 class StaffCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = StaffModel
     permission_required = 'human_resource.add_staffmodel'
     form_class = StaffForm
     template_name = 'human_resource/staff/create.html'
 
-    def get_success_url(self):
-        # self.object is set in form_valid before redirecting
-        return reverse('staff_detail', kwargs={'pk': self.object.pk})
-
-    def _send_credentials_and_set_messages(self, staff, username, password):
-        """
-        Handles sending email and setting the appropriate success/warning message.
-        This method is only called after the database transaction is successful.
-        """
-        # Only attempt to send an email if one was provided.
-        if staff.email:
-            if _send_credentials_email(staff, username, password):
-                messages.success(self.request,
-                                 f"Staff '{staff}' created and credentials sent to {staff.email}.")
-            else:
-                messages.warning(self.request,
-                                 f"Staff '{staff}' created, but failed to send credentials via email.")
-        else:
-            # If no email, just show a success message without mentioning credentials.
-            messages.success(self.request, f"Staff '{staff}' created successfully (no email provided for credentials).")
-
     def form_valid(self, form):
         """
-        Creates Staff, User, and Profile in a transaction.
-        Sends email after successful commit.
+        The view's only job now is to save the form.
+        The post_save signal will handle the User and Profile creation automatically.
         """
         try:
-            # Use atomic block for database operations only
-            with transaction.atomic():
-                # Prepare the staff instance
-                staff_instance = form.save(commit=False)
+            # Save the staff instance. The signal will trigger after this.
+            self.object = form.save()
 
-                # Generate staff_id if needed
-                if not staff_instance.staff_id:
-                    staff_instance.staff_id = staff_instance.generate_unique_staff_id()
-
-                username = staff_instance.staff_id
-
-                # Check if username already exists
-                if User.objects.filter(username=username).exists():
-                    raise ValueError(f"Username {username} already exists")
-
-                # Check if email already exists
-                if staff_instance.email and User.objects.filter(email=staff_instance.email).exists():
-                    raise ValueError(f"Email {staff_instance.email} already exists")
-
-                # Generate password
-                password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-
-                # Create user
-                user_fields = {
-                    'username': username,
-                    'password': password,
-                    'first_name': staff_instance.first_name,
-                    'last_name': staff_instance.staff_id,
-                }
-                if staff_instance.email:
-                    user_fields['email'] = staff_instance.email
-
-                user = User.objects.create_user(**user_fields)
-
-                # Save staff with skip flag
-                staff_instance.save(skip_user_sync=True)
-
-                # Create profile
-                StaffProfileModel.objects.create(
-                    user=user,
-                    staff=staff_instance,
-                    default_password=password
-                )
-
-                # Add to group
-                if staff_instance.group:
-                    staff_instance.group.user_set.add(user)
-
-                # Set for redirect
-                self.object = staff_instance
-
-            # Transaction committed successfully - now send email
-            self._send_credentials_and_set_messages(staff_instance, username, password)
+            messages.success(self.request, (
+                f"Staff '{self.object}' created successfully. "
+                "If an email was provided, their login credentials have been sent."
+            ))
             return HttpResponseRedirect(self.get_success_url())
-
-        except ValueError as e:
-            # Custom validation errors
-            messages.error(self.request, str(e))
-            return self.form_invalid(form)
-
-        except IntegrityError as e:
-            # Database constraint violations
-            logger.exception("IntegrityError during staff creation")
-            if 'username' in str(e).lower():
-                messages.error(self.request, f"Staff ID already exists in the system.")
-            elif 'email' in str(e).lower():
-                messages.error(self.request, "Email address already exists in the system.")
-            else:
-                messages.error(self.request, "A database error occurred. Please check for duplicates.")
-            return self.form_invalid(form)
-
         except Exception as e:
-            # Catch-all for other errors
-            logger.exception("Unexpected error during staff creation")
             messages.error(self.request, f"An unexpected error occurred: {str(e)}")
             return self.form_invalid(form)
+
+    def get_success_url(self):
+        # Redirect to the detail page of the newly created staff member
+        return reverse('staff_detail', kwargs={'pk': self.object.pk})
+
 
 
 class StaffDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):

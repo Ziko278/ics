@@ -513,7 +513,6 @@
             </li>
             {% endif %}
 
-        {% if 'finance.add_salaryrecord' in perms or 'finance.view_salaryrecord' in perms %}
             <li class="nav-item">
                 <a class="nav-link collapsed" data-bs-target="#sal" data-bs-toggle="collapse" href="#">
                     <i class="bi bi-cash-stack"></i><span>Salary Management</span><i class="bi bi-chevron-down ms-auto"></i>
@@ -570,7 +569,7 @@
                     {% endif %}
                 </ul>
             </li>
-            {% endif %}
+
 
         {% if 'cafeteria.view_mealcollectionmodel' in perms or 'cafeteria.view_cafeteriasettingmodel' in perms %}
         <li class="nav-item">
@@ -615,7 +614,6 @@
         </li>
         {% endif %}
 
-       {% if 'human_resource.add_staffmodel' in perms or 'human_resource.view_staffmodel' in perms or 'auth.add_group' in perms %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#hr" data-bs-toggle="collapse" href="#">
                 <i class="bi bi-people"></i><span>Human Resource</span><i class="bi bi-chevron-down ms-auto"></i>
@@ -648,13 +646,11 @@
                 </li>
                 {% endif %}
 
-                {% if 'human_resource.view_staffmodel' in perms %}
                 <li>
                     <a href="{% url 'staff_profile' %}">
                         <i class="bi bi-circle"></i><span>My Profile</span>
                     </a>
                 </li>
-                {% endif %}
 
                 {% if 'auth.add_group' in perms %}
                 <li>
@@ -674,7 +670,7 @@
 
             </ul>
         </li>
-        {% endif %}
+
 
         {% if 'admin_site.change_schoolinfomodel' in perms or 'admin_site.change_schoolsettingmodel' in perms or 'admin_site.add_classesmodel' in perms %}
             <li class="nav-item">

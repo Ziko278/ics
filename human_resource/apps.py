@@ -7,3 +7,4 @@ class HumanResourceConfig(AppConfig):
 
     def ready(self):
         import human_resource.signals
+
