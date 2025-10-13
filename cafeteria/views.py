@@ -1,7 +1,7 @@
 import csv
 from datetime import date
 
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Q
 from django.http import JsonResponse, HttpResponse
 from django.template.loader import get_template
@@ -42,7 +42,7 @@ class FlashFormErrorsMixin:
 # ===================================================================
 class MealListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = MealModel
-    permission_required = 'cafeteria.view_mealmodel'
+    permission_required = 'cafeteria.view_cafeteriasettingmodel'
     template_name = 'cafeteria/meal/index.html'
     context_object_name = 'meals'
 
@@ -55,7 +55,7 @@ class MealListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class MealCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
     model = MealModel
-    permission_required = 'cafeteria.add_mealmodel'
+    permission_required = 'cafeteria.add_cafeteriasettingmodel'
     form_class = MealForm
 
     def get_success_url(self):
@@ -74,7 +74,7 @@ class MealCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormError
 
 class MealUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = MealModel
-    permission_required = 'cafeteria.change_mealmodel'
+    permission_required = 'cafeteria.add_cafeteriasettingmodel'
     form_class = MealForm
 
     def get_success_url(self):
@@ -92,7 +92,7 @@ class MealUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormError
 
 class MealDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = MealModel
-    permission_required = 'cafeteria.delete_mealmodel'
+    permission_required = 'cafeteria.add_cafeteriasettingmodel'
     template_name = 'cafeteria/meal/delete.html'
     success_url = reverse_lazy('cafeteria_meal_list')
 
@@ -150,7 +150,7 @@ class CafeteriaSettingUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Up
     Handles updating the existing cafeteria settings object.
     """
     model = CafeteriaSettingModel
-    permission_required = 'cafeteria.change_cafeteriasettingmodel'
+    permission_required = 'cafeteria.add_cafeteriasettingmodel'
     form_class = CafeteriaSettingForm
     template_name = 'cafeteria/setting/create.html'
     success_url = reverse_lazy('cafeteria_settings_detail')
@@ -346,6 +346,8 @@ class MealCollectionHistoryView(LoginRequiredMixin, PermissionRequiredMixin, Lis
 # ==============================================================================
 # HELPER FUNCTION (to avoid repeating code)
 # ==============================================================================
+@login_required
+@permission_required("cafeteria.view_cafeteriasettingmodel", raise_exception=True)
 def get_paid_cafeteria_students(class_id=None, section_id=None):
     """
     A reusable function to query for students who have paid the cafeteria fee.
@@ -393,6 +395,7 @@ def get_paid_cafeteria_students(class_id=None, section_id=None):
 # MAIN VIEW
 # ==============================================================================
 @login_required
+@permission_required("cafeteria.view_cafeteriasettingmodel", raise_exception=True)
 def paid_cafeteria_students_report(request):
     """
     Displays a filterable list of students who have paid the cafeteria fee.
@@ -420,6 +423,7 @@ def paid_cafeteria_students_report(request):
 # EXPORT VIEWS
 # ==============================================================================
 @login_required
+@permission_required("cafeteria.view_cafeteriasettingmodel", raise_exception=True)
 def export_paid_students_pdf(request):
     """Exports the filtered list of paid students to a PDF file."""
     class_id = request.GET.get('class')
@@ -443,6 +447,7 @@ def export_paid_students_pdf(request):
 
 
 @login_required
+@permission_required("cafeteria.view_cafeteriasettingmodel", raise_exception=True)
 def export_paid_students_excel(request):
     """Exports the filtered list of paid students to an Excel (CSV) file."""
     class_id = request.GET.get('class')

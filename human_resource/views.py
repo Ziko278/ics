@@ -1,12 +1,14 @@
+import io
 import logging
 import random
 import string
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.files.storage import FileSystemStorage
 from django.db import transaction, IntegrityError
 from django.db.models import Count
 from django.db.transaction import non_atomic_requests
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
@@ -20,6 +22,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
+from xlsxwriter import Workbook
 
 from .models import StaffModel, StaffProfileModel, HRSettingModel
 from .forms import StaffForm, GroupForm, HRSettingForm, StaffUploadForm, StaffProfileUpdateForm
@@ -147,7 +150,7 @@ class StaffCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
                     raise ValueError(f"Email {staff_instance.email} already exists")
 
                 # Generate password
-                password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 
                 # Create user
                 user_fields = {
@@ -214,7 +217,7 @@ class StaffDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
 
 class StaffUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = StaffModel
-    permission_required = 'human_resource.change_staffmodel'
+    permission_required = 'human_resource.add_staffmodel'
     form_class = StaffForm
     template_name = 'human_resource/staff/edit.html'
     success_message = 'Staff Information Successfully Updated'
@@ -269,7 +272,7 @@ class StaffDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
 # Staff Account Actions
 # -------------------------
 @login_required
-@permission_required("human_resource.change_staffmodel", raise_exception=True)
+@permission_required("human_resource.add_staffmodel", raise_exception=True)
 def generate_staff_login(request, pk):
     """
     Creates a user account for an existing staff member if they don't have one.
@@ -313,7 +316,7 @@ def generate_staff_login(request, pk):
 
 
 @login_required
-@permission_required("human_resource.change_staffmodel", raise_exception=True)
+@permission_required("human_resource.add_staffmodel", raise_exception=True)
 def update_staff_login(request, pk):
     staff = get_object_or_404(StaffModel, pk=pk)
     try:
@@ -342,7 +345,7 @@ def update_staff_login(request, pk):
 
 
 @login_required
-@permission_required("human_resource.change_staffmodel", raise_exception=True)
+@permission_required("human_resource.add_staffmodel", raise_exception=True)
 def disable_staff(request, pk):
     staff = get_object_or_404(StaffModel, pk=pk)
     staff.status = 'inactive'
@@ -360,7 +363,7 @@ def disable_staff(request, pk):
 
 
 @login_required
-@permission_required("human_resource.change_staffmodel", raise_exception=True)
+@permission_required("human_resource.add_staffmodel", raise_exception=True)
 def enable_staff(request, pk):
     staff = get_object_or_404(StaffModel, pk=pk)
     staff.status = 'active'
@@ -382,7 +385,7 @@ def enable_staff(request, pk):
 # -------------------------
 class GroupListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = Group
-    permission_required = 'auth.view_group'
+    permission_required = 'auth.add_group'
     template_name = 'human_resource/group/index.html'
     context_object_name = "group_list"
 
@@ -409,7 +412,7 @@ class GroupCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErro
 
 class GroupUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = Group
-    permission_required = 'auth.change_group'
+    permission_required = 'auth.add_group'
     form_class = GroupForm
     success_message = 'Permission Group Updated Successfully'
 
@@ -445,7 +448,7 @@ class GroupUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErro
 
 class GroupDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = Group
-    permission_required = 'auth.delete_group'
+    permission_required = 'auth.add_group'
     template_name = 'human_resource/group/delete.html'
     context_object_name = "group"
     success_message = 'Group Successfully Deleted'
@@ -503,12 +506,11 @@ def group_permission_view(request, pk):
     return render(request, 'human_resource/group/permission.html', context)
 
 
-
 # -------------------------
 # HR Setting Views (Singleton)
 # -------------------------
 class HRSettingDetailView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
-    permission_required = 'human_resource.view_hrsettingmodel'
+    permission_required = 'human_resource.change_hrsettingmodel'
     template_name = 'human_resource/setting/detail.html'
 
     def get_context_data(self, **kwargs):
@@ -519,7 +521,7 @@ class HRSettingDetailView(LoginRequiredMixin, PermissionRequiredMixin, TemplateV
 
 class HRSettingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = HRSettingModel
-    permission_required = 'human_resource.add_hrsettingmodel'
+    permission_required = 'human_resource.change_hrsettingmodel'
     form_class = HRSettingForm
     template_name = 'human_resource/setting/create.html'
     success_message = 'HR Settings Created Successfully'
@@ -548,6 +550,7 @@ class HRSettingUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateVie
 
 
 @login_required
+@permission_required("human_resource.add_staffmodel", raise_exception=True)
 def staff_upload_view(request):
     """
     Handles the file upload form and initiates the background task for processing.
@@ -579,6 +582,7 @@ def staff_upload_view(request):
 
 
 @login_required
+@permission_required("human_resource.view_staffmodel", raise_exception=True)
 def hr_dashboard_view(request):
     """
     Displays a dashboard with key statistics about the staff.
@@ -625,3 +629,81 @@ def staff_profile_view(request):
         'staff': staff
     }
     return render(request, 'human_resource/staff/profile.html', context)
+
+
+# human_resource/views.py
+
+@login_required
+@permission_required("human_resource.view_staffmodel", raise_exception=True)
+def export_all_staff_view(request):
+    """
+    Exports a list of all staff with their login credentials (excluding current password) to an Excel file.
+    """
+    staff_list = StaffModel.objects.select_related(
+        'staff_profile__user'
+    ).prefetch_related('staff_profile__user__groups').order_by('last_name', 'first_name')
+
+    if not staff_list.exists():
+        messages.warning(request, "No staff members found to export.")
+        return redirect(request.META.get('HTTP_REFERER', 'some_default_url_name'))
+
+    output = io.BytesIO()
+    workbook = Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet("Staff List")
+
+    # ADDED 'Default Password' to the headers
+    headers = ['Staff ID', 'Full Name', 'Username', 'Default Password', 'Role(s)', 'Email', 'Mobile']
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#D3D3D3'})
+    for col_num, header in enumerate(headers):
+        worksheet.write(0, col_num, header, header_format)
+
+    # Write data rows
+    for row_num, staff in enumerate(staff_list, 1):
+        # Initialize variables with default values from the StaffModel
+        full_name = f"{staff.first_name} {staff.last_name}"
+        username = 'N/A'
+        default_password = 'N/A' # Initialize password field
+        roles = 'N/A'
+        email = staff.email or 'N/A'
+
+        # Try to get more accurate data from the linked User and Profile
+        try:
+            profile = staff.staff_profile
+            user = profile.user
+
+            full_name = user.get_full_name()
+            username = user.username
+            email = user.email
+            roles = ', '.join([group.name for group in user.groups.all()])
+
+            # FETCH THE SAVED DEFAULT PASSWORD
+            default_password = profile.default_password
+
+        except ObjectDoesNotExist:
+            # This block runs if a staff member exists but has no user account linked yet.
+            # The initial default values will be used.
+            pass
+
+        worksheet.write(row_num, 0, staff.staff_id)
+        worksheet.write(row_num, 1, full_name)
+        worksheet.write(row_num, 2, username)
+        # WRITE THE PASSWORD TO THE NEW COLUMN
+        worksheet.write(row_num, 3, default_password)
+        worksheet.write(row_num, 4, roles)
+        worksheet.write(row_num, 5, email)
+        worksheet.write(row_num, 6, staff.mobile or 'N/A')
+
+    # Auto-fit columns for better readability
+    worksheet.autofit()
+
+    workbook.close()
+    output.seek(0)
+
+    filename = "All-Staff-Credentials.xlsx"
+    response = HttpResponse(
+        output.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response['Content-Disposition'] = f"attachment; filename={filename}"
+    return response
+

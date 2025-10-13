@@ -66,7 +66,7 @@ class CategoryListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     the form instance needed for the 'Add New' modal.
     """
     model = CategoryModel
-    permission_required = 'inventory.view_categorymodel'
+    permission_required = 'inventory.view_itemmodel'
     template_name = 'inventory/category/index.html'
     context_object_name = 'categories'
 
@@ -87,7 +87,7 @@ class CategoryCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
     requests from the modal form on the category list page.
     """
     model = CategoryModel
-    permission_required = 'inventory.add_categorymodel'
+    permission_required = 'inventory.add_itemmodel'
     form_class = CategoryForm
     template_name = 'inventory/category/index.html'  # Required for error redirect context
 
@@ -112,7 +112,7 @@ class CategoryUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
     requests from the modal form on the category list page.
     """
     model = CategoryModel
-    permission_required = 'inventory.change_categorymodel'
+    permission_required = 'inventory.add_itemmodel'
     form_class = CategoryForm
     template_name = 'inventory/category/index.html'  # Required for error redirect context
 
@@ -136,7 +136,7 @@ class CategoryDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView
     is handled by a modal on the list page.
     """
     model = CategoryModel
-    permission_required = 'inventory.delete_categorymodel'
+    permission_required = 'inventory.delete_itemmodel'
     template_name = 'inventory/category/delete.html'  # For the confirmation modal content
     success_url = reverse_lazy('inventory_category_list')
     context_object_name = 'category'
@@ -153,14 +153,14 @@ class CategoryDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView
 
 class SupplierListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = SupplierModel
-    permission_required = 'inventory.view_suppliermodel'
+    permission_required = 'inventory.view_itemmodel'
     template_name = 'inventory/supplier/index.html'
     context_object_name = 'suppliers'
 
 
 class SupplierDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = SupplierModel
-    permission_required = 'inventory.view_suppliermodel'
+    permission_required = 'inventory.view_itemmodel'
     template_name = 'inventory/supplier/detail.html'
     context_object_name = 'supplier'
 
@@ -175,7 +175,7 @@ class SupplierDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView
 
 class SupplierCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, CreateView):
     model = SupplierModel
-    permission_required = 'inventory.add_suppliermodel'
+    permission_required = 'inventory.add_itemmodel'
     form_class = SupplierForm
     template_name = 'inventory/supplier/create.html'
     success_message = "Supplier '%(name)s' was created successfully."
@@ -188,7 +188,7 @@ class SupplierCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMes
 
 class SupplierUpdateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, UpdateView):
     model = SupplierModel
-    permission_required = 'inventory.change_suppliermodel'
+    permission_required = 'inventory.add_itemmodel'
     form_class = SupplierForm
     template_name = 'inventory/supplier/update.html'
     success_message = "Supplier '%(name)s' was updated successfully."
@@ -197,7 +197,7 @@ class SupplierUpdateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMes
 
 class SupplierDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, DeleteView):
     model = SupplierModel
-    permission_required = 'inventory.delete_suppliermodel'
+    permission_required = 'inventory.delete_itemmodel'
     template_name = 'inventory/supplier/delete.html'
     success_message = "Supplier was deleted successfully."
     success_url = reverse_lazy('inventory_supplier_list')
@@ -267,7 +267,7 @@ class ItemCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessage
 
 class ItemUpdateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, UpdateView):
     model = ItemModel
-    permission_required = 'inventory.change_itemmodel'
+    permission_required = 'inventory.add_itemmodel'
     form_class = ItemUpdateForm  # Use the form that makes quantity read-only
     template_name = 'inventory/item/update.html'
     success_message = "Item '%(name)s' was updated successfully."
@@ -287,12 +287,9 @@ class ItemDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessage
     success_url = reverse_lazy('inventory_item_list')
 
 
-
 # ===================================================================
 # AJAX Views for Barcode Scanning
 # ===================================================================
-
-
 class ItemBarcodeScanAjaxView(LoginRequiredMixin, View):
     """
     An AJAX endpoint to find an item by its barcode and return its detail URL.
@@ -315,15 +312,12 @@ class ItemBarcodeScanAjaxView(LoginRequiredMixin, View):
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
-
 # ===================================================================
 # Purchase Order Views (Models 5 & 6)
 # ===================================================================
-
-
 class PurchaseOrderListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = PurchaseOrderModel
-    permission_required = 'inventory.view_purchaseordermodel'
+    permission_required = 'inventory.view_inventorycollectionmodel'
     template_name = 'inventory/purchase_order/index.html'
     context_object_name = 'purchase_orders'
     paginate_by = 20
@@ -384,7 +378,7 @@ class PurchaseOrderListView(LoginRequiredMixin, PermissionRequiredMixin, ListVie
 
 class PurchaseOrderCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, CreateView):
     model = PurchaseOrderModel
-    permission_required = 'inventory.add_purchaseordermodel'
+    permission_required = 'inventory.add_inventorycollectionmodel'
     form_class = PurchaseOrderCreateForm
     template_name = 'inventory/purchase_order/create.html'
     success_message = "Purchase Order created successfully. You can now add items."
@@ -400,7 +394,7 @@ class PurchaseOrderCreateView(LoginRequiredMixin, PermissionRequiredMixin, Succe
 
 class PurchaseOrderDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = PurchaseOrderModel
-    permission_required = 'inventory.view_purchaseordermodel'
+    permission_required = 'inventory.view_inventorycollectionmodel'
     template_name = 'inventory/purchase_order/detail.html'
     context_object_name = 'po'
 
@@ -414,7 +408,7 @@ class PurchaseOrderItemCreateView(LoginRequiredMixin, PermissionRequiredMixin, C
     """Handles adding a new item to a PO via POST from the detail page."""
     model = PurchaseOrderItemModel
     form_class = PurchaseOrderItemForm
-    permission_required = 'inventory.add_purchaseorderitemmodel'
+    permission_required = 'inventory.add_inventorycollectionmodel'
 
     def form_valid(self, form):
         purchase_order = get_object_or_404(PurchaseOrderModel, pk=self.kwargs['po_pk'])
@@ -434,7 +428,7 @@ class PurchaseOrderItemCreateView(LoginRequiredMixin, PermissionRequiredMixin, C
 class PurchaseOrderItemDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     """Handles deleting an item from a PO."""
     model = PurchaseOrderItemModel
-    permission_required = 'inventory.delete_purchaseorderitemmodel'
+    permission_required = 'inventory.add_inventorycollectionmodel'
 
     def get_success_url(self):
         purchase_order_pk = self.object.purchase_order.pk
@@ -477,7 +471,7 @@ class PurchaseOrderStatusUpdateView(LoginRequiredMixin, PermissionRequiredMixin,
     Handles updating the status of a Purchase Order, including submitting
     and reverting back to draft.
     """
-    permission_required = 'inventory.change_purchaseordermodel'
+    permission_required = 'inventory.add_inventorycollectionmodel'
 
     def post(self, request, *args, **kwargs):
         po = get_object_or_404(PurchaseOrderModel, pk=self.kwargs.get('pk'))
@@ -675,7 +669,7 @@ class StockOutCreateView(LoginRequiredMixin, PermissionRequiredMixin, View):
     Handles the creation of a StockOut record by correctly calling the
     FIFO service function.
     """
-    permission_required = 'inventory.add_stockoutmodel'
+    permission_required = 'inventory.add_stockinmodel'
 
     def post(self, request, *args, **kwargs):
         item = get_object_or_404(ItemModel, pk=self.kwargs.get('item_pk'))
@@ -716,7 +710,7 @@ class StockOutListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     Lists all historical Stock Out records with full search and filtering capabilities.
     """
     model = StockOutModel
-    permission_required = 'inventory.view_stockoutmodel'
+    permission_required = 'inventory.view_stockinmodel'
     template_name = 'inventory/stock_out/index.html'
     context_object_name = 'stock_out_records'
     paginate_by = 20
@@ -794,7 +788,7 @@ class StockTransferListView(LoginRequiredMixin, PermissionRequiredMixin, ListVie
     Lists all historical Stock Transfer batches with full search and filtering.
     """
     model = StockTransferModel
-    permission_required = 'inventory.view_stocktransfermodel'
+    permission_required = 'inventory.view_stockinmodel'
     template_name = 'inventory/stock_transfer/index.html'
     context_object_name = 'transfer_batches'
     paginate_by = 20
@@ -854,7 +848,7 @@ class StockTransferListView(LoginRequiredMixin, PermissionRequiredMixin, ListVie
 class StockTransferDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     """Shows the details and items of a single Stock Transfer batch."""
     model = StockTransferModel
-    permission_required = 'inventory.view_stocktransfermodel'
+    permission_required = 'inventory.view_stockinmodel'
     template_name = 'inventory/stock_transfer/detail.html'
     context_object_name = 'batch'
 
@@ -863,7 +857,7 @@ class StockTransferCreateView(LoginRequiredMixin, PermissionRequiredMixin, Creat
     """Handles the creation of a multi-item stock transfer via a dynamic "cart"."""
     model = StockTransferModel
     form_class = StockTransferCreateForm
-    permission_required = 'inventory.add_stocktransfermodel'
+    permission_required = 'inventory.add_stockinmodel'
     template_name = 'inventory/stock_transfer/create.html'
 
     def form_valid(self, form):
@@ -927,7 +921,7 @@ class ItemSearchForTransferAjaxView(LoginRequiredMixin, View):
 
 class PurchaseAdvanceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = PurchaseAdvanceModel
-    permission_required = 'inventory.view_purchaseadvancemodel'
+    permission_required = 'inventory.view_inventorycollectionmodel'
     template_name = 'inventory/purchase_advance/index.html'
     context_object_name = 'purchase_advances'
     paginate_by = 20
@@ -976,7 +970,7 @@ class PurchaseAdvanceListView(LoginRequiredMixin, PermissionRequiredMixin, ListV
 
 class PurchaseAdvanceCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, CreateView):
     model = PurchaseAdvanceModel
-    permission_required = 'inventory.add_purchaseadvancemodel'
+    permission_required = 'inventory.add_inventorycollectionmodel'
     form_class = PurchaseAdvanceCreateForm
     template_name = 'inventory/purchase_advance/create.html'
     success_message = "Purchase Advance created successfully. You can now add items."
@@ -991,7 +985,7 @@ class PurchaseAdvanceCreateView(LoginRequiredMixin, PermissionRequiredMixin, Suc
 
 class PurchaseAdvanceDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = PurchaseAdvanceModel
-    permission_required = 'inventory.view_purchaseadvancemodel'
+    permission_required = 'inventory.view_inventorycollectionmodel'
     template_name = 'inventory/purchase_advance/detail.html'
     context_object_name = 'advance'
 
@@ -1004,7 +998,7 @@ class PurchaseAdvanceDetailView(LoginRequiredMixin, PermissionRequiredMixin, Det
 class PurchaseAdvanceItemCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = PurchaseAdvanceItemModel
     form_class = PurchaseAdvanceItemForm
-    permission_required = 'inventory.add_purchaseadvanceitemmodel'
+    permission_required = 'inventory.add_inventorycollectionmodel'
 
     def form_valid(self, form):
         advance = get_object_or_404(PurchaseAdvanceModel, pk=self.kwargs['advance_pk'])
@@ -1025,7 +1019,7 @@ class PurchaseAdvanceItemCreateView(LoginRequiredMixin, PermissionRequiredMixin,
 
 class PurchaseAdvanceItemDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = PurchaseAdvanceItemModel
-    permission_required = 'inventory.delete_purchaseadvanceitemmodel'
+    permission_required = 'inventory.add_inventorycollectionmodel'
 
     def get_success_url(self):
         advance_pk = self.object.advance.pk
@@ -1034,7 +1028,7 @@ class PurchaseAdvanceItemDeleteView(LoginRequiredMixin, PermissionRequiredMixin,
 
 
 class PurchaseAdvanceStatusUpdateView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    permission_required = 'inventory.change_purchaseadvancemodel'
+    permission_required = 'inventory.add_inventorycollectionmodel'
 
     def post(self, request, *args, **kwargs):
         advance = get_object_or_404(PurchaseAdvanceModel, pk=self.kwargs.get('pk'))
@@ -1556,6 +1550,7 @@ def api_barcode_lookup(request):
 
 
 @login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
 def assignment_list_view(request):
     """View all inventory assignments and initiate collection generation"""
     assignments = InventoryAssignmentModel.objects.filter(
@@ -1569,6 +1564,7 @@ def assignment_list_view(request):
 
 
 @login_required
+@permission_required("inventory.add_inventorycollectionmodel", raise_exception=True)
 def create_assignment_view(request):
     """Create a new inventory assignment"""
     if request.method == 'POST':
@@ -1630,6 +1626,7 @@ def create_assignment_view(request):
 
 
 @login_required
+@permission_required("inventory.add_inventorycollectionmodel", raise_exception=True)
 def edit_assignment_view(request, assignment_pk):
     """Edit an existing assignment"""
     assignment = get_object_or_404(InventoryAssignmentModel, pk=assignment_pk)
@@ -1669,6 +1666,7 @@ def edit_assignment_view(request, assignment_pk):
 
 
 @login_required
+@permission_required("inventory.add_inventorycollectionmodel", raise_exception=True)
 def delete_assignment_view(request, assignment_pk):
     """Deactivate an assignment"""
     assignment = get_object_or_404(InventoryAssignmentModel, pk=assignment_pk)
@@ -1685,6 +1683,7 @@ def delete_assignment_view(request, assignment_pk):
 
 
 @login_required
+@permission_required("inventory.add_inventorycollectionmodel", raise_exception=True)
 def generate_collections_view(request, assignment_pk):
     """Initiate background job to generate collections for an assignment"""
     assignment = get_object_or_404(InventoryAssignmentModel, pk=assignment_pk)
@@ -1717,6 +1716,7 @@ def generate_collections_view(request, assignment_pk):
 # ==================== JOB MONITORING VIEWS ====================
 
 @login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
 def collection_job_status_view(request, job_id):
     """Monitor the progress of a collection generation job"""
     job = get_object_or_404(CollectionGenerationJob, job_id=job_id)
@@ -1728,6 +1728,7 @@ def collection_job_status_view(request, job_id):
 
 
 @login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
 def collection_job_status_ajax(request, job_id):
     """AJAX endpoint to get real-time job progress"""
     job = get_object_or_404(CollectionGenerationJob, job_id=job_id)
@@ -1747,6 +1748,7 @@ def collection_job_status_ajax(request, job_id):
 # ==================== STUDENT SEARCH VIEWS ====================
 
 @login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
 def student_collection_search_view(request):
     """Search page to find students and access their collections"""
     # Get all classes for dropdown
@@ -1860,6 +1862,7 @@ def ajax_get_students_by_reg_no(request):
 # ==================== COLLECTION MANAGEMENT VIEWS ====================
 
 @login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
 def student_collection_dashboard_view(request, student_pk):
     """View a student's inventory collections"""
     student = get_object_or_404(StudentModel, pk=student_pk)
@@ -1895,6 +1898,7 @@ def student_collection_dashboard_view(request, student_pk):
 
 
 @login_required
+@permission_required("inventory.add_inventorycollectionmodel", raise_exception=True)
 def process_collection_view(request, collection_pk):
     """Process/update a collection (mark as collected, partial collection, etc.)"""
     collection = get_object_or_404(InventoryCollectionModel, pk=collection_pk)
@@ -1956,6 +1960,7 @@ def process_collection_view(request, collection_pk):
 
 
 @login_required
+@permission_required("inventory.add_inventorycollectionmodel", raise_exception=True)
 def create_direct_collection_view(request, student_pk):
     """Allow student to purchase/collect items not assigned to them - STANDALONE PURCHASE"""
     student = get_object_or_404(StudentModel, pk=student_pk)

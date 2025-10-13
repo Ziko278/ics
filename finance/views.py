@@ -72,7 +72,7 @@ class FinanceSettingCreateView(LoginRequiredMixin, PermissionRequiredMixin, Succ
     This view will only be accessible if no settings object exists.
     """
     model = FinanceSettingModel
-    permission_required = 'finance.add_financesettingmodel'
+    permission_required = 'finance.change_financesettingmodel'
     form_class = FinanceSettingForm
     template_name = 'finance/setting/create.html'
     success_message = 'Finance Settings Created Successfully'
@@ -117,7 +117,7 @@ class SupplierAccountsListView(LoginRequiredMixin, PermissionRequiredMixin, List
     that require payment, showing their financial status.
     """
     model = PurchaseOrderModel
-    permission_required = 'finance.view_supplierpaymentmodel'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/supplier_payment/accounts_payable_list.html'
     context_object_name = 'purchase_orders'
     paginate_by = 20
@@ -160,7 +160,7 @@ class SupplierAccountDetailView(LoginRequiredMixin, PermissionRequiredMixin, Cre
     """
     model = SupplierPaymentModel
     form_class = SupplierPaymentForm
-    permission_required = 'finance.add_supplierpaymentmodel'
+    permission_required = 'finance.add_expensemodel'
     template_name = 'finance/supplier_payment/po_payment_detail.html'
 
     def get_form_kwargs(self):
@@ -195,7 +195,7 @@ class SupplierAccountDetailView(LoginRequiredMixin, PermissionRequiredMixin, Cre
 
 class SupplierPaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Handles reverting a 'Completed' payment to 'Reverted' status."""
-    permission_required = 'finance.change_supplierpaymentmodel'
+    permission_required = 'finance.add_expensemodel'
 
     def post(self, request, *args, **kwargs):
         payment = get_object_or_404(SupplierPaymentModel, pk=self.kwargs['pk'])
@@ -214,15 +214,13 @@ class SupplierPaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, Vie
         return redirect('finance_all_payments_list')  # Fallback redirect
 
 
-# In finance/views.py
-
 class AllSupplierPaymentsListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     """
     SECONDARY VIEW: Provides a comprehensive, filterable log of all
     individual supplier payment transactions for auditing purposes.
     """
     model = SupplierPaymentModel
-    permission_required = 'finance.view_supplierpaymentmodel'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/supplier_payment/all_payments_list.html'
     context_object_name = 'payments'
     paginate_by = 25
@@ -279,7 +277,7 @@ class SupplierPaymentReceiptView(LoginRequiredMixin, PermissionRequiredMixin, De
     Displays a printable receipt for a single supplier payment.
     """
     model = SupplierPaymentModel
-    permission_required = 'finance.view_supplierpaymentmodel'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/supplier_payment/receipt.html'
     context_object_name = 'payment'
 
@@ -287,7 +285,7 @@ class SupplierPaymentReceiptView(LoginRequiredMixin, PermissionRequiredMixin, De
 class PurchaseAdvanceAccountsListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     """Lists approved advances that need payments"""
     model = PurchaseAdvanceModel
-    permission_required = 'finance.view_purchaseadvancepaymentmodel'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/purchase_advance/accounts_list.html'
     context_object_name = 'purchase_advances'
     paginate_by = 20
@@ -326,7 +324,7 @@ class PurchaseAdvancePaymentDetailView(LoginRequiredMixin, PermissionRequiredMix
     """Manages payments for a single Purchase Advance"""
     model = PurchaseAdvancePaymentModel
     form_class = PurchaseAdvancePaymentForm
-    permission_required = 'finance.add_purchaseadvancepaymentmodel'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/purchase_advance/payment_detail.html'
 
     def get_form_kwargs(self):
@@ -391,7 +389,7 @@ class FeeCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrors
 
 class FeeUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = FeeModel
-    permission_required = 'finance.change_feemodel'
+    permission_required = 'finance.add_feemodel'
     form_class = FeeForm
 
     def get_success_url(self):
@@ -409,7 +407,7 @@ class FeeUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrors
 
 class FeeDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = FeeModel
-    permission_required = 'finance.delete_feemodel'
+    permission_required = 'finance.add_feemodel'
     template_name = 'finance/fee/delete.html'
     success_url = reverse_lazy('finance_fee_list')
 
@@ -423,7 +421,7 @@ class FeeDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
 # ===================================================================
 class FeeGroupListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = FeeGroupModel
-    permission_required = 'finance.view_feegroupmodel'
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/fee_group/index.html'
     context_object_name = 'fee_groups'
 
@@ -436,7 +434,7 @@ class FeeGroupListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class FeeGroupCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
     model = FeeGroupModel
-    permission_required = 'finance.add_feegroupmodel'
+    permission_required = 'finance.add_feemodel'
     form_class = FeeGroupForm
 
     def get_success_url(self):
@@ -454,7 +452,7 @@ class FeeGroupCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
 
 class FeeGroupUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = FeeGroupModel
-    permission_required = 'finance.change_feegroupmodel'
+    permission_required = 'finance.add_feemodel'
     form_class = FeeGroupForm
 
     def get_success_url(self):
@@ -472,7 +470,7 @@ class FeeGroupUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
 
 class FeeGroupDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = FeeGroupModel
-    permission_required = 'finance.delete_feegroupmodel'
+    permission_required = 'finance.add_feemodel'
     template_name = 'finance/fee_group/delete.html'
     success_url = reverse_lazy('finance_fee_group_list')
     context_object_name = 'fee_group'
@@ -482,16 +480,13 @@ class FeeGroupDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView
         return super().form_valid(form)
 
 
-
 # ===================================================================
 # Fee Master (Structure)
 # ===================================================================
-
-
 class FeeMasterListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     """Displays a list of all created fee structures."""
     model = FeeMasterModel
-    permission_required = 'finance.view_feemastermodel'
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/fee_master/index.html'
     context_object_name = 'fee_structures'
     paginate_by = 15
@@ -500,7 +495,7 @@ class FeeMasterListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 class FeeMasterCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     """Handles the creation of the main FeeMasterModel header (Step 1)."""
     model = FeeMasterModel
-    permission_required = 'finance.add_feemastermodel'
+    permission_required = 'finance.add_feemodel'
     form_class = FeeMasterCreateForm
     template_name = 'finance/fee_master/create.html'
 
@@ -516,7 +511,7 @@ class FeeMasterCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateVie
 
 # Updated view
 class FeeMasterDetailView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    permission_required = 'finance.change_feemastermodel'
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/fee_master/detail.html'
 
     def get(self, request, *args, **kwargs):
@@ -576,13 +571,14 @@ class FeeMasterDetailView(LoginRequiredMixin, PermissionRequiredMixin, View):
         messages.success(request, "Fee amounts saved successfully!")
         return redirect('finance_fee_master_detail', pk=fee_structure.pk)
 
+
 class FeeMasterUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
     """
     Handles updating the core details of a FeeMasterModel, such as the
     group, fee, and class assignments.
     """
     model = FeeMasterModel
-    permission_required = 'finance.change_feemastermodel'
+    permission_required = 'finance.add_feemodel'
     form_class = FeeMasterCreateForm  # We can reuse the create form for updating
     template_name = 'finance/fee_master/update.html'
     context_object_name = 'fee_structure'
@@ -599,7 +595,7 @@ class FeeMasterUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateVie
 class FeeMasterDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     """Handles the deletion of a FeeMasterModel."""
     model = FeeMasterModel
-    permission_required = 'finance.delete_feemastermodel'
+    permission_required = 'finance.add_feemodel'
     template_name = 'finance/fee_master/delete.html'
     success_url = reverse_lazy('finance_fee_master_list')
 
@@ -614,7 +610,7 @@ class FeeMasterDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteVie
 class InvoiceGenerationView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
     form_class = InvoiceGenerationForm
     template_name = 'finance/invoice/generate.html'
-    permission_required = 'finance.add_invoicemodel'
+    permission_required = 'finance.add_feemodel'
 
     def form_valid(self, form):
         job = form.save(commit=False)
@@ -632,7 +628,7 @@ class InvoiceJobStatusView(LoginRequiredMixin, PermissionRequiredMixin, DetailVi
     model = InvoiceGenerationJob
     template_name = 'finance/invoice/status.html'
     context_object_name = 'job'
-    permission_required = 'finance.view_invoicegenerationjob'
+    permission_required = 'finance.view_feemodel'
 
 
 def invoice_job_status_api(request, pk):
@@ -652,7 +648,7 @@ def invoice_job_status_api(request, pk):
 
 class InvoiceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = InvoiceModel
-    permission_required = 'finance.view_invoicemodel'
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/invoice/index.html'
     context_object_name = 'invoices'
     paginate_by = 20
@@ -737,7 +733,7 @@ class InvoiceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 class InvoiceDetailView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = FeePaymentModel
     form_class = FeePaymentForm
-    permission_required = 'finance.add_feepaymentmodel'
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/invoice/detail.html'
 
     def get_context_data(self, **kwargs):
@@ -772,7 +768,7 @@ class InvoiceDetailView(LoginRequiredMixin, PermissionRequiredMixin, CreateView)
 
 
 class StudentFeeSearchView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
-    permission_required = 'finance.add_feepaymentmodel'
+    permission_required = 'finance.add_feemodel'
     template_name = 'finance/payment/select_student.html'
 
     def get_context_data(self, **kwargs):
@@ -831,7 +827,7 @@ def get_students_by_reg_no_ajax(request):
 
 
 class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
-    permission_required = 'finance.add_feepaymentmodel'
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/payment/student_dashboard.html'
 
     def get_context_data(self, **kwargs):
@@ -919,7 +915,7 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
 
 class InvoiceReceiptView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = InvoiceModel
-    permission_required = 'finance.view_invoicemodel'
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/payment/invoice_receipt.html'
     context_object_name = 'invoice'
 
@@ -932,7 +928,7 @@ class InvoiceReceiptView(LoginRequiredMixin, PermissionRequiredMixin, DetailView
 
 class FeePaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = FeePaymentModel
-    permission_required = 'finance.view_feepaymentmodel'  # Assumes default permission
+    permission_required = 'finance.view_feemodel'  # Assumes default permission
     template_name = 'finance/payment/payment_index.html'
     context_object_name = 'payment_list'
     paginate_by = 25
@@ -993,7 +989,7 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
     across multiple outstanding invoices for a student, oldest first.
     """
     form_class = BulkPaymentForm
-    permission_required = 'finance.add_feepaymentmodel'
+    permission_required = 'finance.add_feemodel'
     template_name = 'finance/payment/bulk_payment_form.html'
 
     def get_context_data(self, **kwargs):
@@ -1047,7 +1043,7 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
 
 class FeePaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Handles reverting a confirmed student fee payment to safely correct errors."""
-    permission_required = 'finance.change_feepaymentmodel'
+    permission_required = 'finance.add_feemodel'
 
     def post(self, request, *args, **kwargs):
         payment = get_object_or_404(FeePaymentModel, pk=self.kwargs['pk'])
@@ -1072,7 +1068,7 @@ class FeePaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, View):
 class FeePaymentReceiptView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     """Displays a printable receipt for a single student fee payment."""
     model = FeePaymentModel
-    permission_required = 'finance.view_feepaymentmodel'
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/payment/receipt.html'
     context_object_name = 'payment'
 
@@ -1084,7 +1080,7 @@ class ExpenseCategoryCreateView(
     LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView
 ):
     model = ExpenseCategoryModel
-    permission_required = 'finance.add_expensecategory'   # keep existing codename (see note below)
+    permission_required = 'finance.add_expensemodel'
     form_class = ExpenseCategoryForm
     template_name = 'finance/expense_category/index.html'
     success_message = 'Expense Category Successfully Created'
@@ -1101,7 +1097,7 @@ class ExpenseCategoryCreateView(
 
 class ExpenseCategoryListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = ExpenseCategoryModel
-    permission_required = 'finance.view_expensecategory'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/expense_category/index.html'
     context_object_name = "category_list"
 
@@ -1118,7 +1114,7 @@ class ExpenseCategoryUpdateView(
     LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView
 ):
     model = ExpenseCategoryModel
-    permission_required = 'finance.change_expensecategory'
+    permission_required = 'finance.add_expensemodel'
     form_class = ExpenseCategoryForm
     template_name = 'finance/expense_category/index.html'
     success_message = 'Expense Category Successfully Updated'
@@ -1134,7 +1130,7 @@ class ExpenseCategoryUpdateView(
 
 class ExpenseCategoryDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = ExpenseCategoryModel
-    permission_required = 'finance.delete_expensecategory'
+    permission_required = 'finance.add_expensemodel'
     template_name = 'finance/expense_category/delete.html'
     context_object_name = "category"
     success_message = 'Expense Category Successfully Deleted'
@@ -1148,7 +1144,7 @@ class ExpenseCategoryDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Del
 # -------------------------
 class ExpenseListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = ExpenseModel
-    permission_required = 'finance.view_expense'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/expense/index.html'
     context_object_name = "expense_list"
     paginate_by = 20
@@ -1192,7 +1188,7 @@ class ExpenseListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class ExpenseCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = ExpenseModel
-    permission_required = 'finance.add_expense'
+    permission_required = 'finance.add_expensemodel'
     form_class = ExpenseForm
     template_name = 'finance/expense/create.html'
     success_message = 'Expense Successfully Created'
@@ -1203,7 +1199,7 @@ class ExpenseCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView)
 
 class ExpenseUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = ExpenseModel
-    permission_required = 'finance.change_expense'
+    permission_required = 'finance.add_expensemodel'
     form_class = ExpenseForm
     template_name = 'finance/expense/edit.html'
     success_message = 'Expense Successfully Updated'
@@ -1214,7 +1210,7 @@ class ExpenseUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormEr
 
 class ExpenseDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = ExpenseModel
-    permission_required = 'finance.view_expense'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/expense/detail.html'
     context_object_name = "expense"
 
@@ -1226,7 +1222,7 @@ class IncomeCategoryCreateView(
     LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView
 ):
     model = IncomeCategoryModel
-    permission_required = 'finance.add_incomecategory'
+    permission_required = 'finance.add_expensemodel'
     form_class = IncomeCategoryForm
     template_name = 'finance/income_category/index.html'
     success_message = 'Income Category Successfully Created'
@@ -1242,7 +1238,7 @@ class IncomeCategoryCreateView(
 
 class IncomeCategoryListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = IncomeCategoryModel
-    permission_required = 'finance.view_incomecategory'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/income_category/index.html'
     context_object_name = "category_list"
 
@@ -1259,7 +1255,7 @@ class IncomeCategoryUpdateView(
     LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView
 ):
     model = IncomeCategoryModel
-    permission_required = 'finance.change_incomecategory'
+    permission_required = 'finance.add_expensemodel'
     form_class = IncomeCategoryForm
     template_name = 'finance/income_category/index.html'
     success_message = 'Income Category Successfully Updated'
@@ -1275,7 +1271,7 @@ class IncomeCategoryUpdateView(
 
 class IncomeCategoryDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = IncomeCategoryModel
-    permission_required = 'finance.delete_incomecategory'
+    permission_required = 'finance.add_expensemodel'
     template_name = 'finance/income_category/delete.html'
     context_object_name = "category"
     success_message = 'Income Category Successfully Deleted'
@@ -1289,7 +1285,7 @@ class IncomeCategoryDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Dele
 # -------------------------
 class IncomeListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = IncomeModel
-    permission_required = 'finance.view_income'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/income/index.html'
     context_object_name = "income_list"
     paginate_by = 20
@@ -1333,7 +1329,7 @@ class IncomeListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class IncomeCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
     model = IncomeModel
-    permission_required = 'finance.add_income'
+    permission_required = 'finance.add_expensemodel'
     form_class = IncomeForm
     template_name = 'finance/income/create.html'
     success_message = 'Income Successfully Created'
@@ -1344,7 +1340,7 @@ class IncomeCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErr
 
 class IncomeUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = IncomeModel
-    permission_required = 'finance.change_income'
+    permission_required = 'finance.add_expensemodel'
     form_class = IncomeForm
     template_name = 'finance/income/edit.html'
     success_message = 'Income Successfully Updated'
@@ -1355,7 +1351,7 @@ class IncomeUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErr
 
 class IncomeDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = IncomeModel
-    permission_required = 'finance.view_income'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/income/detail.html'
     context_object_name = "income"
 
@@ -1365,7 +1361,7 @@ class IncomeDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
 # ===================================================================
 class StaffBankDetailListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = StaffBankDetail
-    permission_required = 'finance.view_staffbankdetail'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/staff_bank/index.html'
     context_object_name = "bank_detail_list"
 
@@ -1381,7 +1377,7 @@ class StaffBankDetailListView(LoginRequiredMixin, PermissionRequiredMixin, ListV
 
 class StaffBankDetailCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
     model = StaffBankDetail
-    permission_required = 'finance.add_staffbankdetail'
+    permission_required = 'finance.add_salaryrecord'
     form_class = StaffBankDetailForm
     success_url = reverse_lazy('finance_staff_bank_detail_list')
 
@@ -1396,7 +1392,7 @@ class StaffBankDetailCreateView(LoginRequiredMixin, PermissionRequiredMixin, Fla
 
 class StaffBankDetailUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = StaffBankDetail
-    permission_required = 'finance.change_staffbankdetail'
+    permission_required = 'finance.add_salaryrecord'
     form_class = StaffBankDetailForm
     success_url = reverse_lazy('finance_staff_bank_detail_list')
 
@@ -1411,7 +1407,7 @@ class StaffBankDetailUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Fla
 
 class StaffBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = StaffBankDetail
-    permission_required = 'finance.delete_staffbankdetail'
+    permission_required = 'finance.add_salaryrecord'
     template_name = 'finance/staff_bank/delete.html'
     context_object_name = "bank_detail"
     success_url = reverse_lazy('finance_staff_bank_detail_list')
@@ -1426,7 +1422,7 @@ class StaffBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Del
 # ===================================================================
 class SchoolBankDetailListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = SchoolBankDetail
-    permission_required = 'finance.view_schoolbankdetail'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/school_bank/index.html'
     context_object_name = "school_bank_detail_list"
 
@@ -1442,7 +1438,7 @@ class SchoolBankDetailListView(LoginRequiredMixin, PermissionRequiredMixin, List
 
 class SchoolBankDetailCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
     model = SchoolBankDetail
-    permission_required = 'finance.add_schoolbankdetail'
+    permission_required = 'finance.add_expensemodel'
     form_class = SchoolBankDetailForm
 
     def get_success_url(self):
@@ -1460,7 +1456,7 @@ class SchoolBankDetailCreateView(LoginRequiredMixin, PermissionRequiredMixin, Fl
 
 class SchoolBankDetailUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = SchoolBankDetail
-    permission_required = 'finance.change_schoolbankdetail'
+    permission_required = 'finance.add_expensemodel'
     form_class = SchoolBankDetailForm
     success_url = reverse_lazy('finance_school_bank_detail_list')
 
@@ -1476,7 +1472,7 @@ class SchoolBankDetailUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Fl
 
 class SchoolBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = SchoolBankDetail
-    permission_required = 'finance.delete_schoolbankdetail'
+    permission_required = 'finance.add_expensemodel'
     template_name = 'finance/school_bank/delete.html'
     context_object_name = "school_bank_detail"
     success_url = reverse_lazy('finance_school_bank_detail_list')
@@ -1491,7 +1487,7 @@ class SchoolBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, De
 # ===================================================================
 class SalaryStructureListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = SalaryStructure
-    permission_required = 'finance.view_salarystructure'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/salary_structure/index.html'
     context_object_name = "salary_structure_list"
 
@@ -1502,7 +1498,7 @@ class SalaryStructureListView(LoginRequiredMixin, PermissionRequiredMixin, ListV
 
 class SalaryStructureCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = SalaryStructure
-    permission_required = 'finance.add_salarystructure'
+    permission_required = 'finance.add_salaryrecord'
     form_class = SalaryStructureForm
     template_name = 'finance/salary_structure/create.html'
 
@@ -1513,7 +1509,7 @@ class SalaryStructureCreateView(LoginRequiredMixin, PermissionRequiredMixin, Cre
 
 class SalaryStructureUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = SalaryStructure
-    permission_required = 'finance.change_salarystructure'
+    permission_required = 'finance.add_salaryrecord'
     form_class = SalaryStructureForm
     template_name = 'finance/salary_structure/edit.html'
 
@@ -1524,14 +1520,14 @@ class SalaryStructureUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Upd
 
 class SalaryStructureDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = SalaryStructure
-    permission_required = 'finance.view_salarystructure'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/salary_structure/detail.html'
     context_object_name = "salary_structure"
 
 
 class SalaryStructureDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = SalaryStructure
-    permission_required = 'finance.delete_salarystructure'
+    permission_required = 'finance.add_salaryrecord'
     template_name = 'finance/salary_structure/delete.html'
     success_url = reverse_lazy('finance_salary_structure_list')
 
@@ -1545,7 +1541,7 @@ class SalaryStructureDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Del
 # ===================================================================
 class SalaryAdvanceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = SalaryAdvance
-    permission_required = 'finance.view_salaryadvance'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/salary_advance/index.html'
     context_object_name = 'advances'
     paginate_by = 15
@@ -1557,7 +1553,7 @@ class SalaryAdvanceListView(LoginRequiredMixin, PermissionRequiredMixin, ListVie
 
 class SalaryAdvanceCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = SalaryAdvance
-    permission_required = 'finance.add_salaryadvance'
+    permission_required = 'finance.add_salaryrecord'
     form_class = SalaryAdvanceForm
     template_name = 'finance/salary_advance/create.html'
 
@@ -1568,14 +1564,14 @@ class SalaryAdvanceCreateView(LoginRequiredMixin, PermissionRequiredMixin, Creat
 
 class SalaryAdvanceDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = SalaryAdvance
-    permission_required = 'finance.view_salaryadvance'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/salary_advance/detail.html'
     context_object_name = 'advance'
 
 
 class SalaryAdvanceActionView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """A single view to handle all status changes for a salary advance."""
-    permission_required = 'finance.change_salaryadvance'
+    permission_required = 'finance.add_salaryrecord'
 
     def post(self, request, *args, **kwargs):
         advance = get_object_or_404(SalaryAdvance, pk=self.kwargs.get('pk'))
@@ -1607,7 +1603,7 @@ class SalaryAdvanceActionView(LoginRequiredMixin, PermissionRequiredMixin, View)
 # ===================================================================
 class StaffLoanListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = StaffLoan
-    permission_required = 'finance.view_staffloan'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/staff_loan/index.html'
     context_object_name = 'loans'
     paginate_by = 15
@@ -1618,7 +1614,7 @@ class StaffLoanListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class StaffLoanCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = StaffLoan
-    permission_required = 'finance.add_staffloan'
+    permission_required = 'finance.add_salaryrecord'
     form_class = StaffLoanForm
     template_name = 'finance/staff_loan/create.html'
 
@@ -1629,13 +1625,13 @@ class StaffLoanCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateVie
 
 class StaffLoanDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = StaffLoan
-    permission_required = 'finance.view_staffloan'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/staff_loan/detail.html'
     context_object_name = 'loan'
 
 
 class StaffLoanActionView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    permission_required = 'finance.change_staffloan'
+    permission_required = 'finance.add_salaryrecord'
 
     def post(self, request, *args, **kwargs):
         loan = get_object_or_404(StaffLoan, pk=self.kwargs.get('pk'))
@@ -1662,7 +1658,7 @@ class StaffLoanActionView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 class StaffLoanDebtorsListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = StaffModel
-    permission_required = 'finance.view_staffloan'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/staff_loan/debtors_list.html'
     context_object_name = 'debtors'
 
@@ -1677,7 +1673,7 @@ class StaffLoanDebtorsListView(LoginRequiredMixin, PermissionRequiredMixin, List
 
 class StaffLoanDebtDetailView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Shows a breakdown of a staff's debt, repayment history, and a repayment form."""
-    permission_required = 'finance.change_staffloan'
+    permission_required = 'finance.view_salaryrecord'
     template_name = 'finance/staff_loan/staff_debt_detail.html'
 
     def get(self, request, *args, **kwargs):
@@ -1710,6 +1706,8 @@ class StaffLoanDebtDetailView(LoginRequiredMixin, PermissionRequiredMixin, View)
         return render(request, self.template_name, context)
 
 
+@login_required
+@permission_required("finance.add_salaryrecord", raise_exception=True)
 @transaction.atomic
 def record_staff_loan_repayment(request, staff_pk):
     if request.method != 'POST':
@@ -1743,7 +1741,7 @@ def record_staff_loan_repayment(request, staff_pk):
 
 
 @login_required
-@permission_required('finance.add_salaryrecord')
+@permission_required("finance.add_salaryrecord", raise_exception=True)
 def process_payroll_view(request):
     # This GET request logic is correct and does not need changes.
     current_year = datetime.now().year
@@ -1946,8 +1944,6 @@ def payroll_dashboard_view(request):
         percent_change = 100 if total_payroll_current > 0 else 0
 
     # --- 2. Charts Data ---
-
-
     # Chart 2: Salary Trend (Line Chart - Last 12 Months)
     twelve_months_ago = today - timedelta(days=365)
     salary_trend = SalaryRecord.objects.filter(paid_date__gte=twelve_months_ago) \
@@ -2150,6 +2146,7 @@ def deposit_create_view(request, student_pk):
 
 
 @login_required
+@permission_required("finance.view_studentfundingmodel", raise_exception=True)
 def deposit_detail_view(request, pk):
     deposit = get_object_or_404(StudentFundingModel, pk=pk)
 
@@ -2294,7 +2291,6 @@ def decline_payment_view(request, payment_id):
         # or just redirect with a message. Assuming redirect for simplicity.
         messages.info(request, "Method Not Supported.")
         return redirect(reverse('pending_deposit_index'))  # Replace with your actual URL name
-
 
 
 @login_required
@@ -2578,7 +2574,7 @@ def finance_dashboard(request):
     ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
     total_income = (total_fee_income + total_funding_income + total_other_income +
-                    total_salary_repayments + total_advance_settlements_income)
+                    total_loan_repayments + total_advance_settlements_income)
 
     # === EXPENSE CALCULATIONS ===
 
@@ -2719,7 +2715,7 @@ def finance_dashboard(request):
         {'name': 'Fee Payments', 'value': float(total_fee_income)},
         {'name': 'Student Funding', 'value': float(total_funding_income)},
         {'name': 'Other Income', 'value': float(total_other_income)},
-        {'name': 'Salary Repayments', 'value': float(total_salary_repayments)},
+        {'name': 'Salary Repayments', 'value': float(total_loan_repayments)},
         {'name': 'Advance Settlements', 'value': float(total_advance_settlements_income)},
     ]
 
@@ -2790,7 +2786,7 @@ def finance_dashboard(request):
         'total_fee_income': total_fee_income,
         'total_funding_income': total_funding_income,
         'total_other_income': total_other_income,
-        'total_salary_repayments': total_salary_repayments,
+        'total_loan_repayments': total_loan_repayments,
 
         # Expense breakdown
         'total_expenses': total_expenses,

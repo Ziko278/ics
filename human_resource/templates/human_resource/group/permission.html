@@ -100,42 +100,58 @@
                                                 <h5 class="card-title">Products, Product Categories, Product Suppliers</h5>
                                                 <ul class="list-group">
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        Can add Products, Categories and Suppliers
+                                                        Can add and update Products, Categories and Suppliers
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="add_productmodel"
-                                                            {% if "add_productmodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="add_itemmodel"
+                                                            {% if "add_itemmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                                         Can View Products, Categories and Suppliers
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="view_productmodel"
-                                                            {% if "view_productmodel" in permission_codenames %} checked {% endif %}>
-                                                        </span>
-                                                    </li>
-
-                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        Can Update Products, Categories and Suppliers
-                                                        <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="change_productmodel"
-                                                            {% if "change_productmodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="view_itemmodel"
+                                                            {% if "view_itemmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                                         Can Delete Products, Categories and Suppliers
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="delete_productmodel"
-                                                            {% if "delete_productmodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="delete_itemmodel"
+                                                            {% if "delete_itemmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        Can Stock Products
+                                                        Can Stock in and stock out Products
                                                         <span class="badge">
                                                             <input type="checkbox" name="permissions[]" value="add_stockinmodel"
                                                             {% if "add_stockinmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+                                                    
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Stock in and stock out
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_stockinmodel"
+                                                            {% if "view_stockinmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Handle inventory Management (Purchase order, purchase advance, student collections)
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_inventorycollectionmodel"
+                                                            {% if "add_inventorycollectionmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View inventory collection
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_inventorycollectionmodel"
+                                                            {% if "view_inventorycollectionmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
@@ -152,14 +168,14 @@
                             <div class="accordion-item">
                                 <h2 class="accordion-header" id="flush-finance-permission">
                                     <button class="accordion-button collapsed card-title" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse3" aria-expanded="false" aria-controls="flush-collapseOne">
-                                        Student Wallet and Finance Permissions
+                                        Finance Permissions
                                     </button>
                                 </h2>
                                 <div id="flush-collapse3" class="accordion-collapse collapse" aria-labelledby="finance-permission" data-bs-parent="#accordionFlushExample">
                                     <div class="accordion-body">
                                         <div class="card">
                                             <div class="card-body">
-                                                <h5 class="card-title">Finance Permissions</h5>
+                                                <h5 class="card-title">Student Wallet Permissions</h5>
                                                 <ul class="list-group">
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                                         Fund Student Wallet
@@ -184,6 +200,67 @@
                                                             {% if "change_studentfundingmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Finance Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Record Transactions
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_expensemodel"
+                                                            {% if "add_expensemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Transactions
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_expensemodel"
+                                                            {% if "view_expensemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Finance Setting
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_financesettingmodel"
+                                                            {% if "view_financesettingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Update Finance Setting
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_financesettingmodel"
+                                                            {% if "change_financesettingmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5 class="card-title">Salary Permissions</h5>
+                                                <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Process Salary and Salary Setup
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_salaryrecord"
+                                                            {% if "add_salaryrecord" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Salary and Salary Setup
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_salaryrecord"
+                                                            {% if "view_salaryrecord" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
                                                 </ul>
                                             </div>
                                         </div>
@@ -202,29 +279,37 @@
                                     <div class="accordion-body">
                                         <div class="card">
                                             <div class="card-body">
-                                                <h5 class="card-title">Finance Permissions</h5>
+                                                <h5 class="card-title">Student Fee Permissions</h5>
                                                 <ul class="list-group">
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        Fund Student Wallet
+                                                        Can Handle Fee Setup (Fees, Fee Group, Fee Structure)
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="add_studentfundingmodel"
-                                                            {% if "add_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="add_feemodel"
+                                                            {% if "add_feemodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        View Student Funding
+                                                        Can View Fee Setup (Fees, Fee Group, Fee Structure)
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="view_studentfundingmodel"
-                                                            {% if "view_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="view_feemodel"
+                                                            {% if "view_feemodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        Confirm Student Funding by Parent
+                                                        Can Process Fee Collections
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="change_studentfundingmodel"
-                                                            {% if "change_studentfundingmodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="add_feepaymentmodel"
+                                                            {% if "add_feepaymentmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Fee Collections
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_feepaymentmodel"
+                                                            {% if "add_feepaymentmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
                                                 </ul>
@@ -264,14 +349,20 @@
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        View Statistics
+                                                        Update Orders
                                                         <span class="badge">
                                                             <input type="checkbox" name="permissions[]" value="change_salemodel"
                                                             {% if "change_salemodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
-
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        View Statistics
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_salemodel"
+                                                            {% if "delete_salemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
 
                                                 </ul>
                                             </div>
@@ -291,34 +382,39 @@
                                     <div class="accordion-body">
                                         <div class="card">
                                             <div class="card-body">
-                                                <h5 class="card-title">Sales Permissions</h5>
+                                                <h5 class="card-title">Cafeteria Permissions</h5>
                                                 <ul class="list-group">
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        Place Orders
+                                                        Can Handle Setup
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="add_salemodel"
-                                                            {% if "add_salemodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="add_cafeteriasettingmodel"
+                                                            {% if "add_cafeteriasettingmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        View Orders
+                                                        Can View Setup
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="view_salemodel"
-                                                            {% if "view_salemodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="view_cafeteriasettingmodel"
+                                                            {% if "view_cafeteriasettingmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        View Statistics
+                                                        Can Record Collections
                                                         <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="change_salemodel"
-                                                            {% if "change_salemodel" in permission_codenames %} checked {% endif %}>
+                                                            <input type="checkbox" name="permissions[]" value="add_mealcollectionmodel"
+                                                            {% if "add_mealcollectionmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 
-
-
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can View Collections
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="view_mealcollectionmodel"
+                                                            {% if "view_mealcollectionmodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
                                                 </ul>
                                             </div>
                                         </div>
@@ -340,7 +436,7 @@
                                                 <h5 class="card-title">Human Resource Permissions</h5>
                                                 <ul class="list-group">
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        Register Staff
+                                                        Register and Update Staff
                                                         <span class="badge">
                                                             <input type="checkbox" name="permissions[]" value="add_staffmodel"
                                                             {% if "add_staffmodel" in permission_codenames %} checked {% endif %}>
@@ -356,16 +452,6 @@
                                                     </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                        Update Staff Information
-                                                        <span class="badge">
-                                                            <input type="checkbox" name="permissions[]" value="change_staffmodel"
-                                                            {% if "change_staffmodel" in permission_codenames %} checked {% endif %}>
-                                                        </span>
-                                                    </li>
-
-
-
-                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
                                                         Delete Staff
                                                         <span class="badge">
                                                             <input type="checkbox" name="permissions[]" value="delete_staffmodel"
@@ -378,6 +464,14 @@
                                                         <span class="badge">
                                                             <input type="checkbox" name="permissions[]" value="add_group"
                                                             {% if "add_group" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
+
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Update HR Setting
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="change_hrsettingmodel"
+                                                            {% if "change_hrsettingmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
 

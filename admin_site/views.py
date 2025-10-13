@@ -106,6 +106,7 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
 
         return context
 
+
 class ActivityLogView(LoginRequiredMixin, ListView):
     model = ActivityLogModel
     permission_required = 'admin_site.view_activitylogmodel'
@@ -117,7 +118,7 @@ class ActivityLogView(LoginRequiredMixin, ListView):
 # --- Singleton Views for SchoolInfo (Dedicated Pages) ---
 class SchoolInfoDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = SchoolInfoModel
-    permission_required = 'admin_site.view_schoolinfomodel'
+    permission_required = 'admin_site.change_schoolinfomodel'
     template_name = 'admin_site/school_info/detail.html'
     context_object_name = "school_info"
 
@@ -133,7 +134,7 @@ class SchoolInfoDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailVi
 
 class SchoolInfoCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, CreateView):
     model = SchoolInfoModel
-    permission_required = 'admin_site.add_schoolinfomodel'
+    permission_required = 'admin_site.change_schoolinfomodel'
     form_class = SchoolInfoForm
     template_name = 'admin_site/school_info/create.html'
     success_message = 'School Information Created Successfully'
@@ -163,7 +164,7 @@ class SchoolInfoUpdateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessM
 # --- Singleton Views for SchoolSetting (Dedicated Pages) ---
 class SchoolSettingDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = SchoolSettingModel
-    permission_required = 'admin_site.view_schoolsettingmodel'
+    permission_required = 'admin_site.change_schoolsettingmodel'
     template_name = 'admin_site/school_setting/detail.html'
     context_object_name = "school_setting"
 
@@ -179,7 +180,7 @@ class SchoolSettingDetailView(LoginRequiredMixin, PermissionRequiredMixin, Detai
 
 class SchoolSettingCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, CreateView):
     model = SchoolSettingModel
-    permission_required = 'admin_site.add_schoolsettingmodel'
+    permission_required = 'admin_site.change_schoolsettingmodel'
     form_class = SchoolSettingForm
     template_name = 'admin_site/school_setting/create.html'
     success_message = 'Settings Created Successfully'
@@ -208,7 +209,7 @@ class SchoolSettingUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Succe
 # --- CRUD Views for ClassSection (Single Page Pattern) ---
 class ClassSectionListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = ClassSectionModel
-    permission_required = 'admin_site.view_classsectionmodel'
+    permission_required = 'admin_site.add_classesmodel'
     template_name = 'admin_site/class_section/index.html'
     context_object_name = "class_section_list"
     queryset = ClassSectionModel.objects.order_by('name')
@@ -221,7 +222,7 @@ class ClassSectionListView(LoginRequiredMixin, PermissionRequiredMixin, ListView
 
 class ClassSectionCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, SuccessMessageMixin, CreateView):
     model = ClassSectionModel
-    permission_required = 'admin_site.add_classsectionmodel'
+    permission_required = 'admin_site.add_classesmodel'
     form_class = ClassSectionForm
     success_message = 'Class Section Added Successfully'
 
@@ -236,7 +237,7 @@ class ClassSectionCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashF
 
 class ClassSectionUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, SuccessMessageMixin, UpdateView):
     model = ClassSectionModel
-    permission_required = 'admin_site.change_classsectionmodel'
+    permission_required = 'admin_site.add_classesmodel'
     form_class = ClassSectionForm
     success_message = 'Class Section Updated Successfully'
     success_url = reverse_lazy('class_section_index')
@@ -249,7 +250,7 @@ class ClassSectionUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashF
 
 class ClassSectionDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, DeleteView):
     model = ClassSectionModel
-    permission_required = 'admin_site.delete_classsectionmodel'
+    permission_required = 'admin_site.add_classesmodel'
     template_name = 'admin_site/class_section/delete.html'
     success_message = 'Class Section Deleted Successfully'
     success_url = reverse_lazy('class_section_index')
@@ -257,7 +258,7 @@ class ClassSectionDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Succes
 
 class ClassListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = ClassesModel
-    permission_required = 'admin_site.view_classesmodel'
+    permission_required = 'admin_site.add_classesmodel'
     template_name = 'admin_site/class/index.html'
     context_object_name = "class_list"
     queryset = ClassesModel.objects.order_by('name')
@@ -284,7 +285,7 @@ class ClassCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErro
 
 class ClassDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = ClassesModel
-    permission_required = 'admin_site.view_classesmodel'
+    permission_required = 'admin_site.add_classesmodel'
     template_name = 'admin_site/class/detail.html'
     context_object_name = "class"
 
@@ -297,7 +298,7 @@ class ClassDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
 
 class ClassUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, SuccessMessageMixin, UpdateView):
     model = ClassesModel
-    permission_required = 'admin_site.change_classesmodel'
+    permission_required = 'admin_site.add_classesmodel'
     form_class = ClassForm
     success_message = 'Class Updated Successfully'
 
@@ -307,7 +308,7 @@ class ClassUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErro
 
 class ClassDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, DeleteView):
     model = ClassesModel
-    permission_required = 'admin_site.delete_classesmodel'
+    permission_required = 'admin_site.add_classesmodel'
     template_name = 'admin_site/class/delete.html'
     success_message = 'Class Deleted Successfully'
     success_url = reverse_lazy('class_index')
@@ -315,7 +316,7 @@ class ClassDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessag
 
 
 class ClassSectionInfoDetailView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
-    permission_required = 'admin_site.view_classsectioninfomodel'
+    permission_required = 'admin_site.add_classesmodel'
     template_name = 'admin_site/class_section_info/detail.html'
 
     def get_context_data(self, **kwargs):
@@ -336,7 +337,7 @@ class ClassSectionInfoDetailView(LoginRequiredMixin, PermissionRequiredMixin, Te
 
 class ClassSectionInfoUpdateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, UpdateView):
     model = ClassSectionInfoModel
-    permission_required = 'admin_site.change_classsectioninfomodel'
+    permission_required = 'admin_site.add_classesmodel'
     form_class = ClassSectionInfoForm
     success_message = 'Class Roster Information Updated Successfully'
 
