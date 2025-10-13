@@ -8,7 +8,7 @@ from django.db import transaction
 from django.contrib.auth.models import Group, User
 from .models import StaffModel, StaffProfileModel, StaffUploadTask
 # Import the helper function we defined in views.py
-from human_resource.views import _send_credentials_email
+#from human_resource.views import _send_credentials_email
 
 
 @shared_task(bind=True)
@@ -91,8 +91,7 @@ def process_staff_upload(self, file_path):
                             if staff_member.group:
                                 staff_member.group.user_set.add(user)
 
-                            _send_credentials_email(staff_member, username, password)
-                            print(f"Successfully created user account for {username}")
+                            
 
                         except Exception as user_creation_error:
                             print(
