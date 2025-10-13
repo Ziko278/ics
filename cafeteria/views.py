@@ -12,7 +12,7 @@ from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView
 from django.shortcuts import redirect, get_object_or_404, render
 
-from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel
+from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ClassSectionModel
 from cafeteria.models import MealModel, CafeteriaSettingModel, MealCollectionModel
 from cafeteria.forms import MealForm, CafeteriaSettingForm
 from finance.models import InvoiceModel, InvoiceItemModel
@@ -346,8 +346,9 @@ class MealCollectionHistoryView(LoginRequiredMixin, PermissionRequiredMixin, Lis
 # ==============================================================================
 # HELPER FUNCTION (to avoid repeating code)
 # ==============================================================================
-@login_required
-@permission_required("cafeteria.view_cafeteriasettingmodel", raise_exception=True)
+# ==============================================================================
+# HELPER FUNCTION (DECORATORS REMOVED)
+# ==============================================================================
 def get_paid_cafeteria_students(class_id=None, section_id=None):
     """
     A reusable function to query for students who have paid the cafeteria fee.
@@ -358,7 +359,6 @@ def get_paid_cafeteria_students(class_id=None, section_id=None):
     cafeteria_settings = CafeteriaSettingModel.objects.first()
 
     if not (school_settings and cafeteria_settings and cafeteria_settings.cafeteria_fee):
-        # Return an empty queryset if settings are incomplete
         return StudentModel.objects.none()
 
     cafeteria_fee_id = cafeteria_settings.cafeteria_fee.id
@@ -366,7 +366,6 @@ def get_paid_cafeteria_students(class_id=None, section_id=None):
     current_term = school_settings.term
 
     # 2. Find all invoice items for the cafeteria fee in the current period that have been paid.
-    # We consider it "paid" if any amount has been paid towards that specific line item.
     paid_invoice_items = InvoiceItemModel.objects.filter(
         invoice__session=current_session,
         invoice__term=current_term,
@@ -392,20 +391,30 @@ def get_paid_cafeteria_students(class_id=None, section_id=None):
 
 
 # ==============================================================================
-# MAIN VIEW
+# MAIN VIEW (THIS IS CORRECTLY DECORATED)
 # ==============================================================================
 @login_required
 @permission_required("cafeteria.view_cafeteriasettingmodel", raise_exception=True)
 def paid_cafeteria_students_report(request):
     """
-    Displays a filterable list of students who have paid the cafeteria fee.
+    Handles both the main report page and the API request for class sections.
     """
+    # --- Logic to handle JavaScript request for sections ---
+    if 'fetch_sections' in request.GET and 'class_id' in request.GET:
+        class_id = request.GET.get('class_id')
+        try:
+            sections = ClassSectionModel.objects.filter(student_class_id=class_id).order_by('name')
+            data = [{'id': section.id, 'name': section.name} for section in sections]
+            return JsonResponse(data, safe=False)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    # --- Main page logic ---
     class_id = request.GET.get('class')
     section_id = request.GET.get('section')
 
     students = get_paid_cafeteria_students(class_id, section_id)
 
-    # Check if settings are configured before showing the page
     cafeteria_settings = CafeteriaSettingModel.objects.first()
     if not cafeteria_settings or not cafeteria_settings.cafeteria_fee:
         messages.warning(request, "Cafeteria settings are incomplete. Please assign a 'Cafeteria Fee' in the settings.")
