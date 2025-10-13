@@ -1,0 +1,8 @@
+# Local settings and secrets
+ics/settings.py
+
+# Database file
+db.sqlite3
+
+# User-uploaded files
+/media/
