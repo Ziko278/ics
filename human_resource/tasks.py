@@ -1,32 +1,37 @@
-# hr_management/tasks.py
-
 import openpyxl
 from celery import shared_task
 from django.db import transaction
 from django.contrib.auth.models import Group
-from .models import StaffModel
+from .models import StaffModel, StaffUploadTask  # <-- Import the new model
 
 
-@shared_task
-def process_staff_upload(file_path):
+# Use bind=True to get access to the task's own information
+@shared_task(bind=True)
+def process_staff_upload(self, file_path):
     """
-    Processes an uploaded Excel file using openpyxl.
-    - If staff (FirstName, LastName, Gender) exists, it updates mobile/email.
-    - If staff does not exist, it creates a new one.
-    - A post_save signal on StaffModel handles User creation for NEW staff.
+    Processes an uploaded Excel file and updates a tracking model with its status.
     """
+    # Find the tracker record for this specific task run
     try:
+        tracker = StaffUploadTask.objects.get(task_id=self.request.id)
+        tracker.status = StaffUploadTask.Status.PROCESSING
+        tracker.save(update_fields=['status'])
+    except StaffUploadTask.DoesNotExist:
+        print(f"FATAL: Could not find tracker for task {self.request.id}")
+        return  # Cannot proceed without a tracker
+
+    try:
+        # --- Complete file processing logic ---
         workbook = openpyxl.load_workbook(file_path, data_only=True)
         sheet = workbook.active
 
         header_row = [cell.value for cell in sheet[1]]
         try:
-            header_map = {header.strip(): idx for idx, header in enumerate(header_row)}
+            header_map = {str(header).strip(): idx for idx, header in enumerate(header_row)}
             if not all(k in header_map for k in ['first_name', 'last_name', 'gender']):
                 raise ValueError("Missing required columns: first_name, last_name, gender")
         except Exception as e:
-            print(f"Error reading header row: {e}")
-            return f"Error reading header row: {e}"
+            raise ValueError(f"Error reading header row: {e}")
 
         created_count = 0
         updated_count = 0
@@ -51,7 +56,6 @@ def process_staff_upload(file_path):
                         failed_count += 1
                         continue
 
-                    # --- Get optional data and Group ---
                     email = get_cell_value('email').lower() or None
                     mobile = get_cell_value('mobile') or None
                     group_name = get_cell_value('group_name')
@@ -63,9 +67,7 @@ def process_staff_upload(file_path):
                         except Group.DoesNotExist:
                             print(f"Group '{group_name}' not found for row {row_index}. Staff will have no group.")
 
-                    # --- NEW: UPDATE OR CREATE LOGIC ---
                     try:
-                        # UPDATE PATH: Try to find an existing staff member
                         staff_member = StaffModel.objects.get(
                             first_name__iexact=first_name,
                             last_name__iexact=last_name,
@@ -73,26 +75,21 @@ def process_staff_upload(file_path):
                         )
 
                         fields_to_update = []
-                        # Check if mobile number needs updating
                         if staff_member.mobile != (mobile or ''):
                             staff_member.mobile = mobile
                             fields_to_update.append('mobile')
 
-                        # Check if email needs updating
                         if staff_member.email != email:
                             staff_member.email = email
                             fields_to_update.append('email')
-                            # Also update the associated user's email since signals don't run on .save()
                             if hasattr(staff_member, 'staff_profile') and staff_member.staff_profile:
                                 user = staff_member.staff_profile.user
                                 user.email = email if email else ''
                                 user.save(update_fields=['email'])
 
-                        # Check if group needs updating
                         if staff_member.group != user_group:
                             staff_member.group = user_group
                             fields_to_update.append('group')
-                            # Also update the user's group membership
                             if hasattr(staff_member, 'staff_profile') and staff_member.staff_profile:
                                 user = staff_member.staff_profile.user
                                 user.groups.set([user_group] if user_group else [])
@@ -107,7 +104,6 @@ def process_staff_upload(file_path):
                             skipped_count += 1
 
                     except StaffModel.DoesNotExist:
-                        # CREATE PATH: If no staff member was found, create one
                         StaffModel.objects.create(
                             first_name=first_name,
                             last_name=last_name,
@@ -123,12 +119,25 @@ def process_staff_upload(file_path):
                 print(f"Error processing row {row_index}: {e}")
                 failed_count += 1
 
-        result = (f"Processing complete. "
-                  f"Created: {created_count}, Updated: {updated_count}, "
-                  f"Skipped: {skipped_count}, Failed: {failed_count}.")
-        print(result)
-        return result
+        # At the end of your logic, create the final success message
+        result_message = (f"Processing complete. "
+                          f"Created: {created_count}, Updated: {updated_count}, "
+                          f"Skipped: {skipped_count}, Failed: {failed_count}.")
+
+        # --- Update the tracker with the successful result ---
+        tracker.status = StaffUploadTask.Status.SUCCESS
+        tracker.result = result_message
+        tracker.save(update_fields=['status', 'result'])
+        print(result_message)
+        return result_message
 
     except Exception as e:
-        print(f"A critical error occurred: {e}")
-        return "A critical error occurred during file processing."
+        # --- If ANY error occurs, catch it and update the tracker with the failure message ---
+        error_message = f"A critical error occurred: {e}"
+        tracker.status = StaffUploadTask.Status.FAILURE
+        tracker.result = error_message
+        tracker.save(update_fields=['status', 'result'])
+        print(error_message)
+        # Re-raise the exception so Celery also marks the task as failed internally
+        raise e
+

@@ -6,7 +6,7 @@
     <div class="card">
         <div class="card-body">
             <h5 class="card-title">Bulk Upload Staff</h5>
-            
+
             {% if messages %}
                 {% for message in messages %}
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -45,6 +45,34 @@
                     <a href="#" onclick="window.history.back();" class="btn btn-secondary">Cancel</a>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-body">
+            <h5 class="card-title">Recent Uploads</h5>
+            <div class="list-group">
+                {% for task in recent_tasks %}
+                    <a href="{% url 'staff_upload_status' task.task_id %}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">Task #{{ task.task_id|slice:":8" }}...</h6>
+                            <small>{{ task.created_at|timesince }} ago</small>
+                        </div>
+                        <p class="mb-1">
+                            Status:
+                            {% if task.status == 'SUCCESS' %}
+                                <span class="badge bg-success">{{ task.get_status_display }}</span>
+                            {% elif task.status == 'FAILURE' %}
+                                <span class="badge bg-danger">{{ task.get_status_display }}</span>
+                            {% else %}
+                                <span class="badge bg-primary">{{ task.get_status_display }}</span>
+                            {% endif %}
+                        </p>
+                    </a>
+                {% empty %}
+                    <p class="text-muted">You have not uploaded any files yet.</p>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </div>

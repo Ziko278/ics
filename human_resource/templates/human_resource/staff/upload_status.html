@@ -1,0 +1,71 @@
+{% extends 'admin_site/layout.html' %}
+
+{% block 'main' %}
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Staff Data Upload Status</h5>
+        <p>Your file is being processed in the background. Please wait, this page will update automatically.</p>
+
+        <div class="mt-4">
+            <p>
+                <strong>Task Status:</strong>
+                <span id="task-status" class="badge bg-secondary">{{ tracker.get_status_display }}</span>
+            </p>
+            <div id="result-container" style="display: none;">
+                <strong>Result:</strong>
+                <pre id="task-result" class="alert alert-light border"></pre>
+            </div>
+        </div>
+
+        <!-- A simple spinner that shows while processing -->
+        <div id="spinner" class="d-flex justify-content-center my-3">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <a href="{% url 'staff_upload' %}" class="btn btn-secondary"><i class="bi bi-upload"></i> Upload Another File</a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const statusElement = document.getElementById('task-status');
+    const resultContainer = document.getElementById('result-container');
+    const resultElement = document.getElementById('task-result');
+    const spinner = document.getElementById('spinner');
+    const apiUrl = `{% url 'get_task_status_api' task_id=tracker.task_id %}`;
+
+    function checkStatus() {
+        fetch(apiUrl)
+            .then(response => response.json())
+            .then(data => {
+                statusElement.textContent = data.status;
+                if (data.status === 'Processing') {
+                    statusElement.className = 'badge bg-primary';
+                }
+
+                if (data.status === 'Success' || data.status === 'Failure') {
+                    spinner.style.display = 'none';
+                    resultElement.textContent = data.result;
+                    resultContainer.style.display = 'block';
+                    statusElement.className = data.status === 'Success' ? 'badge bg-success' : 'badge bg-danger';
+                    resultElement.className = data.status === 'Success' ? 'alert alert-success border' : 'alert alert-danger border';
+                    clearInterval(pollingInterval);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching task status:', error);
+                statusElement.textContent = 'Error';
+                statusElement.className = 'badge bg-danger';
+                spinner.style.display = 'none';
+                clearInterval(pollingInterval);
+            });
+    }
+
+    const pollingInterval = setInterval(checkStatus, 3000); // Poll every 3 seconds
+});
+</script>
+{% endblock %}

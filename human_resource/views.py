@@ -8,7 +8,7 @@ from django.core.files.storage import FileSystemStorage
 from django.db import transaction, IntegrityError
 from django.db.models import Count
 from django.db.transaction import non_atomic_requests
-from django.http import HttpResponseRedirect, HttpResponse
+from django.http import HttpResponseRedirect, HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
@@ -24,7 +24,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from xlsxwriter import Workbook
 
-from .models import StaffModel, StaffProfileModel, HRSettingModel
+from .models import StaffModel, StaffProfileModel, HRSettingModel, StaffUploadTask
 from .forms import StaffForm, GroupForm, HRSettingForm, StaffUploadForm, StaffProfileUpdateForm
 from human_resource.tasks import process_staff_upload
 
@@ -579,6 +579,33 @@ def staff_upload_view(request):
         form = StaffUploadForm()
 
     return render(request, 'human_resource/staff/upload.html', {'form': form})
+
+
+@login_required
+def staff_upload_status_view(request, task_id):
+    """
+    Renders the page that will show the task's progress.
+    This view corresponds to the 'staff/upload/status/<str:task_id>/' URL.
+    """
+    # Find the tracker object for this task, or show a 404 error if it doesn't exist.
+    tracker = get_object_or_404(StaffUploadTask, task_id=task_id)
+    return render(request, 'human_resource/staff/upload_status.html', {'tracker': tracker})
+
+
+@login_required
+def get_task_status_api(request, task_id):
+    """
+    An API endpoint for the frontend JavaScript to poll for task status updates.
+    This view corresponds to the 'api/task-status/<str:task_id>/' URL.
+    """
+    # Find the tracker object.
+    tracker = get_object_or_404(StaffUploadTask, task_id=task_id)
+
+    # Return the current status and result as a JSON object.
+    return JsonResponse({
+        'status': tracker.get_status_display(),  # e.g., "Processing", "Success"
+        'result': tracker.result  # The message from the Celery task
+    })
 
 
 @login_required

@@ -9,6 +9,9 @@ urlpatterns = [
     path('staff/<int:pk>/edit/', StaffUpdateView.as_view(), name='staff_edit'),
     path('staff/<int:pk>/delete/', StaffDeleteView.as_view(), name='staff_delete'),
     path('staff/upload/', staff_upload_view, name='staff_upload'),
+    path('staff/upload/status/<str:task_id>/', staff_upload_status_view, name='staff_upload_status'),
+    path('api/task-status/<str:task_id>/', get_task_status_api, name='get_task_status_api'),
+
 
     # Staff Account Action URLs
     path('staff/<int:pk>/generate-login/', generate_staff_login, name='staff_generate_login'),
