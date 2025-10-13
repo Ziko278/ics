@@ -96,35 +96,67 @@ class StaffListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         return StaffModel.objects.all().order_by('first_name')
 
 
-@method_decorator(transaction.non_atomic_requests, name='dispatch')
+@method_decorator(non_atomic_requests, name='dispatch')
 class StaffCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = StaffModel
     permission_required = 'human_resource.add_staffmodel'
     form_class = StaffForm
     template_name = 'human_resource/staff/create.html'
 
-    def form_valid(self, form):
-        """
-        The view's only job now is to save the form.
-        The post_save signal will handle the User and Profile creation automatically.
-        """
-        try:
-            # Save the staff instance. The signal will trigger after this.
-            self.object = form.save()
-
-            messages.success(self.request, (
-                f"Staff '{self.object}' created successfully. "
-                "If an email was provided, their login credentials have been sent."
-            ))
-            return HttpResponseRedirect(self.get_success_url())
-        except Exception as e:
-            messages.error(self.request, f"An unexpected error occurred: {str(e)}")
-            return self.form_invalid(form)
-
     def get_success_url(self):
-        # Redirect to the detail page of the newly created staff member
         return reverse('staff_detail', kwargs={'pk': self.object.pk})
 
+    def _send_credentials_and_set_messages(self, staff, username, password):
+        if staff.email:
+            if _send_credentials_email(staff, username, password):
+                messages.success(self.request, f"Staff '{staff}' created and credentials sent to {staff.email}.")
+            else:
+                messages.warning(self.request, f"Staff '{staff}' created, but failed to send credentials email.")
+        else:
+            messages.success(self.request, f"Staff '{staff}' created successfully (no email provided).")
+
+    def form_valid(self, form):
+        try:
+            with transaction.atomic():
+                staff_instance = form.save(commit=False)
+                if not staff_instance.staff_id:
+                    staff_instance.staff_id = staff_instance.generate_unique_staff_id()
+
+                username = staff_instance.staff_id
+                if User.objects.filter(username=username).exists():
+                    raise ValueError(f"A user with username '{username}' already exists.")
+
+                if staff_instance.email and User.objects.filter(email__iexact=staff_instance.email).exists():
+                    raise ValueError(f"A user with email '{staff_instance.email}' already exists.")
+
+                password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+
+                user = User.objects.create_user(
+                    username=username, password=password,
+                    first_name=staff_instance.first_name, last_name=staff_instance.last_name,
+                    email=staff_instance.email or ''
+                )
+
+                staff_instance.save(skip_user_sync=True)
+
+                StaffProfileModel.objects.create(
+                    user=user, staff=staff_instance, default_password=password
+                )
+
+                if staff_instance.group:
+                    staff_instance.group.user_set.add(user)
+
+                self.object = staff_instance
+
+            # self._send_credentials_and_set_messages(staff_instance, username, password)
+            return HttpResponseRedirect(self.get_success_url())
+
+        except (ValueError, IntegrityError) as e:
+            messages.error(self.request, f"Could not create staff: {e}")
+            return self.form_invalid(form)
+        except Exception as e:
+            messages.error(self.request, f"An unexpected error occurred: {e}")
+            return self.form_invalid(form)
 
 
 class StaffDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
