@@ -553,32 +553,35 @@ class HRSettingUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateVie
 @permission_required("human_resource.add_staffmodel", raise_exception=True)
 def staff_upload_view(request):
     """
-    Handles the file upload form and initiates the background task for processing.
+    Handles the file upload form, creates a tracker, and redirects to the status page.
     """
     if request.method == 'POST':
         form = StaffUploadForm(request.POST, request.FILES)
         if form.is_valid():
             uploaded_file = request.FILES['excel_file']
-
-            # Use FileSystemStorage to save the file securely.
-            # This prevents filename conflicts and saves it in your MEDIA_ROOT.
             fs = FileSystemStorage()
             filename = fs.save(uploaded_file.name, uploaded_file)
             file_path = fs.path(filename)
 
-            # Dispatch the background task with the path to the saved file.
-            process_staff_upload.delay(file_path)
+            # 1. Start the Celery task and get its unique ID
+            task = process_staff_upload.delay(file_path)
+            task_id = task.id
 
-            # Provide immediate feedback to the user.
-            messages.success(request, (
-                'File uploaded successfully! The staff data is being processed in the background. '
-                'You can safely navigate away from this page.'
-            ))
-            return redirect('staff_upload')
+            # 2. Create our tracking object in the database, linking it to the task ID
+            StaffUploadTask.objects.create(
+                task_id=task_id,
+                uploaded_by=request.user
+            )
+
+            # 3. Redirect to the NEW status page, passing the task ID in the URL
+            messages.info(request, 'File upload started! See live progress below.')
+            return redirect(reverse('staff_upload_status', args=[task_id]))
     else:
         form = StaffUploadForm()
 
-    return render(request, 'human_resource/staff/upload.html', {'form': form})
+    # This part shows a history of recent uploads on the main upload page.
+    recent_tasks = StaffUploadTask.objects.filter(uploaded_by=request.user).order_by('-created_at')[:5]
+    return render(request, 'human_resource/staff/upload.html', {'form': form, 'recent_tasks': recent_tasks})
 
 
 @login_required
