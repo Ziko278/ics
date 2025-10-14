@@ -828,19 +828,18 @@ def parent_student_upload_view(request):
             student_filename = fs.save(f"imports/students/{student_file.name}", student_file)
             student_file_path = fs.path(student_filename)
 
-            # Use the helper function to get a unique batch ID
-            batch_id = generate_import_batch_id()
+            # This is the correct line
+            batch_id = generate_import_batch_id(parent_file.name, student_file.name)
 
-            # Create the import batch record for tracking
-            # Note: request.user.staff_profile may not exist for all users.
-            # Using getattr is a safe way to avoid errors.
+            # Safely get the staff profile from the logged-in user
             staff_profile = getattr(request.user, 'staff_profile', None)
 
             ImportBatchModel.objects.create(
                 batch_id=batch_id,
                 parent_file_name=parent_file.name,
                 student_file_name=student_file.name,
-                imported_by=staff_profile,
+                # Correctly pass the staff object from the profile
+                imported_by=staff_profile.staff if staff_profile else None,
                 status='processing'
             )
 
@@ -854,9 +853,10 @@ def parent_student_upload_view(request):
             messages.success(
                 request,
                 f'Files uploaded successfully! The data is being processed in the background. '
-                f'Batch ID: {batch_id}.'
+                f'You can view the progress by clicking the "View" button on Batch ID: {batch_id}.'
             )
-            return redirect('parent_student_upload')
+            # This redirect name should match the name in your urls.py
+            return redirect('import_parent_student')
     else:
         form = ParentStudentUploadForm()
 

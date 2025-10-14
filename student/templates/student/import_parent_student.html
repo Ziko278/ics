@@ -1,249 +1,90 @@
 {% extends 'admin_site/layout.html' %}
-{% load static %}
 {% block 'main' %}
+
 <div class="container mt-4">
     <div class="row">
-        <div class="col-md-12">
-            <!-- Batch Info Card -->
-            <div class="card mb-4">
+        <div class="col-lg-10 offset-lg-1 col-md-12">
+            <div class="card">
                 <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">
-                        <i class="fas fa-info-circle"></i> Import Batch Details
-                    </h4>
+                    <h4 class="mb-0"><i class="fas fa-upload"></i> Import Parents & Students</h4>
                 </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <table class="table table-bordered">
-                                <tr>
-                                    <th width="40%">Batch ID:</th>
-                                    <td><code>{{ batch.batch_id }}</code></td>
-                                </tr>
-                                <tr>
-                                    <th>Import Date:</th>
-                                    <td>{{ batch.created_at|date:"F d, Y H:i:s" }}</td>
-                                </tr>
-                                <tr>
-                                    <th>Status:</th>
-                                    <td>
-                                        {% if batch.status == 'completed' %}
-                                            <span class="badge text-success text-lg">
-                                                <i class="fas fa-check-circle"></i> Completed
-                                            </span>
-                                        {% elif batch.status == 'processing' %}
-                                            <span class="badge text-warning text-lg">
-                                                <i class="fas fa-spinner fa-spin"></i> Processing
-                                            </span>
-                                        {% else %}
-                                            <span class="badge text-danger text-lg">
-                                                <i class="fas fa-times-circle"></i> Failed
-                                            </span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th>Imported By:</th>
-                                    <td>
-                                        {% if batch.imported_by %}
-                                            {{ batch.imported_by.first_name }} {{ batch.imported_by.last_name }}
-                                        {% else %}
-                                            <em>System</em>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            </table>
-                        </div>
-                        <div class="col-md-6">
-                            <table class="table table-bordered">
-                                <tr>
-                                    <th width="40%">Parent File:</th>
-                                    <td>{{ batch.parent_file_name }}</td>
-                                </tr>
-                                <tr>
-                                    <th>Student File:</th>
-                                    <td>{{ batch.student_file_name }}</td>
-                                </tr>
-                                <tr>
-                                    <th>Parents:</th>
-                                    <td>
-                                        <span class="badge text-success">{{ batch.parents_created }} created</span>
-                                        <span class="badge text-info">{{ batch.parents_updated }} updated</span>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th>Students:</th>
-                                    <td>
-                                        <span class="badge text-success">{{ batch.students_created }} created</span>
-                                        <span class="badge text-info">{{ batch.students_updated }} updated</span>
-                                    </td>
-                                </tr>
-                            </table>
-                        </div>
-                    </div>
-
-                    {% if batch.error_message %}
-                    <div class="alert alert-danger mt-3">
-                        <h5><i class="fas fa-exclamation-triangle"></i> Error Message:</h5>
-                        <pre>{{ batch.error_message }}</pre>
-                    </div>
+                <div class="card-body py-4">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
                     {% endif %}
 
-                    <div class="mt-3">
-                        <a href="{% url 'parent_student_upload' %}" class="btn btn-secondary">
-                            <i class="fas fa-arrow-left"></i> Back to Import
-                        </a>
-                        <a href="{% url 'download_all_parent_credentials' %}" class="btn btn-success">
-                            <i class="fas fa-download"></i> Download Parent Credentials (Excel)
-                        </a>
+                    <div class="alert alert-info">
+                        <h5><i class="fas fa-info-circle"></i> Instructions</h5>
+                        <ul class="mb-0">
+                            <li>Upload both parent and student Excel files (.xlsx) together.</li>
+                            <li>The system uses a **PID** column in both files to link students to parents.</li>
+                            <li>The process runs in the background. You can check the status in the "Recent Imports" table below.</li>
+                        </ul>
                     </div>
+
+                    <form method="post" enctype="multipart/form-data" class="mt-4">
+                        {% csrf_token %}
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.parent_file.id_for_label }}" class="form-label"><strong>{{ form.parent_file.label }}</strong></label>
+                                {{ form.parent_file }}
+                                {% if form.parent_file.help_text %}<small class="form-text text-muted">{{ form.parent_file.help_text }}</small>{% endif %}
+                                {% if form.parent_file.errors %}<div class="text-danger mt-1"><small>{{ form.parent_file.errors.0 }}</small></div>{% endif %}
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.student_file.id_for_label }}" class="form-label"><strong>{{ form.student_file.label }}</strong></label>
+                                {{ form.student_file }}
+                                {% if form.student_file.help_text %}<small class="form-text text-muted">{{ form.student_file.help_text }}</small>{% endif %}
+                                {% if form.student_file.errors %}<div class="text-danger mt-1"><small>{{ form.student_file.errors.0 }}</small></div>{% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-cloud-upload-alt"></i> Upload & Process Files
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
-            <!-- Parents Table -->
-            <div class="card mb-4">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-users"></i> Parents Imported ({{ parents.count }})
-                    </h5>
-                </div>
+            {% if recent_imports %}
+            <div class="card mt-4">
+                <div class="card-header bg-secondary text-white"><h5 class="mb-0"><i class="fas fa-history"></i> Recent Imports</h5></div>
                 <div class="card-body p-0">
-                    {% if parents %}
                     <div class="table-responsive">
                         <table class="table table-striped table-hover mb-0">
                             <thead>
-                                <tr>
-                                    <th>Excel PID</th>
-                                    <th>Parent ID</th>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Mobile</th>
-                                    <th>Wards</th>
-                                    <th>User Account</th>
-                                </tr>
+                                <tr><th>Batch ID</th><th>Date</th><th>Parents (C/U)</th><th>Students (C/U)</th><th>Status</th><th>Actions</th></tr>
                             </thead>
                             <tbody>
-                                {% for parent in parents %}
+                                {% for batch in recent_imports %}
                                 <tr>
-                                    <td><code>{{ parent.excel_pid }}</code></td>
-                                    <td><strong>{{ parent.parent_id }}</strong></td>
-                                    <td>{{ parent.first_name }} {{ parent.last_name }}</td>
-                                    <td>{{ parent.email|default:"—" }}</td>
-                                    <td>{{ parent.mobile|default:"—" }}</td>
+                                    <td><code>{{ batch.batch_id|truncatechars:13 }}</code></td>
+                                    <td>{{ batch.created_at|date:"M d, Y H:i" }}</td>
+                                    <td>{{ batch.parents_created }} / {{ batch.parents_updated }}</td>
+                                    <td>{{ batch.students_created }} / {{ batch.students_updated }}</td>
                                     <td>
-                                        <span class="badge text-primary">
-                                            {{ parent.number_of_wards }} ward{{ parent.number_of_wards|pluralize }}
-                                        </span>
+                                        {% if batch.status == 'completed' %}<span class="badge bg-success">Completed</span>
+                                        {% elif batch.status == 'processing' %}<span class="badge bg-warning">Processing</span>
+                                        {% else %}<span class="badge bg-danger">Failed</span>{% endif %}
                                     </td>
-                                    <td>
-                                        {% if parent.parent_profile %}
-                                            <span class="badge text-success" title="Username: {{ parent.parent_profile.user.username }}">
-                                                <i class="fas fa-check"></i> {{ parent.parent_profile.user.username }}
-                                            </span>
-                                            <br>
-                                            <small class="text-muted">Pass: {{ parent.parent_profile.default_password }}</small>
-                                        {% else %}
-                                            <span class="badge text-warning">
-                                                <i class="fas fa-clock"></i> No Login
-                                            </span>
-                                        {% endif %}
-                                    </td>
+                                    <td><a href="{% url 'import_batch_detail' batch.batch_id %}" class="btn btn-sm btn-outline-primary"><i class="fas fa-eye"></i> View</a></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
-                    {% else %}
-                    <div class="alert alert-info m-3">
-                        No parents found in this import batch.
-                    </div>
-                    {% endif %}
                 </div>
             </div>
-
-            <!-- Students Table -->
-            <div class="card mb-4">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-user-graduate"></i> Students Imported ({{ students.count }})
-                    </h5>
-                </div>
-                <div class="card-body p-0">
-                    {% if students %}
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Reg. Number</th>
-                                    <th>Name</th>
-                                    <th>Gender</th>
-                                    <th>Parent</th>
-                                    <th>Class</th>
-                                    <th>Section</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for student in students %}
-                                <tr>
-                                    <td><strong>{{ student.registration_number }}</strong></td>
-                                    <td>{{ student.first_name }} {{ student.last_name }}</td>
-                                    <td>
-                                        {% if student.gender == 'MALE' %}
-                                            <i class="fas fa-mars text-primary"></i> Male
-                                        {% else %}
-                                            <i class="fas fa-venus text-danger"></i> Female
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {{ student.parent.first_name }} {{ student.parent.last_name }}
-                                        <small class="text-muted">({{ student.parent.parent_id }})</small>
-                                    </td>
-                                    <td>
-                                        {% if student.student_class %}
-                                            {{ student.student_class.name }}
-                                        {% else %}
-                                            <em class="text-muted">Not assigned</em>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if student.class_section %}
-                                            {{ student.class_section.name }}
-                                        {% else %}
-                                            <em class="text-muted">Not assigned</em>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <span class="badge text-{% if student.status == 'active' %}success{% else %}secondary{% endif %}">
-                                            {{ student.get_status_display }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    <div class="alert alert-info m-3">
-                        No students found in this import batch.
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
+            {% endif %}
         </div>
     </div>
 </div>
-
-<style>
-    .text-lg {
-        font-size: 1rem;
-        padding: 0.5rem 1rem;
-    }
-    pre {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 4px;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-    }
-</style>
 {% endblock %}
