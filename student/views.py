@@ -4,7 +4,10 @@ import io
 import json
 import base64
 from datetime import datetime
-from .tasks import process_parent_student_upload
+
+from django.contrib.auth.models import User
+
+from .tasks import process_parent_student_upload, _send_parent_welcome_email
 from django.core.files.storage import FileSystemStorage
 from django.db import transaction
 from django.db.models import Q
@@ -26,7 +29,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from admin_site.models import ClassesModel, ClassSectionModel
-from .models import StudentModel, ParentModel, StudentSettingModel, FingerprintModel, ImportBatchModel
+from .models import StudentModel, ParentModel, StudentSettingModel, FingerprintModel, ImportBatchModel, \
+    ParentProfileModel, StudentWalletModel
 from .forms import StudentForm, ParentForm, StudentSettingForm, ParentStudentUploadForm
 
 logger = logging.getLogger(__name__)
@@ -86,16 +90,81 @@ class ParentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class ParentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = ParentModel
-    permission_required = 'student.add_studentmodel'
+    permission_required = 'student.add_parentmodel'  # Permission is on ParentModel
     form_class = ParentForm
     template_name = 'student/parent/create.html'
 
+    def form_valid(self, form):
+        """
+        This method is called when valid form data has been POSTed.
+        It's the ideal place to add logic for creating the user and sending emails.
+        """
+        # First, let the parent class do its job: save the ParentModel instance.
+        # super().form_valid(form) returns the HttpResponseRedirect.
+        response = super().form_valid(form)
+
+        # self.object is now the newly created ParentModel instance.
+        parent = self.object
+
+        try:
+            # 1. Use the auto-generated parent_id as the unique username.
+            username = parent.parent_id
+
+            # Safety check: ensure a user doesn't already exist.
+            if User.objects.filter(username=username).exists():
+                messages.warning(self.request,
+                                 f"Parent was created, but a user with login ID '{username}' already exists. Please resolve this manually.")
+                return response
+
+            # 2. Generate a random password.
+            # You can use your make_random_password function or a simple one here.
+            password = User.objects.make_random_password(length=10)
+
+            # 3. Create the Django User object.
+            user = User.objects.create_user(
+                username=username,
+                password=password,
+                email=parent.email,
+                first_name=parent.first_name,
+                last_name=parent.last_name
+            )
+
+            # 4. Create the ParentProfile to link the User and Parent.
+            ParentProfileModel.objects.create(
+                user=user,
+                parent=parent,
+                default_password=password
+            )
+
+            # 5. Send the welcome email directly, bypassing the signal.
+            email_sent = _send_parent_welcome_email(parent, username, password)
+            if email_sent:
+                messages.info(self.request, f"A welcome email with login credentials has been sent to {parent.email}.")
+            elif parent.email:
+                messages.warning(self.request,
+                                 "Parent login was created, but the welcome email could not be sent. Please check the server logs.")
+
+        except Exception as e:
+            # If anything goes wrong, log the error and notify the admin.
+            logger.error(f"Failed to create user account or send email for Parent ID {parent.id}: {e}")
+            messages.error(self.request,
+                           "The parent was created, but there was a critical error creating their login account. Please review the system logs.")
+
+        # Finally, return the original redirect response.
+        return response
+
     def get_success_url(self):
+        """
+        Determines the redirect URL after the form is successfully submitted.
+        This part remains unchanged.
+        """
         action = self.request.POST.get('action')
         if action == 'save_and_add_ward':
             messages.success(self.request, "Parent created successfully. Now, please register their first ward.")
             return reverse('student_create', kwargs={'parent_pk': self.object.pk})
-        messages.success(self.request, "Parent created successfully.")
+
+        # The main success message is now part of form_valid, so we can make this one simpler.
+        messages.success(self.request, "Parent record created successfully.")
         return reverse('parent_detail', kwargs={'pk': self.object.pk})
 
 
@@ -189,17 +258,55 @@ class StudentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView)
     template_name = 'student/student/create.html'
 
     def get_context_data(self, **kwargs):
+        """
+        Adds the parent object to the template context for display.
+        """
         context = super().get_context_data(**kwargs)
+        # Get the parent from the URL and add it to the context
         context['parent'] = get_object_or_404(ParentModel, pk=self.kwargs.get('parent_pk'))
         return context
 
     def form_valid(self, form):
+        """
+        This method is called when the form is valid. We override it to:
+        1. Associate the student with the correct parent from the URL.
+        2. Explicitly create the StudentWalletModel after the student is saved.
+        """
+        # First, get the parent object from the primary key in the URL
         parent = get_object_or_404(ParentModel, pk=self.kwargs.get('parent_pk'))
+        # Assign this parent to the new student instance before it's saved
         form.instance.parent = parent
-        messages.success(self.request, f"Student '{form.instance.first_name}' registered successfully for {parent}.")
-        return super().form_valid(form)
+
+        # Call the parent class's form_valid. This saves the StudentModel
+        # to the database and returns the redirect response.
+        response = super().form_valid(form)
+
+        # After the super() call, self.object contains the newly created student instance.
+        try:
+            # EXPLICITLY CREATE THE WALLET, bypassing the signal.
+            # Using get_or_create is robust; it won't crash if a wallet somehow already exists.
+            wallet, created = StudentWalletModel.objects.get_or_create(student=self.object)
+
+            if created:
+                messages.success(self.request,
+                                 f"Student '{self.object.first_name}' registered and a new wallet was created successfully.")
+            else:
+                messages.info(self.request,
+                              f"Student '{self.object.first_name}' was registered, but a wallet already existed for them.")
+
+        except Exception as e:
+            # If wallet creation fails, log it and inform the user.
+            logger.error(f"CRITICAL: Failed to create wallet for new student {self.object.id}: {e}")
+            messages.error(self.request,
+                           "The student was created, but there was an error creating their wallet. Please contact support.")
+
+        # Return the original redirect response
+        return response
 
     def get_success_url(self):
+        """
+        Redirect to the detail page of the newly created student.
+        """
         return reverse('student_detail', kwargs={'pk': self.object.pk})
 
 
@@ -703,40 +810,39 @@ def generate_import_batch_id(parent_filename, student_filename):
 def parent_student_upload_view(request):
     """
     Handles the file upload form for both parent and student files.
-    Initiates background processing task.
+    Initiates background processing task and displays recent imports.
     """
-    # Import the form here instead of at the top
-
     if request.method == 'POST':
         form = ParentStudentUploadForm(request.POST, request.FILES)
         if form.is_valid():
             parent_file = request.FILES['parent_file']
             student_file = request.FILES['student_file']
 
-            # Save files to disk
             fs = FileSystemStorage()
-
+            # Save files to organized subdirectories within your media root
             parent_filename = fs.save(f"imports/parents/{parent_file.name}", parent_file)
             parent_file_path = fs.path(parent_filename)
 
             student_filename = fs.save(f"imports/students/{student_file.name}", student_file)
             student_file_path = fs.path(student_filename)
 
-            # Generate unique batch ID
-            batch_id = generate_import_batch_id(parent_file.name, student_file.name)
+            # Use the helper function to get a unique batch ID
+            batch_id = generate_import_batch_id()
 
-            # Create import batch record
-            from .models import ImportBatchModel
-            import_batch = ImportBatchModel.objects.create(
+            # Create the import batch record for tracking
+            # Note: request.user.staff_profile may not exist for all users.
+            # Using getattr is a safe way to avoid errors.
+            staff_profile = getattr(request.user, 'staff_profile', None)
+
+            ImportBatchModel.objects.create(
                 batch_id=batch_id,
                 parent_file_name=parent_file.name,
                 student_file_name=student_file.name,
-                imported_by=request.user.staff_profile.staff if hasattr(request.user, 'staff_profile') else None,
+                imported_by=staff_profile,
                 status='processing'
             )
 
-            # Dispatch background task
-            from .tasks import process_parent_student_upload
+            # Dispatch the background task to Celery
             process_parent_student_upload.delay(
                 parent_file_path,
                 student_file_path,
@@ -745,36 +851,32 @@ def parent_student_upload_view(request):
 
             messages.success(
                 request,
-                f'Files uploaded successfully! Import batch ID: {batch_id}. '
-                'The data is being processed in the background. '
-                'You will be notified when processing is complete.'
+                f'Files uploaded successfully! The data is being processed in the background. '
+                f'Batch ID: {batch_id}.'
             )
             return redirect('parent_student_upload')
     else:
-        # Import here too for GET requests
         form = ParentStudentUploadForm()
 
-    # Get recent imports for display
-    from .models import ImportBatchModel
+    # Get recent import batches to display on the page
     recent_imports = ImportBatchModel.objects.all()[:10]
 
     context = {
         'form': form,
         'recent_imports': recent_imports,
     }
-    return render(request, 'student/parent_student_upload.html', context)
+    return render(request, 'student/import_parent_student.html', context)
 
 
 @login_required
 def import_batch_detail_view(request, batch_id):
-    """View details of a specific import batch."""
-
+    """
+    Displays the details and results of a specific import batch.
+    """
     batch = get_object_or_404(ImportBatchModel, batch_id=batch_id)
 
-    # Get parents and students from this batch
-    from .models import ParentModel, StudentModel
-
-    parents = ParentModel.objects.filter(import_batch_id=batch_id).select_related('parent_profile')
+    # Get parents and students that were created or updated in this batch
+    parents = ParentModel.objects.filter(import_batch_id=batch_id).select_related('parent_profile__user')
     students = StudentModel.objects.filter(import_batch_id=batch_id).select_related(
         'parent', 'student_class', 'class_section'
     )
