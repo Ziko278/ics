@@ -34,6 +34,7 @@
                 <tr>
                     <th scope="col">#</th>
                     <th scope="col">Class Name</th>
+                    <th scope="col">Class Code</th>
                     <th class="text-center" scope="col">Assigned Sections</th>
                     <th scope="col" class="text-center">Action</th>
                 </tr>
@@ -43,6 +44,7 @@
                 <tr>
                     <th scope="row">{{ forloop.counter }}</th>
                     <td>{{ class.name|upper }}</td>
+                    <td>{{ class.code|upper }}</td>
                     <td class="text-center">
                         {% for section in class.section.all %}
                             <span class="badge bg-secondary">{{ section.name|upper }}</span>
@@ -113,6 +115,12 @@
                                 <label for="id_name">Class Name (e.g., JSS 1)<span class="text-danger">*</span></label>
                             </div>
                         </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                {{ form.code }}
+                                <label for="id_code">Class Code<span class="text-danger"></span></label>
+                            </div>
+                        </div>
                         <div class="col-md-6">
                             <label for="id_sections" class="form-label">Assign Sections</label>
                             {{ form.section }}
@@ -146,6 +154,12 @@
                             <div class="form-floating">
                                 <input type="text" name="name" value="{{ class_obj.name }}" autocomplete="off" required class="form-control" id="id_name_{{ forloop.counter }}">
                                 <label for="id_name_{{ forloop.counter }}">Class Name<span class="text-danger">*</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-floating">
+                                <input type="text" name="code" value="{{ class_obj.code }}" autocomplete="off" class="form-control" id="id_code_{{ forloop.counter }}">
+                                <label for="id_code_{{ forloop.counter }}">Class Code<span class="text-danger"></span></label>
                             </div>
                         </div>
                         <div class="col-md-6">

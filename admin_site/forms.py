@@ -129,7 +129,7 @@ class ClassForm(forms.ModelForm):
 
     class Meta:
         model = ClassesModel
-        fields = ['name', 'section']
+        fields = ['name', 'code', 'section']
         widgets = {
             'section': forms.CheckboxSelectMultiple,
         }
