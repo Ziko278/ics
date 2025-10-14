@@ -11,13 +11,16 @@ from django.urls import reverse
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.contrib.auth.models import User
-
+import logging
 from admin_site.models import ClassesModel, ClassSectionModel, SchoolInfoModel
 from .models import (
     ParentModel, ParentProfileModel, StudentModel, StudentWalletModel,
     ImportBatchModel
 )
 from .utils import clean_email, clean_phone, normalize_gender, find_class_by_name, find_section_by_name
+
+logger = logging.getLogger(__name__)
+
 
 
 def _send_parent_welcome_email(parent, username, password):
@@ -93,6 +96,7 @@ def create_parent_with_user(excel_pid, import_batch_id, first_name, last_name,
         _send_parent_welcome_email(parent, username, password)
     except Exception as e:
         print(f"ERROR creating user for parent {parent.parent_id}: {e}")
+        logger.error(f"Error processing student row {e}", exc_info=True)
 
     return parent
 
@@ -142,6 +146,8 @@ def process_parents(file_path, import_batch_id):
                     created_count += 1
         except Exception as e:
             print(f"Error on parent row {row_index}: {e}")
+            logger.error(f"Error processing student row {e}", exc_info=True)
+
             failed_count += 1
 
     return {'created': created_count, 'updated': updated_count, 'skipped': skipped_count, 'failed': failed_count}
