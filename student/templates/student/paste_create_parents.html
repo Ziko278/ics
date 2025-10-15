@@ -1,0 +1,142 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-10 offset-lg-1 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Semi-Automated Parent Creation</h5>
+
+            <div class="alert alert-info">
+                <h6 class="alert-heading">How to Use</h6>
+                <ol>
+                    <li>First, ask me to convert your raw Excel data into a clean JSON format.</li>
+                    <li>Paste the entire JSON array I provide into the text box below.</li>
+                    <li>Click the "Start Processing" button.</li>
+                    <li>The system will create each parent account one by one and show you the real-time status.</li>
+                </ol>
+            </div>
+
+            <div class="mb-3">
+                <label for="json-data" class="form-label"><strong>Paste JSON Data Here:</strong></label>
+                <textarea class="form-control" id="json-data" rows="10" placeholder='[&#10;  {&#10;    "first_name": "John",&#10;    "last_name": "Doe",&#10;    "email": "john.doe@example.com",&#10;    "mobile": "08012345678"&#10;  },&#10;  {&#10;    "first_name": "Jane",&#10;    "last_name": "Smith",&#10;    "email": "jane.smith@example.com",&#10;    "mobile": "09012345678"&#10;  }&#10;]'></textarea>
+            </div>
+
+            <div class="d-flex align-items-center">
+                <button id="start-button" class="btn btn-primary me-3"><i class="bi bi-play-circle-fill"></i> Start Processing</button>
+                <div id="spinner" class="spinner-border text-primary d-none" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <h6 class="card-subtitle mb-2 text-muted">Processing Log</h6>
+                <pre id="log-output" style="background-color: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 5px; height: 300px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;"></pre>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const startButton = document.getElementById('start-button');
+    const jsonTextArea = document.getElementById('json-data');
+    const logOutput = document.getElementById('log-output');
+    const spinner = document.getElementById('spinner');
+
+    // Helper function to get the CSRF token from cookies
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    // Helper function to add messages to the log
+    function logMessage(message, type = 'info') {
+        const timestamp = new Date().toLocaleTimeString();
+        let color = '#e2e8f0'; // Default white/gray
+        let prefix = 'INFO';
+        if (type === 'success') {
+            color = '#48bb78'; // Green
+            prefix = '✅ SUCCESS';
+        } else if (type === 'error') {
+            color = '#f56565'; // Red
+            prefix = '❌ ERROR';
+        } else if (type === 'system') {
+            color = '#4299e1'; // Blue
+        }
+        logOutput.innerHTML += `<span style="color: ${color};">[${timestamp}] ${prefix}: ${message}\n</span>`;
+        logOutput.scrollTop = logOutput.scrollHeight; // Auto-scroll to bottom
+    }
+
+    startButton.addEventListener('click', async function () {
+        startButton.disabled = true;
+        spinner.classList.remove('d-none');
+        logOutput.innerHTML = ''; // Clear previous logs
+
+        const jsonData = jsonTextArea.value;
+        let parents;
+
+        try {
+            parents = JSON.parse(jsonData);
+            if (!Array.isArray(parents)) {
+                throw new Error("Pasted data is not a valid JSON array.");
+            }
+        } catch (error) {
+            logMessage(`Invalid JSON format: ${error.message}`, 'error');
+            startButton.disabled = false;
+            spinner.classList.add('d-none');
+            return;
+        }
+
+        logMessage(`Found ${parents.length} parent records to process. Starting...`, 'system');
+
+        // Process each parent one-by-one
+        for (const parent of parents) {
+            const name = `${parent.first_name || ''} ${parent.last_name || ''}`.trim();
+            logMessage(`Processing account for ${name}...`);
+
+            try {
+                const response = await fetch("{% url 'ajax_create_parent' %}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken,
+                    },
+                    body: JSON.stringify(parent),
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    logMessage(result.message, 'success');
+                } else {
+                    logMessage(result.message, 'error');
+                }
+
+            } catch (error) {
+                logMessage(`Network or server error for ${name}. Check console for details.`, 'error');
+                console.error(error);
+            }
+
+            // Small delay to prevent overwhelming the server and to make the log readable
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        logMessage("All records have been processed.", 'system');
+        startButton.disabled = false;
+        spinner.classList.add('d-none');
+    });
+});
+</script>
+{% endblock %}

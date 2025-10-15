@@ -5,7 +5,8 @@ from student.views import StudentSettingDetailView, StudentSettingUpdateView, St
     StudentUpdateView, StudentDeleteView, StudentDetailView, change_student_status, select_class_for_export_view, \
     export_class_list_view, capture_fingerprint, identify_student_by_fingerprint, SelectParentView, ParentSearchView, \
     ClassStudentSelectView, GetClassSectionsView, delete_fingerprint, test_scanner_connection, \
-    parent_student_upload_view, import_batch_detail_view, download_parent_credentials, download_all_parent_credentials
+    parent_student_upload_view, import_batch_detail_view, download_parent_credentials, download_all_parent_credentials, \
+    ajax_create_parent_view, paste_create_parents_view
 
 urlpatterns = [
     # Student Settings URLs (Singleton)
@@ -48,4 +49,16 @@ urlpatterns = [
     path('api/fingerprint/delete/', delete_fingerprint, name='delete_fingerprint'),
     path('api/fingerprint/test-scanner/', test_scanner_connection, name='test_scanner'),
 
+    path(
+        'paste-create-parents/',
+        paste_create_parents_view,
+        name='paste_create_parents'
+    ),
+
+    # The URL that the JavaScript will call to create each parent (the AJAX endpoint)
+    path(
+        'ajax/create-parent/',
+        ajax_create_parent_view,
+        name='ajax_create_parent'
+    ),
 ]
