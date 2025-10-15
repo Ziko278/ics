@@ -4,6 +4,7 @@ import io
 import json
 import base64
 import random
+import secrets
 import string
 from datetime import datetime
 
@@ -1233,17 +1234,13 @@ def download_all_parent_credentials(request):
 def _create_parent_account(first_name, last_name, email, mobile):
     """
     A helper function to create a parent, user, profile, and send an email.
-    This contains the core logic for creating a single parent account.
     """
-    # Use the logic to handle single names
     if not last_name:
         last_name = first_name
 
-    # Check for existing user by email if provided
     if email and User.objects.filter(email__iexact=email).exists():
         raise ValueError(f"An account with the email '{email}' already exists.")
 
-    # Create the ParentModel instance; this will generate the parent_id
     parent = ParentModel.objects.create(
         first_name=first_name,
         last_name=last_name,
@@ -1252,9 +1249,14 @@ def _create_parent_account(first_name, last_name, email, mobile):
     )
 
     username = parent.parent_id
-    password = User.objects.make_random_password(length=10)
 
-    # Create the User and Profile
+    # --- THIS IS THE CORRECTED PASSWORD LOGIC ---
+    # Using the 'secrets' module as you suggested for security.
+    # This alphabet avoids ambiguous characters like 'i', 'I', '1', 'l', 'o', 'O', '0'.
+    alphabet = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    password = ''.join(secrets.choice(alphabet) for i in range(10))
+    # --- END OF CORRECTION ---
+
     user = User.objects.create_user(
         username=username,
         password=password,
@@ -1268,11 +1270,9 @@ def _create_parent_account(first_name, last_name, email, mobile):
         default_password=password
     )
 
-    # Send the welcome email
     _send_parent_welcome_email(parent, username, password)
 
     return parent
-
 
 @login_required
 def paste_create_parents_view(request):
