@@ -1392,7 +1392,6 @@ def ajax_create_student_view(request):
             parent=parent,
             student_class=student_class,
             class_section=class_section,
-            created_by=request.user.staffmodel  # Adjust if your user-staff link is different
         )
         StudentWalletModel.objects.create(student=student)
 
