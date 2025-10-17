@@ -1,0 +1,140 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-10 offset-lg-1 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Semi-Automated Student Creation</h5>
+
+            <div class="alert alert-info">
+                <h6 class="alert-heading">How to Use</h6>
+                <ol>
+                    <li>Run the `convert_students.py` script to turn your Excel file into clean JSON.</li>
+                    <li>Copy the entire JSON array from the `students_data.json` file.</li>
+                    <li>Paste the JSON into the text box below.</li>
+                    <li>Click the "Start Processing" button.</li>
+                    <li>The system will create each student and their wallet one by one, showing the real-time status.</li>
+                </ol>
+            </div>
+
+            <div class="mb-3">
+                <label for="json-data" class="form-label"><strong>Paste Student JSON Data Here:</strong></label>
+                <textarea class="form-control" id="json-data" rows="10" placeholder='[&#10;  {&#10;    "last_name": "Abacha",&#10;    "first_name": "Fatima",&#10;    "class_code": "G7",&#10;    "class_section_name": "White",&#10;    "gender": "F",&#10;    "parent_emails_raw": "faatymah@hotmail.com"&#10;  },&#10;  {&#10;    "last_name": "Abah",&#10;    "first_name": "Zara",&#10;    "class_code": "G6",&#10;    "class_section_name": "Blue",&#10;    "gender": "F",&#10;    "parent_emails_raw": "basiraabah@yahoo.com"&#10;  }&#10;]'>
+                </textarea>
+            </div>
+
+            <div class="d-flex align-items-center">
+                <button id="start-button" class="btn btn-primary me-3"><i class="bi bi-play-circle-fill"></i> Start Processing</button>
+                <div id="spinner" class="spinner-border text-primary d-none" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <h6 class="card-subtitle mb-2 text-muted">Processing Log</h6>
+                <pre id="log-output" style="background-color: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 5px; height: 300px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;"></pre>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const startButton = document.getElementById('start-button');
+    const jsonTextArea = document.getElementById('json-data');
+    const logOutput = document.getElementById('log-output');
+    const spinner = document.getElementById('spinner');
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    function logMessage(message, type = 'info') {
+        const timestamp = new Date().toLocaleTimeString();
+        let color = '#e2e8f0'; // Default
+        let prefix = 'INFO';
+        if (type === 'success') {
+            color = '#48bb78'; // Green
+            prefix = '✅ SUCCESS';
+        } else if (type === 'error') {
+            color = '#f56565'; // Red
+            prefix = '❌ ERROR';
+        } else if (type === 'system') {
+            color = '#4299e1'; // Blue
+        }
+        logOutput.innerHTML += `<span style="color: ${color};">[${timestamp}] ${prefix}: ${message}\n</span>`;
+        logOutput.scrollTop = logOutput.scrollHeight;
+    }
+
+    startButton.addEventListener('click', async function () {
+        startButton.disabled = true;
+        spinner.classList.remove('d-none');
+        logOutput.innerHTML = '';
+
+        const jsonData = jsonTextArea.value;
+        let students;
+
+        try {
+            students = JSON.parse(jsonData);
+            if (!Array.isArray(students)) {
+                throw new Error("Pasted data is not a valid JSON array.");
+            }
+        } catch (error) {
+            logMessage(`Invalid JSON format: ${error.message}`, 'error');
+            startButton.disabled = false;
+            spinner.classList.add('d-none');
+            return;
+        }
+
+        logMessage(`Found ${students.length} student records to process. Starting...`, 'system');
+
+        for (const student of students) {
+            const name = `${student.first_name || ''} ${student.last_name || ''}`.trim();
+            logMessage(`Processing student: ${name}...`);
+
+            try {
+                const response = await fetch("{% url 'ajax_create_student' %}", { // <-- IMPORTANT: URL is updated
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken,
+                    },
+                    body: JSON.stringify(student),
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    logMessage(result.message, 'success');
+                } else {
+                    logMessage(result.message, 'error');
+                }
+
+            } catch (error) {
+                logMessage(`Network or server error for ${name}. Check console for details.`, 'error');
+                console.error(error);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        logMessage("All records have been processed.", 'system');
+        startButton.disabled = false;
+        spinner.classList.add('d-none');
+    });
+});
+</script>
+{% endblock %}

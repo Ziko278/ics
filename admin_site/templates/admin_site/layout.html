@@ -229,8 +229,15 @@
 
                     {% if 'student.add_studentmodel' in perms %}
                     <li>
-                        <a href="{% url 'import_parent_student' %}">
-                            <i class="bi bi-circle"></i><span>Data Upload</span>
+                        <a href="{% url 'paste_create_students' %}">
+                            <i class="bi bi-circle"></i><span>Data Student Upload</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if 'student.add_studentmodel' in perms %}
+                    <li>
+                        <a href="{% url 'paste_create_parents' %}">
+                            <i class="bi bi-circle"></i><span>Data Parent Upload</span>
                         </a>
                     </li>
                     {% endif %}

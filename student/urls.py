@@ -6,7 +6,7 @@ from student.views import StudentSettingDetailView, StudentSettingUpdateView, St
     export_class_list_view, capture_fingerprint, identify_student_by_fingerprint, SelectParentView, ParentSearchView, \
     ClassStudentSelectView, GetClassSectionsView, delete_fingerprint, test_scanner_connection, \
     parent_student_upload_view, import_batch_detail_view, download_parent_credentials, download_all_parent_credentials, \
-    ajax_create_parent_view, paste_create_parents_view
+    ajax_create_parent_view, paste_create_parents_view, paste_create_students_view, ajax_create_student_view
 
 urlpatterns = [
     # Student Settings URLs (Singleton)
@@ -60,5 +60,16 @@ urlpatterns = [
         'ajax/create-parent/',
         ajax_create_parent_view,
         name='ajax_create_parent'
+    ),
+
+path(
+        'paste-create-students/',
+        paste_create_students_view,
+        name='paste_create_students'
+    ),
+    path(
+        'ajax/create-student/',
+        ajax_create_student_view,
+        name='ajax_create_student'
     ),
 ]

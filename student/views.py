@@ -4,10 +4,12 @@ import io
 import json
 import base64
 import random
+import re
 import secrets
 import string
 from datetime import datetime
-
+from functools import reduce
+import operator
 from django.contrib.auth.models import User
 
 from .tasks import process_parent_student_upload, _send_parent_welcome_email
@@ -1274,6 +1276,7 @@ def _create_parent_account(first_name, last_name, email, mobile):
 
     return parent
 
+
 @login_required
 def paste_create_parents_view(request):
     """
@@ -1313,3 +1316,101 @@ def ajax_create_parent_view(request):
         # Catch any other unexpected errors
         logger.error("Error in ajax_create_parent_view: %s", e, exc_info=True)
         return JsonResponse({'status': 'error', 'message': 'A critical server error occurred. Check logs.'}, status=500)
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def ajax_create_student_view(request):
+    """
+    AJAX endpoint to create a single student and their wallet.
+    Processes a case-insensitive, 100% exact match for parent emails.
+    """
+    try:
+        data = json.loads(request.body)
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        gender_raw = data.get('gender')
+        class_code = data.get('class_code')
+        class_section_name = data.get('class_section_name')
+        parent_emails_raw = data.get('parent_emails_raw')
+
+        # --- 1. Basic Validation ---
+        if not all([first_name, last_name, class_code, class_section_name, parent_emails_raw]):
+            return JsonResponse({'status': 'error', 'message': 'Missing required data.'}, status=400)
+
+        # --- 2. Find Parent (Case-Insensitive 100% Exact Match Logic) ---
+        # Split by comma, space, or semicolon and clean up
+        email_list = [email.strip().lower() for email in re.split(r'[,\s;]+', parent_emails_raw) if email.strip()]
+        if not email_list:
+            raise ValueError("Parent email field is empty or invalid.")
+
+        # Build a dynamic query with Q objects for case-insensitive matching
+        # This assumes your ParentModel is linked to a User model with an email field.
+        # If ParentModel has the email directly, change 'user__email__iexact' to 'email__iexact'.
+        query_objects = [Q(email__iexact=email) for email in email_list]
+
+        # Combine all Q objects with an OR operator
+        if query_objects:
+            query = reduce(operator.or_, query_objects)
+            parents = ParentModel.objects.filter(query).distinct()
+        else:
+            # If email_list is empty, return an empty queryset
+            parents = ParentModel.objects.none()
+
+        if parents.count() == 0:
+            raise ValueError(f"Parent with emails ({', '.join(email_list)}) not found.")
+        elif parents.count() > 1:
+            raise ValueError(f"Ambiguous match: Found multiple parents for emails ({', '.join(email_list)}).")
+
+        parent = parents.first()
+
+        # --- 3. Find Class and Section ---
+        try:
+            student_class = ClassesModel.objects.get(code__iexact=class_code)
+        except ClassesModel.DoesNotExist:
+            raise ValueError(f"Class with code '{class_code}' does not exist.")
+
+        class_section, _ = ClassSectionModel.objects.get_or_create(
+            name__iexact=class_section_name,
+            defaults={'name': class_section_name}
+        )
+
+        # --- 4. Map Gender ---
+        if gender_raw.startswith('F'):
+            gender = StudentModel.Gender.FEMALE
+        elif gender_raw.startswith('M'):
+            gender = StudentModel.Gender.MALE
+        else:
+            raise ValueError(f"Invalid gender value: '{gender_raw}'. Use 'M' or 'F'.")
+
+        # --- 5. Create Student and Wallet ---
+        student = StudentModel.objects.create(
+            first_name=first_name,
+            last_name=last_name,
+            gender=gender,
+            parent=parent,
+            student_class=student_class,
+            class_section=class_section,
+            created_by=request.user.staffmodel  # Adjust if your user-staff link is different
+        )
+        StudentWalletModel.objects.create(student=student)
+
+        return JsonResponse({
+            'status': 'success',
+            'message': f"Student '{student.first_name} {student.last_name}' ({student.registration_number}) created and linked to parent '{parent}'."
+        })
+
+    except ValueError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    except Exception as e:
+        logger.error("Critical error in ajax_create_student_view: %s", e, exc_info=True)
+        return JsonResponse({'status': 'error', 'message': 'A critical server error occurred. Check logs.'}, status=500)
+
+
+@login_required
+def paste_create_students_view(request):
+    """
+    Renders the HTML page with the textarea for pasting student JSON.
+    """
+    return render(request, 'student/paste_create_students.html')
