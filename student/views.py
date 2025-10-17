@@ -1325,6 +1325,7 @@ def ajax_create_student_view(request):
     """
     AJAX endpoint to create a single student and their wallet.
     Processes a case-insensitive, 100% exact match for parent emails.
+    Includes a fallback search by student's last name if email search fails.
     """
     try:
         data = json.loads(request.body)
@@ -1339,29 +1340,31 @@ def ajax_create_student_view(request):
         if not all([first_name, last_name, class_code, class_section_name, parent_emails_raw]):
             return JsonResponse({'status': 'error', 'message': 'Missing required data.'}, status=400)
 
-        # --- 2. Find Parent (Case-Insensitive 100% Exact Match Logic) ---
-        # Split by comma, space, or semicolon and clean up
+        # --- 2. Find Parent (Primary search by Email) ---
         email_list = [email.strip().lower() for email in re.split(r'[,\s;]+', parent_emails_raw) if email.strip()]
-        if not email_list:
-            raise ValueError("Parent email field is empty or invalid.")
+        parents = ParentModel.objects.none()  # Start with an empty queryset
 
-        # Build a dynamic query with Q objects for case-insensitive matching
-        # This assumes your ParentModel is linked to a User model with an email field.
-        # If ParentModel has the email directly, change 'user__email__iexact' to 'email__iexact'.
-        query_objects = [Q(email__iexact=email) for email in email_list]
-
-        # Combine all Q objects with an OR operator
-        if query_objects:
+        if email_list:
+            # Build a dynamic query with Q objects for case-insensitive matching
+            # Assumes ParentModel has an 'email' field directly.
+            query_objects = [Q(email__iexact=email) for email in email_list]
             query = reduce(operator.or_, query_objects)
             parents = ParentModel.objects.filter(query).distinct()
-        else:
-            # If email_list is empty, return an empty queryset
-            parents = ParentModel.objects.none()
 
+        # --- NEW: Fallback search by Name if no parent was found by email ---
+        if not parents.exists():
+            # Search for a parent where their first or last name matches the student's last name
+            name_query = Q(last_name__iexact=last_name) | Q(first_name__iexact=last_name)
+            parents = ParentModel.objects.filter(name_query)
+            # This result will now be checked by the validation below.
+
+        # --- Final Validation for Parent ---
         if parents.count() == 0:
-            raise ValueError(f"Parent with emails ({', '.join(email_list)}) not found.")
+            # This error now triggers if BOTH email and name searches failed.
+            raise ValueError(f"Parent not found via email ({', '.join(email_list)}) or name ({last_name}).")
         elif parents.count() > 1:
-            raise ValueError(f"Ambiguous match: Found multiple parents for emails ({', '.join(email_list)}).")
+            raise ValueError(
+                f"Ambiguous match: Found multiple parents for email ({', '.join(email_list)}) or name ({last_name}).")
 
         parent = parents.first()
 
@@ -1405,6 +1408,7 @@ def ajax_create_student_view(request):
     except Exception as e:
         logger.error("Critical error in ajax_create_student_view: %s", e, exc_info=True)
         return JsonResponse({'status': 'error', 'message': 'A critical server error occurred. Check logs.'}, status=500)
+
 
 
 @login_required
