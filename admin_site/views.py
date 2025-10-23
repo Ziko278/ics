@@ -386,7 +386,7 @@ def login_view(request):
                     del request.session['selected_ward_id']
                 messages.success(request, f'Welcome back, {user.parent_profile.parent.first_name}!')
                 # Redirect to the parent portal ward selection page
-                return redirect(reverse('select_ward'))
+                return redirect(reverse('parent_select_ward'))
 
             # 4. If user has no associated profile, deny access and log out
             else:
