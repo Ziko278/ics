@@ -1,0 +1,171 @@
+{% extends "parent_portal/layout.html" %}
+{% load humanize %}
+{% load humanize custom_filters %}
+
+
+{% block title %}Payment Upload History - {{ selected_ward.first_name }}{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Payment Upload History</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item">Fees</li>
+      <li class="breadcrumb-item active">Upload History</li>
+    </ol>
+  </nav>
+</div><section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+                     <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title">History of Uploaded Payments for {{ selected_ward.first_name }} {{ selected_ward.last_name }}</h5>
+                        <a href="{% url 'parent_fee_upload' %}" class="btn btn-sm btn-success"><i class="bi bi-upload"></i> Upload New Proof</a>
+                    </div>
+                    <p class="small text-muted">This page shows payment proofs you have uploaded, both for general wallet funding and specific invoices, along with their review status.</p>
+
+                    {% if wallet_uploads or invoice_uploads %}
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Date Uploaded</th>
+                                        <th>Type</th>
+                                        <th class="text-end">Amount (₦)</th>
+                                        <th>Method</th>
+                                        <th>Reference / Invoice</th>
+                                        <th>Status</th>
+                                        <th class="text-center">Proof</th>
+                                        <th>Admin Remarks/Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                {# --- Invoice Payments Uploaded (FeePaymentModel) --- #}
+                                {% for upload in invoice_uploads %}
+                                    <tr>
+                                        <td>{{ upload.created_at|date:"d M, Y H:i" }}</td>
+                                        <td>
+                                            <span class="badge bg-primary" title="Payment applied towards a specific invoice">
+                                                <i class="bi bi-receipt me-1"></i> Invoice Payment
+                                            </span>
+                                        </td>
+                                        <td class="text-end fw-bold">₦{{ upload.amount|floatformat:2|intcomma }}</td>
+                                        <td>{{ upload.get_payment_mode_display }}</td>
+                                        <td>
+                                            {% if upload.invoice %}
+                                            <a href="{% url 'parent_fee_invoice_detail' upload.invoice.pk %}" title="View Invoice {{ upload.invoice.invoice_number }}">
+                                                {{ upload.invoice.invoice_number }}
+                                            </a>
+                                            {% else %}
+                                            <span class="text-muted">Invoice Error</span>
+                                            {% endif %}
+                                            <br>
+                                            <small class="text-muted">Ref: {{ upload.reference|default:"N/A" }}</small>
+                                        </td>
+                                        <td>
+                                            {# Status Badge for FeePaymentModel #}
+                                            <span class="badge
+                                                {% if upload.status == 'confirmed' %}bg-success
+                                                {% elif upload.status == 'pending' %}bg-warning text-dark
+                                                {% elif upload.status == 'failed' or upload.status == 'reverted' %}bg-danger
+                                                {% else %}bg-secondary{% endif %}">
+                                                {{ upload.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            {# --- CORRECTED PROOF HANDLING --- #}
+                                            {# Assumes notes contain "Proof File: path/to/file.ext" on its own line or easily extractable #}
+                                            {% if "Proof File:" in upload.notes %}
+                                                {# Attempt to extract path - THIS IS FRAGILE #}
+                                                {% with proof_note_part=upload.notes|split:"Proof File:"|last %} {# Get text after "Proof File:" #}
+                                                {% with proof_path=proof_note_part|split:"\n"|first|strip %} {# Get first line after, strip whitespace #}
+                                                    {% if proof_path and proof_path != 'Not Saved' %}
+                                                        <a href="{{ MEDIA_URL }}{{ proof_path }}" target="_blank" class="btn btn-sm btn-outline-primary" title="View Uploaded Proof">
+                                                            <i class="bi bi-eye"></i>
+                                                        </a>
+                                                    {% else %}
+                                                        <span class="text-muted" title="Proof path invalid or not saved">-</span>
+                                                    {% endif %}
+                                                {% endwith %}
+                                                {% endwith %}
+                                            {% else %}
+                                                <span class="text-muted" title="Proof info missing">-</span>
+                                            {% endif %}
+                                            {# --- END CORRECTION --- #}
+                                        </td>
+                                        <td>
+                                             {# Display notes, which might include admin rejection reasons #}
+                                             {% if upload.notes %}
+                                                <small class="text-muted">{{ upload.notes|linebreaksbr }}</small>
+                                             {% else %}
+                                                -
+                                             {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+
+                                {# --- Wallet Funding Uploaded (StudentFundingModel) --- #}
+                                {% for upload in wallet_uploads %}
+                                    <tr>
+                                        <td>{{ upload.created_at|date:"d M, Y H:i" }}</td>
+                                        <td>
+                                            <span class="badge bg-info" title="General funding added to student wallet balance">
+                                               <i class="bi bi-wallet2 me-1"></i> Wallet Funding
+                                            </span>
+                                        </td>
+                                        <td class="text-end fw-bold">₦{{ upload.amount|floatformat:2|intcomma }}</td>
+                                        <td>{{ upload.get_method_display }}</td>
+                                        <td>{{ upload.teller_number|default:"N/A" }}</td>
+                                        <td>
+                                            {# Status Badge for StudentFundingModel #}
+                                            <span class="badge
+                                                {% if upload.status == 'confirmed' %}bg-success
+                                                {% elif upload.status == 'pending' %}bg-warning text-dark
+                                                {% elif upload.status == 'failed' %}bg-danger
+                                                {% else %}bg-secondary{% endif %}">
+                                                {{ upload.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            {# Assuming StudentFundingModel *does* have proof_of_payment field #}
+                                            {% if upload.proof_of_payment %}
+                                                <a href="{{ upload.proof_of_payment.url }}" target="_blank" class="btn btn-sm btn-outline-primary" title="View Uploaded Proof">
+                                                    <i class="bi bi-eye"></i>
+                                                </a>
+                                            {% else %}
+                                                <span class="text-muted">None</span>
+                                            {% endif %}
+                                        </td>
+                                         <td>
+                                            {% if upload.decline_reason %}
+                                                <span class="text-danger">{{ upload.decline_reason }}</span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                         </td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {# --- Optional: Add Pagination --- #}
+                        {# {% include 'parent_portal/partials/pagination.html' %} #}
+
+                    {% else %}
+                        {# Message if NO uploads of EITHER type exist #}
+                        <div class="alert alert-info text-center mt-3">
+                           <i class="bi bi-cloud-upload fs-3"></i><br>
+                           You have not uploaded any payment proofs yet.
+                           <a href="{% url 'parent_fee_upload' %}" class="alert-link">Upload one now</a>.
+                        </div>
+                    {% endif %}
+                </div> {# End Card Body #}
+            </div> {# End Card #}
+        </div> {# End Col #}
+    </div> {# End Row #}
+</section>
+
+{% endblock %}

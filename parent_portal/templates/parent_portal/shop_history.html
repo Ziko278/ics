@@ -1,0 +1,74 @@
+{% extends "parent_portal/layout.html" %}
+{% load humanize %}
+
+{% block title %}Shop Purchase History - {{ selected_ward.first_name }}{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Shop Purchase History</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item active">Shop Purchases</li>
+    </ol>
+  </nav>
+</div><section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Shop Purchase History for {{ selected_ward.first_name }} {{ selected_ward.last_name }}</h5>
+
+                    {% if sales %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Transaction ID</th>
+                                        <th class="text-end">Total Amount</th>
+                                        <th>Payment Method</th>
+                                        <th>Status</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                {% for sale in sales %}
+                                    <tr>
+                                        <td>{{ sale.sale_date|date:"d M, Y H:i" }}</td>
+                                        <td><code>{{ sale.transaction_id }}</code></td>
+                                        <td class="text-end fw-bold">₦{{ sale.total_amount|floatformat:2|intcomma }}</td>
+                                        <td><span class="badge bg-info">{{ sale.get_payment_method_display }}</span></td>
+                                        <td>
+                                            <span class="badge
+                                                {% if sale.status == 'completed' %}bg-success
+                                                {% elif sale.status == 'refunded' %}bg-warning text-dark
+                                                {% else %}bg-secondary{% endif %}">
+                                                {{ sale.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            <a href="{% url 'parent_shop_detail' sale.pk %}" class="btn btn-sm btn-primary">
+                                                <i class="bi bi-receipt"></i> View Details
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                         {% include 'parent_portal/partials/pagination.html' %}
+
+                    {% else %}
+                        <div class="alert alert-info text-center mt-3">
+                           <i class="bi bi-cart-x fs-3"></i><br>
+                           No shop purchases recorded for {{ selected_ward.first_name }}.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

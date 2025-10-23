@@ -1,0 +1,142 @@
+{% extends "parent_portal/layout.html" %}
+{% load humanize %} {# Load humanize if needed for comma formatting, although not used directly here #}
+
+{% block title %}Upload Payment Proof - {{ selected_ward.first_name }}{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Upload Payment Proof</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item">Fees</li>
+      <li class="breadcrumb-item active">Upload Proof</li>
+    </ol>
+  </nav>
+</div><section class="section">
+    <div class="row">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Submit Payment Details for {{ selected_ward.first_name }} {{ selected_ward.last_name }}</h5>
+                    <p>Please fill in the details of the payment you made and upload a clear picture or screenshot of the teller/transfer confirmation. You can optionally link this payment directly to an outstanding invoice.</p>
+
+                    {# --- Display Messages (including form errors from view) --- #}
+                    {% if messages %}
+                        {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} {% if message.tags == 'error' %}alert-danger{% endif %} alert-dismissible fade show" role="alert">
+                             {% if message.tags == 'success' %}<i class="bi bi-check-circle me-1"></i>{% endif %}
+                             {% if message.tags == 'warning' %}<i class="bi bi-exclamation-triangle me-1"></i>{% endif %}
+                             {% if message.tags == 'info' %}<i class="bi bi-info-circle me-1"></i>{% endif %}
+                             {% if message.tags == 'error' %}<i class="bi bi-exclamation-octagon me-1"></i>{% endif %}
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                    {# --- End Messages --- #}
+
+                    {# --- Form --- #}
+                    <form method="post" enctype="multipart/form-data" class="row g-3 needs-validation" novalidate>
+                        {% csrf_token %}
+
+                        {# Amount Field #}
+                        <div class="col-md-6">
+                            <label for="{{ form.amount.id_for_label }}" class="form-label">Amount Paid (₦) <span class="text-danger">*</span></label>
+                            {{ form.amount }} {# Assumes 'form-control' class is set in forms.py widget attrs #}
+                            {% if form.amount.errors %}
+                                <div class="text-danger small mt-1">{{ form.amount.errors|striptags }}</div>
+                            {% endif %}
+                        </div>
+
+                        {# Payment Method Field #}
+                        <div class="col-md-6">
+                            <label for="{{ form.method.id_for_label }}" class="form-label">Payment Method <span class="text-danger">*</span></label>
+                            {{ form.method }} {# Assumes 'form-select' class is set in forms.py widget attrs #}
+                             {% if form.method.errors %}
+                                <div class="text-danger small mt-1">{{ form.method.errors|striptags }}</div>
+                             {% endif %}
+                        </div>
+
+                        {# Teller/Reference Field #}
+                        <div class="col-12">
+                            <label for="{{ form.teller_number.id_for_label }}" class="form-label">{{ form.teller_number.label }}</label>
+                            {{ form.teller_number }} {# Assumes 'form-control' class is set in forms.py widget attrs #}
+                             <small class="text-muted">Enter the bank teller number or the online transfer reference ID.</small>
+                            {% if form.teller_number.errors %}
+                                <div class="text-danger small mt-1">{{ form.teller_number.errors|striptags }}</div>
+                            {% endif %}
+                        </div>
+
+                        {# Target Invoice Field #}
+                        <div class="col-12">
+                             <label for="{{ form.target_invoice.id_for_label }}" class="form-label">
+                                {{ form.target_invoice.label }}
+                             </label>
+                             {{ form.target_invoice }} {# Assumes 'form-select' class is set in forms.py widget attrs #}
+                             <small class="text-muted">Select an invoice to apply this payment directly to it, or leave as 'General' to fund the student's wallet.</small>
+                             {% if form.target_invoice.errors %}
+                                <div class="text-danger small mt-1">{{ form.target_invoice.errors|striptags }}</div>
+                             {% endif %}
+                        </div>
+
+                        {# Proof of Payment Field #}
+                        <div class="col-12">
+                            <label for="{{ form.proof_of_payment.id_for_label }}" class="form-label">{{ form.proof_of_payment.label }} <span class="text-danger">*</span></label>
+                            {{ form.proof_of_payment }} {# Assumes 'form-control' class is set in forms.py widget attrs #}
+                             <small class="text-muted">Max file size: 5MB. Allowed types: jpg, png, pdf.</small>
+                             {% if form.proof_of_payment.errors %}
+                                <div class="text-danger small mt-1">{{ form.proof_of_payment.errors|striptags }}</div>
+                             {% endif %}
+                        </div>
+
+                        {# Submit/Cancel Buttons #}
+                        <div class="text-center mt-4">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Submit for Review</button>
+                            <a href="{% url 'parent_fee_list' %}" class="btn btn-secondary"><i class="bi bi-x-lg"></i> Cancel</a>
+                        </div>
+                    </form> {# --- End Form --- #}
+                </div> {# End Card Body #}
+            </div> {# End Card #}
+        </div> {# End Form Column #}
+
+        {# --- Bank Details Column --- #}
+        <div class="col-lg-5">
+            <div class="card">
+                 <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-bank"></i> School Bank Account Details</h5>
+                    {% if bank_details %}
+                        <ul class="list-group list-group-flush">
+                        {% for detail in bank_details %}
+                            <li class="list-group-item">
+                                <strong>Bank:</strong> {{ detail.bank_name }}<br>
+                                <strong>Account Name:</strong> {{ detail.account_name }}<br>
+                                <strong>Account Number:</strong> {{ detail.account_number }}
+                            </li>
+                        {% endfor %}
+                        </ul>
+                         <p class="small text-muted mt-2">Please use your child's full name or registration number as the payment reference/narration.</p>
+                    {% else %}
+                        <div class="alert alert-secondary">Bank details not available. Please contact the school administration.</div>
+                    {% endif %}
+                 </div>
+            </div> {# End Bank Details Card #}
+
+            <div class="card">
+                 <div class="card-body">
+                     <h5 class="card-title"><i class="bi bi-question-circle"></i> Need Help?</h5>
+                     <p>If you encounter any issues uploading your payment proof or have questions about fees, please contact the school administration office.</p>
+                     {# Optional: Add contact details from school_info model #}
+                     {% if school_info.mobile or school_info.email %}
+                        <p>
+                            {% if school_info.mobile %}<strong>Phone:</strong> {{ school_info.mobile }}<br>{% endif %}
+                            {% if school_info.email %}<strong>Email:</strong> {{ school_info.email }}{% endif %}
+                        </p>
+                     {% endif %}
+                 </div>
+            </div> {# End Help Card #}
+        </div> {# End Info Column #}
+    </div> {# End Row #}
+</section>
+
+{% endblock %}

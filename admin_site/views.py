@@ -372,31 +372,35 @@ def login_view(request):
             # 1. Check for Superuser
             if user.is_superuser:
                 messages.success(request, f'Welcome back, {user.username.title()}!')
-                return redirect(reverse('admin_dashboard'))
+                return redirect(reverse('admin_dashboard')) # Keep admin redirect
 
             # 2. Check for Staff Profile
-            # hasattr is an efficient way to check for a related object without a try/except block
             if hasattr(user, 'staff_profile'):
                 messages.success(request, f'Welcome back, {user.staff_profile.staff}!')
-                return redirect(reverse('admin_dashboard'))
+                return redirect(reverse('admin_dashboard')) # Keep staff redirect
 
             # 3. Check for Parent Profile
             elif hasattr(user, 'parent_profile'):
-                messages.success(request, f'Welcome back, {user.parent_profile.parent}!')
-                # TODO: Create a 'parent_dashboard' URL and view
-                # For now, we redirect to a placeholder or the main admin dashboard
-                return redirect(reverse('admin_dashboard'))
+                # Clear any previous ward selection from session
+                if 'selected_ward_id' in request.session:
+                    del request.session['selected_ward_id']
+                messages.success(request, f'Welcome back, {user.parent_profile.parent.first_name}!')
+                # Redirect to the parent portal ward selection page
+                return redirect(reverse('select_ward'))
 
             # 4. If user has no associated profile, deny access and log out
             else:
                 messages.error(request, 'Your account is not associated with any role. Access Denied.')
-                logout(request) # CRITICAL FIX: Log the user out
+                logout(request)
                 return redirect(reverse('login')) # Use your actual login URL name
 
         else:
+            # Invalid credentials
             messages.error(request, 'Invalid username or password.')
+            # Redirect back to login page
             return redirect(reverse('login')) # Use your actual login URL name
 
+    # For GET requests, just show the login form
     return render(request, 'admin_site/sign_in.html')
 
 

@@ -1,0 +1,93 @@
+{% extends "parent_portal/layout.html" %}
+{% load humanize %}
+
+{% block title %}Inventory Collection - {{ selected_ward.first_name }}{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Inventory Collection Status</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item active">Inventory Collection</li>
+    </ol>
+  </nav>
+</div><section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Assigned Inventory Items for {{ selected_ward.first_name }} {{ selected_ward.last_name }}</h5>
+                     <p class="small text-muted">This list shows items assigned to your ward's class for collection.</p>
+
+                    {% if collections %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>Session / Term</th>
+                                        <th class="text-center">Assigned</th>
+                                        <th class="text-center">Collected</th>
+                                        <th class="text-center">Outstanding</th>
+                                        <th>Status</th>
+                                        <th>Payment Status</th>
+                                        <th>Collection Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                {% for collection in collections %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ collection.assignment.item.name }}</strong><br>
+                                            <small class="text-muted">{{ collection.assignment.item.get_unit_display }}</small>
+                                        </td>
+                                        <td>{{ collection.assignment.session }} / {{ collection.assignment.term.name|title }}</td>
+                                        <td class="text-center">{{ collection.quantity_assigned|floatformat:0 }}</td>
+                                        <td class="text-center">{{ collection.quantity_collected|floatformat:0 }}</td>
+                                        <td class="text-center">
+                                            {% if collection.outstanding_quantity > 0 %}
+                                                <span class="badge rounded-pill bg-warning text-dark">{{ collection.outstanding_quantity|floatformat:0 }}</span>
+                                            {% else %}
+                                                <span class="badge rounded-pill bg-success">0</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge
+                                                {% if collection.status == 'collected' %}bg-success
+                                                {% elif collection.status == 'partially_collected' %}bg-info
+                                                {% elif collection.status == 'pending' %}bg-warning text-dark
+                                                {% elif collection.status == 'returned' %}bg-secondary
+                                                {% else %}bg-danger{% endif %}">
+                                                {{ collection.get_status_display }}
+                                            </span>
+                                        </td>
+                                         <td>
+                                            {% if collection.payment_required %}
+                                                {% if collection.payment_completed %}
+                                                    <span class="badge bg-success">Paid: ₦{{ collection.amount_paid|intcomma }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">Payment Required</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge bg-secondary">Free Item</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ collection.collection_date|date:"d M, Y"|default:"-" }}</td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info text-center mt-3">
+                           <i class="bi bi-box-seam fs-3"></i><br>
+                           No inventory items are currently assigned for collection for {{ selected_ward.first_name }}.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

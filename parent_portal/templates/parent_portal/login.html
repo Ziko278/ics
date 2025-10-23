@@ -1,0 +1,61 @@
+{% extends "parent_portal/layout.html" %}
+{% load static widget_tweaks %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<section class="section register min-vh-100 d-flex flex-column align-items-center justify-content-center py-4">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-4 col-md-6 d-flex flex-column align-items-center justify-content-center">
+
+                <div class="d-flex justify-content-center py-4">
+                    <a href="#" class="logo d-flex align-items-center w-auto">
+                        {% if school_info.logo %}
+                        <img src="{{ school_info.logo.url }}" alt="">
+                        {% endif %}
+                        <span class="d-none d-lg-block">{{ school_info.short_name|default:"Parent Portal" }}</span>
+                    </a>
+                </div><div class="card mb-3">
+                    <div class="card-body">
+                        <div class="pt-4 pb-2">
+                            <h5 class="card-title text-center pb-0 fs-4">Parent Portal Login</h5>
+                            <p class="text-center small">Enter your username & password to login</p>
+                        </div>
+
+                         {% if messages %}
+                            {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} {% if message.tags == 'error' %}alert-danger{% endif %} alert-dismissible fade show non-printable" role="alert">
+                                {% if message.tags == 'error' %}<i class="bi bi-exclamation-octagon me-1"></i>{% endif %}
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                            {% endfor %}
+                         {% endif %}
+
+                        <form class="row g-3 needs-validation" method="post" novalidate>
+                            {% csrf_token %}
+                            <div class="col-12">
+                                <label for="yourUsername" class="form-label">Username</label>
+                                {% render_field form.username class="form-control" %}
+                                <div class="invalid-feedback">Please enter your username.</div>
+                            </div>
+
+                            <div class="col-12">
+                                <label for="yourPassword" class="form-label">Password</label>
+                                {% render_field form.password class="form-control" %}
+                                <div class="invalid-feedback">Please enter your password!</div>
+                            </div>
+
+                            <div class="col-12">
+                                <button class="btn btn-primary w-100" type="submit">Login</button>
+                            </div>
+                            {# Optional: Add forgot password link #}
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

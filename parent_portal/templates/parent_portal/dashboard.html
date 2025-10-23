@@ -1,0 +1,204 @@
+{% extends "parent_portal/layout.html" %}
+{% load humanize %}
+{% load static %}
+
+{% block title %}Dashboard - {{ selected_ward.first_name }}{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+    <h1>Dashboard</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Home</a></li>
+            <li class="breadcrumb-item active">Dashboard for {{ selected_ward.first_name }}</li>
+        </ol>
+    </nav>
+</div>
+<section class="section dashboard">
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body profile-card pt-4 d-flex flex-column align-items-center">
+                    {% if selected_ward.image %}
+                    <img alt="Profile" class="rounded-circle" src="{{ selected_ward.image.url }}"
+                         style="width: 120px; height: 120px; object-fit: cover;">
+                    {% else %}
+                    <img alt="Profile" class="rounded-circle" src="{% static 'admin_site/images/default_image.jpg' %}">
+                    {% endif %}
+                    <h2 class="mt-2">{{ selected_ward.first_name }} {{ selected_ward.last_name }}</h2>
+                    <h3>{{ selected_ward.student_class }} {{ selected_ward.class_section }}</h3>
+                    <p class="text-muted small">Reg No: {{ selected_ward.registration_number }}</p>
+                </div>
+            </div>
+            {# Add other right-side cards if needed, e.g., announcements #}
+
+        </div>
+
+        <div class="col-lg-8">
+            <div class="row">
+
+                <div class="col-xxl-6 col-md-6">
+                    <div class="card info-card revenue-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Outstanding Fees</h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                                    <i class="bi bi-cash-stack"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>₦{{ total_due|floatformat:2|intcomma }}</h6>
+                                    <span class="text-muted small pt-2 ps-1">Across {{ pending_invoices.count }} invoice{{ pending_invoices.count|pluralize }}</span>
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <a class="btn btn-sm btn-outline-success" href="{% url 'parent_fee_list' %}">View
+                                    Details</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xxl-6 col-md-6">
+                    <div class="card info-card sales-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Recent Shop Purchases</h5>
+                            {% if recent_sales %}
+                            <p class="small text-muted mb-1">Last purchase: {{ recent_sales.0.sale_date|date:"d M, Y" }}</p>
+                            {% else %}
+                            <p class="small text-muted mb-1">No recent purchases</p>
+                            {% endif %}
+                            <div class="mt-3">
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'parent_shop_history' %}">View
+                                    History</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card info-card customers-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Inventory Collection Status</h5>
+                            {# Add a summary here if needed, e.g., count of pending items #}
+                            <div class="mt-3">
+                                <a class="btn btn-sm btn-outline-warning" href="{% url 'parent_inventory_list' %}">View
+                                    Assigned Items</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card recent-sales overflow-auto">
+                        <div class="card-body">
+                            <h5 class="card-title">Recent Activity <span>| Last 5 entries</span></h5>
+
+                            <ul class="nav nav-tabs nav-tabs-bordered" id="activityTab" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button aria-controls="fees-activity" aria-selected="true" class="nav-link active"
+                                            data-bs-target="#fees-activity" data-bs-toggle="tab" id="fees-tab"
+                                            role="tab" type="button">Fees
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button aria-controls="shop-activity" aria-selected="false" class="nav-link"
+                                            data-bs-target="#shop-activity" data-bs-toggle="tab" id="shop-tab"
+                                            role="tab" type="button">Shop
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button aria-controls="cafeteria-activity" aria-selected="false" class="nav-link"
+                                            data-bs-target="#cafeteria-activity" data-bs-toggle="tab" id="cafeteria-tab"
+                                            role="tab" type="button">Cafeteria
+                                    </button>
+                                </li>
+                            </ul>
+                            <div class="tab-content pt-2" id="activityTabContent">
+                                <div aria-labelledby="fees-tab" class="tab-pane fade show active" id="fees-activity"
+                                     role="tabpanel">
+                                    <table class="table table-borderless datatable">
+                                        <thead>
+                                        <tr>
+                                            <th scope="col">Invoice #</th>
+                                            <th scope="col">Amount Due</th>
+                                            <th scope="col">Status</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        {% for invoice in pending_invoices|slice:":5" %}
+                                        <tr>
+                                            <th scope="row"><a href="{% url 'parent_fee_invoice_detail' invoice.pk %}">{{
+                                                invoice.invoice_number }}</a></th>
+                                            <td>₦{{ invoice.balance|floatformat:2|intcomma }}</td>
+                                            <td><span
+                                                    class="badge {% if invoice.status == 'partially_paid' %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ invoice.get_status_display }}</span>
+                                            </td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td class="text-center text-muted" colspan="3">No pending fee invoices.</td>
+                                        </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div aria-labelledby="shop-tab" class="tab-pane fade" id="shop-activity"
+                                     role="tabpanel">
+                                    <table class="table table-borderless datatable">
+                                        <thead>
+                                        <tr>
+                                            <th scope="col">Date</th>
+                                            <th scope="col">Transaction ID</th>
+                                            <th scope="col">Amount</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        {% for sale in recent_sales %}
+                                        <tr>
+                                            <td>{{ sale.sale_date|date:"d M, Y" }}</td>
+                                            <th scope="row"><a href="{% url 'parent_shop_detail' sale.pk %}">
+                                                {{ sale.transaction_id }}</a></th>
+                                            <td>₦{{ sale.total_amount|floatformat:2|intcomma }}</td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td class="text-center text-muted" colspan="3">No recent shop purchases.
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div aria-labelledby="cafeteria-tab" class="tab-pane fade" id="cafeteria-activity"
+                                     role="tabpanel">
+                                    <table class="table table-borderless datatable">
+                                        <thead>
+                                        <tr>
+                                            <th scope="col">Date</th>
+                                            <th scope="col">Time</th>
+                                            <th scope="col">Meal</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        {% for meal in recent_meals %}
+                                        <tr>
+                                            <td>{{ meal.collection_date|date:"d M, Y" }}</td>
+                                            <td>{{ meal.collection_time|time:"h:i A" }}</td>
+                                            <td>{{ meal.meal.name }}</td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td class="text-center text-muted" colspan="3">No recent cafeteria visits
+                                                recorded.
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

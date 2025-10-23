@@ -1,0 +1,49 @@
+{% extends "parent_portal/layout.html" %}
+
+{% block title %}Select Student{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Select Student</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item active">Select Student</li>
+    </ol>
+  </nav>
+</div><section class="section">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Please select the student you wish to view</h5>
+                    <p>Click on a student's name to view their details.</p>
+
+                    {% if parent_wards %}
+                        <div class="list-group">
+                            {% for ward in parent_wards %}
+                                <a href="{% url 'parent_set_ward' ward.id %}" class="list-group-item list-group-item-action d-flex align-items-center">
+                                    {% if ward.image %}
+                                        <img src="{{ ward.image.url }}" alt="{{ ward.first_name }}" class="rounded-circle me-3" style="width: 40px; height: 40px; object-fit: cover;">
+                                    {% else %}
+                                        <i class="bi bi-person-circle fs-3 me-3 text-secondary"></i>
+                                    {% endif %}
+                                    <div>
+                                        <strong>{{ ward.first_name }} {{ ward.last_name }}</strong><br>
+                                        <small class="text-muted">{{ ward.student_class }} {{ ward.class_section }} - {{ ward.registration_number }}</small>
+                                    </div>
+                                    <i class="bi bi-chevron-right ms-auto"></i>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning text-center">
+                           <i class="bi bi-exclamation-triangle-fill fs-3"></i><br>
+                           No active students found linked to your account. Please contact the school administration if this is incorrect.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

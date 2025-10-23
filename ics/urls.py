@@ -12,6 +12,7 @@ urlpatterns = [
     path('admin/finance/', include('finance.urls')),
     path('admin/human-resource/', include('human_resource.urls')),
     path('django-admin/', admin.site.urls),
+    path('parent-portal/', include('parent_portal.urls')),
 
 ]
 

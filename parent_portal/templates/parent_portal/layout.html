@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Parent Portal - {% block title %}Dashboard{% endblock %}</title>
+
+    {# Assuming school_info is passed globally or you add it in context #}
+    {% if school_info.logo %}
+    <link href="{{ school_info.logo.url }}" rel="icon">
+    <link href="{{ school_info.logo.url }}" rel="apple-touch-icon">
+    {% endif %}
+
+    <link href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
+    <link href="{% static 'admin_site/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+    <link href="{% static 'admin_site/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+    <link href="{% static 'admin_site/vendor/boxicons/css/boxicons.min.css' %}" rel="stylesheet">
+    {# Add other CSS if needed, remove admin-specific ones like simple-datatables if not used #}
+
+    <link href="{% static 'admin_site/styles/style.css' %}" rel="stylesheet">
+
+    <style>
+        body { background-color: #f6f9ff; } /* Light background */
+        .header { background-color: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,.1); }
+        .parent-nav .nav-link { color: #012970; }
+        .parent-nav .nav-link.active { color: #4154f1; background-color: #f6f9ff; }
+        .main { margin-top: 60px; padding: 20px 30px; } /* Adjust top margin based on header height */
+        .logo span { color: #012970; }
+        .ward-selector .dropdown-toggle::after { display: none; } /* Hide default caret */
+         @media print { .non-printable { display: none !important; } }
+    </style>
+</head>
+<body>
+
+<header id="header" class="header fixed-top d-flex align-items-center non-printable">
+    <div class="d-flex align-items-center justify-content-between">
+        <a href="{% url 'parent_dashboard' %}" class="logo d-flex align-items-center">
+            {% if school_info.logo %}
+            <img src="{{ school_info.logo.url }}" alt="">
+            {% endif %}
+            <span class="d-none d-lg-block">{{ school_info.short_name|default:"Parent Portal" }}</span>
+        </a>
+        {# Maybe a toggle for mobile nav if needed #}
+    </div>
+
+    <nav class="header-nav ms-auto">
+        <ul class="d-flex align-items-center">
+
+            {% if selected_ward %}
+            <li class="nav-item dropdown ward-selector pe-2">
+                 <a class="nav-link nav-profile d-flex align-items-center pe-0 dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                    <i class="bi bi-person-check-fill me-2"></i>
+                    <span class="d-none d-md-block">{{ selected_ward.first_name }} {{ selected_ward.last_name }}</span>
+                 </a>
+                 <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                    <li class="dropdown-header">
+                        <h6>Switch Ward</h6>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    {% for ward in parent_wards %}
+                        {% if ward.id != selected_ward.id %}
+                        <li>
+                            <a class="dropdown-item d-flex align-items-center" href="{% url 'parent_set_ward' ward.id %}">
+                                <i class="bi bi-person"></i>
+                                <span>{{ ward.first_name }} {{ ward.last_name }}</span>
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        {% endif %}
+                    {% endfor %}
+                     <li>
+                        <a class="dropdown-item d-flex align-items-center text-primary" href="{% url 'parent_select_ward' %}">
+                            <i class="bi bi-people"></i>
+                            <span>View All Wards</span>
+                        </a>
+                    </li>
+                 </ul>
+            </li>
+            {% endif %}
+
+            <li class="nav-item dropdown pe-3">
+                <a class="nav-link nav-profile d-flex align-items-center pe-0" href="#" data-bs-toggle="dropdown">
+                     <i class="bi bi-person-circle fs-4"></i>
+                     <span class="d-none d-md-block dropdown-toggle ps-2">{{ user.parent_profile.parent.first_name }}</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
+                    <li class="dropdown-header">
+                        <h6>{{ user.parent_profile.parent.first_name }} {{ user.parent_profile.parent.last_name }}</h6>
+                        <span>Parent</span>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    {# Add profile link if needed #}
+                    {# <li><a class="dropdown-item d-flex align-items-center" href="#"><i class="bi bi-person"></i><span>My Profile</span></a></li> #}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center" href="{% url 'logout' %}">
+                            <i class="bi bi-box-arrow-right"></i>
+                            <span>Sign Out</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+{% if selected_ward %} {# Show Nav only if a ward is selected #}
+<nav class="navbar navbar-expand-lg navbar-light bg-white non-printable shadow-sm parent-nav" style="margin-top: 60px; border-bottom: 1px solid #dee2e6;">
+  <div class="container-fluid">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#parentNavbar" aria-controls="parentNavbar" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="parentNavbar">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'parent_dashboard' %}"><i class="bi bi-grid me-1"></i>Dashboard</a>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if 'fee_' in request.resolver_match.url_name %}active{% endif %}" href="#" id="feesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-cash-stack me-1"></i>Fees
+          </a>
+          <ul class="dropdown-menu" aria-labelledby="feesDropdown">
+            <li><a class="dropdown-item" href="{% url 'parent_fee_list' %}">View Invoices</a></li>
+            <li><a class="dropdown-item" href="{% url 'parent_fee_upload' %}">Upload Payment Proof</a></li>
+            <li><a class="dropdown-item" href="{% url 'parent_fee_history' %}">Uploaded Proof History</a></li>
+          </ul>
+        </li>
+         <li class="nav-item">
+          <a class="nav-link {% if 'shop_' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'parent_shop_history' %}"><i class="bi bi-shop me-1"></i>Shop Purchases</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.resolver_match.url_name == 'inventory_list' %}active{% endif %}" href="{% url 'parent_inventory_list' %}"><i class="bi bi-box-seam me-1"></i>Inventory Collection</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.resolver_match.url_name == 'cafeteria_history' %}active{% endif %}" href="{% url 'parent_cafeteria_history' %}"><i class="bi bi-egg-fried me-1"></i>Cafeteria</a>
+        </li>
+      </ul>
+      {# Optional: Move ward switcher here #}
+    </div>
+  </div>
+</nav>
+{% endif %}
+
+<main id="main" class="main {% if not selected_ward %}mt-5 pt-5{% endif %}"> {# Adjust margin if nav is hidden #}
+    {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} {% if message.tags == 'error' %}alert-danger{% endif %} alert-dismissible fade show non-printable" role="alert">
+            {% if message.tags == 'success' %}<i class="bi bi-check-circle me-1"></i>{% endif %}
+            {% if message.tags == 'warning' %}<i class="bi bi-exclamation-triangle me-1"></i>{% endif %}
+            {% if message.tags == 'info' %}<i class="bi bi-info-circle me-1"></i>{% endif %}
+            {% if message.tags == 'error' %}<i class="bi bi-exclamation-octagon me-1"></i>{% endif %}
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    {% block content %}
+    {# Default content goes here if needed #}
+    {% endblock %}
+</main>
+
+<a href="#" class="back-to-top d-flex align-items-center justify-content-center non-printable"><i class="bi bi-arrow-up-short"></i></a>
+
+<script src="{% static 'admin_site/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+{# Add other JS if needed #}
+
+<script src="{% static 'admin_site/scripts/main.js' %}"></script>
+{% block extra_js %}{% endblock %}
+
+</body>
+</html>
