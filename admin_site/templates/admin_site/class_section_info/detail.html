@@ -77,7 +77,7 @@
                                         <i class="bi bi-person-video3"></i>
                                     </div>
                                     <div class="ps-3">
-                                        <h6>{{ class_section_info.form_teacher.full_name|default:"Not Assigned" }}</h6>
+                                        <h6>{{ class_section_info.form_teacher|default:"Not Assigned" }}</h6>
                                     </div>
                                 </div>
                             </div>
@@ -110,7 +110,7 @@
                             <option value="">--------- UN-ASSIGN TEACHER ---------</option>
                             {% for teacher in teacher_list %}
                                 <option value="{{ teacher.id }}" {% if teacher == class_section_info.form_teacher %}selected{% endif %}>
-                                    {{ teacher.full_name|upper }}
+                                    {{ teacher|upper }}
                                 </option>
                             {% endfor %}
                         </select>

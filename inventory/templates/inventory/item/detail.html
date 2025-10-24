@@ -86,7 +86,7 @@
                 <div class="tab-pane fade" id="stock-levels">
                     <h5 class="card-title">Current Stock Levels</h5>
                     <div class="row mb-2">
-                        <div class="col-lg-4 col-md-4 label fw-bold">Quantity in Shop</div>
+                        <div class="col-lg-4 col-md-4 label fw-bold">Quantity in Tuck Shop</div>
                         <div class="col-lg-8 col-md-8">{{ item.shop_quantity|floatformat:2|intcomma }}</div>
                     </div>
                     <div class="row mb-2">
@@ -191,10 +191,10 @@
                             <tbody>
                                 {% for entry in stock_transfers %}
                                 <tr>
-                                    <td>{{ entry.transfer_date|date:"d M, Y" }}</td>
+                                    <td>{{ entry.created_at }}</td>
                                     <td>{{ entry.quantity|floatformat:2|intcomma }}</td>
                                     <td>Store <i class="bi bi-arrow-right"></i> Shop</td>
-                                    <td>{{ entry.created_by.staff_profile.staff|default:"System" }}</td>
+                                    <td>{% if entry.created_by %} {{ entry.created_by.staff_profile.staff|default:"System" }}{% endif %}</td>
                                 </tr>
                                 {% empty %}
                                 <tr><td colspan="4" class="text-center">No transfer records found.</td></tr>

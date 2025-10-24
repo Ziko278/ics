@@ -1,5 +1,7 @@
 <!DOCTYPE html>
 {% load static %}
+{% load student_custom_tags %}
+
 <html lang="en">
 
 <head>
@@ -198,7 +200,7 @@
         {% endif %}
 
 
-        {% if 'student.add_studentmodel' in perms or 'student.view_studentmodel' in perms or 'student.view_studentsettingmodel' in perms %}
+        {% if 'student.add_studentmodel' in perms or 'student.view_studentmodel' in perms or 'student.view_studentsettingmodel' in perms or request.user|is_form_teacher %}
             <li class="nav-item">
                 <a class="nav-link collapsed" data-bs-target="#stud" data-bs-toggle="collapse" href="#">
                     <i class="bi bi-journal-bookmark-fill"></i><span>Student</span><i
@@ -206,7 +208,7 @@
                 </a>
                 <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="stud">
 
-                    {% if 'student.add_studentmodel' in perms %}
+                    {% if 'student.add_studentmodel' in perms or request.user|is_form_teacher %}
                     <li>
                         <a href="{% url 'select_parent' %}">
                             <i class="bi bi-circle"></i><span>Register Student</span>
@@ -220,6 +222,8 @@
                             <i class="bi bi-circle"></i><span>View Students</span>
                         </a>
                     </li>
+                    {% endif %}
+                    {% if 'student.view_studentmodel' in perms or request.user|is_form_teacher %}
                     <li>
                         <a href="{% url 'student_select_class' %}">
                             <i class="bi bi-circle"></i><span>Class Students</span>
@@ -227,22 +231,22 @@
                     </li>
                     {% endif %}
 
-                    {% if 'student.add_studentmodel' in perms %}
-                    <li>
-                        <a href="{% url 'paste_create_students' %}">
-                            <i class="bi bi-circle"></i><span>Data Student Upload</span>
-                        </a>
-                    </li>
-                    {% endif %}
-                    {% if 'student.add_studentmodel' in perms %}
-                    <li>
-                        <a href="{% url 'paste_create_parents' %}">
-                            <i class="bi bi-circle"></i><span>Data Parent Upload</span>
-                        </a>
-                    </li>
-                    {% endif %}
+<!--                    {% if 'student.add_studentmodel' in perms %}-->
+<!--                    <li>-->
+<!--                        <a href="{% url 'paste_create_students' %}">-->
+<!--                            <i class="bi bi-circle"></i><span>Data Student Upload</span>-->
+<!--                        </a>-->
+<!--                    </li>-->
+<!--                    {% endif %}-->
+<!--                    {% if 'student.add_studentmodel' in perms %}-->
+<!--                    <li>-->
+<!--                        <a href="{% url 'paste_create_parents' %}">-->
+<!--                            <i class="bi bi-circle"></i><span>Data Parent Upload</span>-->
+<!--                        </a>-->
+<!--                    </li>-->
+<!--                    {% endif %}-->
 
-                    {% if 'student.add_studentmodel' in perms %}
+                    {% if 'student.add_studentmodel' in perms or request.user|is_form_teacher %}
                     <li>
                         <a href="{% url 'parent_create' %}">
                             <i class="bi bi-circle"></i><span>Register Parent</span>
@@ -250,7 +254,7 @@
                     </li>
                     {% endif %}
 
-                    {% if 'student.view_studentmodel' in perms %}
+                    {% if 'student.view_studentmodel' in perms or request.user|is_form_teacher %}
                     <li>
                         <a href="{% url 'parent_index' %}">
                             <i class="bi bi-circle"></i><span>View Parents</span>
@@ -567,11 +571,13 @@
                     </li>
                     {% endif %}
 
+                    {% if request.user.staff_profile.staff %}
                     <li>
                         <a href="{% url 'staff_salary_profile' %}">
                             <i class="bi bi-circle"></i><span>My Salary Profile</span>
                         </a>
                     </li>
+                    {% endif %}
 
                 </ul>
             </li>
@@ -632,11 +638,11 @@
                         <i class="bi bi-circle"></i><span>Register Staff</span>
                     </a>
                 </li>
-                <li>
-                    <a href="{% url 'staff_upload' %}">
-                        <i class="bi bi-circle"></i><span>Upload Staff</span>
-                    </a>
-                </li>
+<!--                <li>-->
+<!--                    <a href="{% url 'staff_upload' %}">-->
+<!--                        <i class="bi bi-circle"></i><span>Upload Staff</span>-->
+<!--                    </a>-->
+<!--                </li>-->
                 {% endif %}
 
                 {% if 'human_resource.view_staffmodel' in perms %}
@@ -652,11 +658,13 @@
                 </li>
                 {% endif %}
 
+                {% if request.user.staff_profile.staff %}
                 <li>
                     <a href="{% url 'staff_profile' %}">
                         <i class="bi bi-circle"></i><span>My Profile</span>
                     </a>
                 </li>
+                {% endif %}
 
                 {% if 'auth.add_group' in perms %}
                 <li>
@@ -795,12 +803,21 @@
         class="bi bi-arrow-up-short"></i></a>
 
 <!-- Vendor JS Files -->
-<script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
-<script src="{% static 'admin_site/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
-<script src="{% static 'admin_site/vendor/quill/quill.min.js' %}"></script>
+<!-- Vendor JS Files -->
+  <script src="{% static 'admin_site/vendor/apexcharts/apexcharts.min.js' %}"></script>
+  <script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/chart.js/chart.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/echarts/echarts.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/quill/quill.min.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/simple-datatables/simple-datatables.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/tinymce/tinymce.min.js' %}"></script>
 
-<!-- Template Main JS File -->
-<script src="{% static 'admin_site/scripts/main.js' %}"></script>
+  <script src="{% static 'admin_site/vendor/php-email-form/validate.js' %}"></script>
+
+
+  <!-- Template Main JS File -->
+  <script src="{% static 'admin_site/scripts/main.js' %}"></script>
 
 </body>
 

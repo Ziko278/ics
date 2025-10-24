@@ -11,6 +11,7 @@ from datetime import datetime
 from functools import reduce
 import operator
 from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied
 
 from .tasks import process_parent_student_upload, _send_parent_welcome_email
 from django.core.files.storage import FileSystemStorage
@@ -33,7 +34,7 @@ from django.views.generic import (
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from admin_site.models import ClassesModel, ClassSectionModel
+from admin_site.models import ClassesModel, ClassSectionModel, ClassSectionInfoModel
 from .models import StudentModel, ParentModel, StudentSettingModel, FingerprintModel, ImportBatchModel, \
     ParentProfileModel, StudentWalletModel
 from .forms import StudentForm, ParentForm, StudentSettingForm, ParentStudentUploadForm
@@ -82,15 +83,48 @@ class StudentSettingUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Upda
         return reverse('setting_detail')
 
 
-# -------------------------
-# Parent Views
-# -------------------------
 class ParentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = ParentModel
-    permission_required = 'student.view_studentmodel'
+    permission_required = 'student.view_studentmodel'  # keep as you have it, or change to 'student.view_parentmodel' if appropriate
     template_name = 'student/parent/index.html'
     context_object_name = "parent_list"
-    queryset = ParentModel.objects.all().order_by('first_name')
+
+    def has_permission(self):
+        user = self.request.user
+        # Superusers and users with the permission are allowed
+        if user.is_superuser or user.has_perm(self.permission_required):
+            return True
+
+        # Allow if user is a form teacher (we'll still restrict queryset)
+        try:
+            staff = user.staff_profile.staff
+            return ClassSectionInfoModel.objects.filter(form_teacher=staff).exists()
+        except Exception:
+            return False
+
+    def get_queryset(self):
+        user = self.request.user
+
+        # Superuser or user with permission -> full list
+        if user.is_superuser or user.has_perm(self.permission_required):
+            return ParentModel.objects.all().order_by('first_name', 'last_name')
+
+        # Otherwise, restrict to parents who have wards in the teacher's assigned classes/sections
+        try:
+            staff = user.staff_profile.staff
+            assigned_infos = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+            assigned_class_ids = list(assigned_infos.values_list('student_class_id', flat=True))
+            assigned_section_ids = list(assigned_infos.values_list('section_id', flat=True))
+
+            # Filter parents via the reverse relation `wards` on StudentModel
+            qs = ParentModel.objects.filter(
+                Q(wards__student_class_id__in=assigned_class_ids) |
+                Q(wards__class_section_id__in=assigned_section_ids)
+            ).distinct().order_by('first_name', 'last_name')
+
+            return qs
+        except Exception:
+            return ParentModel.objects.none()
 
 
 class ParentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
@@ -98,6 +132,28 @@ class ParentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = 'student.add_parentmodel'  # Permission is on ParentModel
     form_class = ParentForm
     template_name = 'student/parent/create.html'
+
+    def has_permission(self):
+        """
+        Allow access if user has the required permission
+        OR is assigned as a form teacher.
+        """
+        user = self.request.user
+
+        # Normal permission check (from PermissionRequiredMixin)
+        if super().has_permission():
+            return True
+
+        # Custom form-teacher check
+        try:
+            staff = user.staff_profile.staff
+            is_form_teacher = ClassSectionInfoModel.objects.filter(form_teacher=staff).exists()
+            if is_form_teacher:
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def form_valid(self, form):
         """
@@ -179,6 +235,49 @@ class ParentDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     template_name = 'student/parent/detail.html'
     context_object_name = "parent"
 
+    def has_permission(self):
+        """
+        Override permission logic:
+        - Allow if user has 'view_parentmodel' permission
+        - Allow if user is superuser
+        - Allow if staff is form teacher for any class containing a ward of this parent
+        """
+        user = self.request.user
+
+        # Superusers always allowed
+        if user.is_superuser:
+            return True
+
+        # Has global permission
+        if user.has_perm(self.permission_required):
+            return True
+
+        # Otherwise, check if this staff is a form teacher for any ward of this parent
+        try:
+            staff = user.staff_profile.staff
+        except Exception:
+            return False
+
+        parent = self.get_object()
+
+        # Get all class-section assignments for this staff
+        assigned_infos = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+        assigned_class_ids = assigned_infos.values_list('student_class_id', flat=True)
+        assigned_section_ids = assigned_infos.values_list('section_id', flat=True)
+
+        # Check if any of this parent's wards belong to those classes or sections
+        has_access = StudentModel.objects.filter(
+            parent=parent
+        ).filter(
+            Q(student_class_id__in=assigned_class_ids) | Q(class_section_id__in=assigned_section_ids)
+        ).exists()
+
+        return has_access
+
+    def handle_no_permission(self):
+        """Raise a clean permission error."""
+        raise PermissionDenied("You don't have permission to view this parent.")
+
 
 class ParentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = ParentModel
@@ -209,46 +308,112 @@ class ParentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
 class ClassStudentSelectView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
     """
     Displays a form for the user to select a class and section to view.
+    Form teachers can access this view even without 'student.add_studentmodel' permission.
     """
     permission_required = 'student.add_studentmodel'
     template_name = 'student/student/select_class.html'
 
+    def has_permission(self):
+        """Allow access if user has permission OR is a form teacher."""
+        user = self.request.user
+        if super().has_permission():
+            return True
+        try:
+            staff = user.staff_profile.staff
+            return ClassSectionInfoModel.objects.filter(form_teacher=staff).exists()
+        except Exception:
+            return False
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['class_list'] = ClassesModel.objects.all().order_by('name')
+        user = self.request.user
+
+        # Default to all classes
+        class_queryset = ClassesModel.objects.all().order_by('name')
+
+        try:
+            staff = user.staff_profile.staff
+            form_teacher_records = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+
+            if form_teacher_records.exists():
+                # ✅ Extract distinct class IDs the teacher handles
+                allowed_class_ids = form_teacher_records.values_list('student_class_id', flat=True).distinct()
+                class_queryset = ClassesModel.objects.filter(id__in=allowed_class_ids).order_by('name')
+        except Exception:
+            pass
+
+        context['class_list'] = class_queryset
         return context
 
 
 class StudentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     """
-    This view now handles both displaying ALL students and displaying a
-    FILTERED list of students based on a class and section.
+    Displays all students for admins or permissioned users,
+    and only the students in their class/section for form teachers.
     """
     model = StudentModel
     permission_required = 'student.view_studentmodel'
     template_name = 'student/student/index.html'
     context_object_name = "student_list"
 
-    def get_queryset(self):
-        queryset = StudentModel.objects.select_related('parent', 'student_class', 'class_section').all()
+    def has_permission(self):
+        """
+        Allow access if user has the permission or is a form teacher.
+        """
+        user = self.request.user
+        if super().has_permission():
+            return True
 
-        # Check if class and section filters are present in the URL
+        try:
+            staff = user.staff_profile.staff
+            return ClassSectionInfoModel.objects.filter(form_teacher=staff).exists()
+        except Exception:
+            return False
+
+    def get_queryset(self):
+        """
+        Apply permission rules and class/section filters.
+        """
+        user = self.request.user
+        queryset = StudentModel.objects.select_related('parent', 'student_class', 'class_section').filter(status='active')
+
         class_id = self.request.GET.get('class')
         section_id = self.request.GET.get('section')
 
-        if class_id and section_id:
-            # If filters are present, apply them to the queryset
-            return queryset.filter(student_class_id=class_id, class_section_id=section_id).order_by('first_name')
+        # 🔹 Admin / Permissioned users see all
+        if user.has_perm('student.view_studentmodel'):
+            if class_id and section_id:
+                return queryset.filter(student_class_id=class_id, class_section_id=section_id).order_by('first_name')
+            return queryset.order_by('first_name')
 
-        # Otherwise, return all active students
-        return queryset.filter(status='active').order_by('first_name')
+        # 🔹 Form teacher restriction
+        try:
+            staff = user.staff_profile.staff
+            teacher_sections = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+
+            # Limit to teacher’s own students
+            allowed_class_ids = teacher_sections.values_list('student_class_id', flat=True)
+            allowed_section_ids = teacher_sections.values_list('section_id', flat=True)
+
+            queryset = queryset.filter(
+                student_class_id__in=allowed_class_ids,
+                class_section_id__in=allowed_section_ids
+            )
+
+            # Apply filters if present (still restricted to their allowed classes/sections)
+            if class_id and section_id:
+                queryset = queryset.filter(student_class_id=class_id, class_section_id=section_id)
+
+            return queryset.order_by('first_name')
+
+        except Exception:
+            return StudentModel.objects.none()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         class_id = self.request.GET.get('class')
         section_id = self.request.GET.get('section')
 
-        # Add the selected class and section to the context for display in the template
         if class_id and section_id:
             context['selected_class'] = get_object_or_404(ClassesModel, pk=class_id)
             context['selected_section'] = get_object_or_404(ClassSectionModel, pk=section_id)
@@ -256,11 +421,34 @@ class StudentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         return context
 
 
+
 class StudentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = StudentModel
     permission_required = 'student.add_studentmodel'
     form_class = StudentForm
     template_name = 'student/student/create.html'
+
+    def has_permission(self):
+        """
+        Allow access if user has the required permission
+        OR is assigned as a form teacher.
+        """
+        user = self.request.user
+
+        # Normal permission check (from PermissionRequiredMixin)
+        if super().has_permission():
+            return True
+
+        # Custom form-teacher check
+        try:
+            staff = user.staff_profile.staff
+            is_form_teacher = ClassSectionInfoModel.objects.filter(form_teacher=staff).exists()
+            if is_form_teacher:
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def get_context_data(self, **kwargs):
         """
@@ -314,12 +502,51 @@ class StudentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView)
         """
         return reverse('student_detail', kwargs={'pk': self.object.pk})
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user  # Pass the logged-in user
+        return kwargs
+
 
 class StudentDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = StudentModel
     permission_required = 'student.view_studentmodel'
     template_name = 'student/student/detail.html'
     context_object_name = "student"
+
+    def has_permission(self):
+        """
+        Allow:
+        - Users with the `view_studentmodel` permission.
+        - Form teachers viewing students in their assigned classes/sections.
+        """
+        user = self.request.user
+
+        # ✅ Default permission check
+        if super().has_permission():
+            return True
+
+        # ✅ If user is a form teacher, check if this student belongs to their class
+        try:
+            staff = user.staff_profile.staff
+            form_teacher_sections = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+            student = self.get_object()
+
+            # Check if student's class/section is among teacher's assigned sections
+            is_my_student = form_teacher_sections.filter(
+                student_class=student.student_class,
+                section=student.class_section
+            ).exists()
+
+            if is_my_student:
+                return True
+        except Exception:
+            pass
+
+        return False
+
+    def handle_no_permission(self):
+        raise PermissionDenied("You don’t have permission to view this student.")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -341,6 +568,41 @@ class StudentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView)
     permission_required = 'student.change_studentmodel'
     form_class = StudentForm
     template_name = 'student/student/edit.html'
+    context_object_name = 'student'
+
+    def has_permission(self):
+        """
+        Allow:
+        - Users with the `view_studentmodel` permission.
+        - Form teachers viewing students in their assigned classes/sections.
+        """
+        user = self.request.user
+
+        # ✅ Default permission check
+        if super().has_permission():
+            return True
+
+        # ✅ If user is a form teacher, check if this student belongs to their class
+        try:
+            staff = user.staff_profile.staff
+            form_teacher_sections = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+            student = self.get_object()
+
+            # Check if student's class/section is among teacher's assigned sections
+            is_my_student = form_teacher_sections.filter(
+                student_class=student.student_class,
+                section=student.class_section
+            ).exists()
+
+            if is_my_student:
+                return True
+        except Exception:
+            pass
+
+        return False
+
+    def handle_no_permission(self):
+        raise PermissionDenied("You don’t have permission to view this student.")
 
     def get_success_url(self):
         messages.success(self.request, "Student details updated successfully.")
@@ -352,6 +614,40 @@ class StudentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView)
     permission_required = 'student.delete_studentmodel'
     template_name = 'student/student/delete.html'
     context_object_name = "student"
+
+    def has_permission(self):
+        """
+        Allow:
+        - Users with the `view_studentmodel` permission.
+        - Form teachers viewing students in their assigned classes/sections.
+        """
+        user = self.request.user
+
+        # ✅ Default permission check
+        if super().has_permission():
+            return True
+
+        # ✅ If user is a form teacher, check if this student belongs to their class
+        try:
+            staff = user.staff_profile.staff
+            form_teacher_sections = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+            student = self.get_object()
+
+            # Check if student's class/section is among teacher's assigned sections
+            is_my_student = form_teacher_sections.filter(
+                student_class=student.student_class,
+                section=student.class_section
+            ).exists()
+
+            if is_my_student:
+                return True
+        except Exception:
+            pass
+
+        return False
+
+    def handle_no_permission(self):
+        raise PermissionDenied("You don’t have permission to view this student.")
 
     def get_success_url(self):
         messages.success(self.request, "Student deleted successfully.")
@@ -450,6 +746,28 @@ class SelectParentView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView
     permission_required = 'student.add_studentmodel'
     template_name = 'student/student/select_parent.html'
 
+    def has_permission(self):
+        """
+        Allow access if user has the required permission
+        OR is assigned as a form teacher.
+        """
+        user = self.request.user
+
+        # Normal permission check (from PermissionRequiredMixin)
+        if super().has_permission():
+            return True
+
+        # Custom form-teacher check
+        try:
+            staff = user.staff_profile.staff
+            is_form_teacher = ClassSectionInfoModel.objects.filter(form_teacher=staff).exists()
+            if is_form_teacher:
+                return True
+        except Exception:
+            pass
+
+        return False
+
 
 class ParentSearchView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """
@@ -457,6 +775,28 @@ class ParentSearchView(LoginRequiredMixin, PermissionRequiredMixin, View):
     This is called by JavaScript from the SelectParentView template.
     """
     permission_required = 'student.add_studentmodel'
+
+    def has_permission(self):
+        """
+        Allow access if user has the required permission
+        OR is assigned as a form teacher.
+        """
+        user = self.request.user
+
+        # Normal permission check (from PermissionRequiredMixin)
+        if super().has_permission():
+            return True
+
+        # Custom form-teacher check
+        try:
+            staff = user.staff_profile.staff
+            is_form_teacher = ClassSectionInfoModel.objects.filter(form_teacher=staff).exists()
+            if is_form_teacher:
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def get(self, request, *args, **kwargs):
         query = request.GET.get('q', '').strip()

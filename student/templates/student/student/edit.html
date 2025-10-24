@@ -87,9 +87,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     const classSelect = document.getElementById('id_student_class');
     const sectionSelect = document.getElementById('id_class_section');
-    const currentSectionId = "{{ form.instance.class_section.pk|default:'' }}";
+    const currentSectionId = "{{ form.instance.class_section.id|default:'' }}";
 
-    async function updateSections() {
+    async function updateSections(preselect = false) {
         const classId = classSelect.value;
 
         sectionSelect.innerHTML = '<option value="">Loading...</option>';
@@ -101,10 +101,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         try {
-            const response = await fetch(`/api/get-class-sections/?class_id=${classId}`);
+            // ✅ Use your correct endpoint (adjust if needed)
+            const response = await fetch(`/admin/student/api/get-class-sections/?class_id=${classId}`);
             if (!response.ok) throw new Error('Failed to fetch sections');
-            const sections = await response.json();
 
+            const sections = await response.json();
             sectionSelect.innerHTML = '<option value="">-- Select a Section --</option>';
 
             if (sections.length > 0) {
@@ -112,9 +113,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     const option = document.createElement('option');
                     option.value = section.id;
                     option.textContent = section.name.toUpperCase();
-                    if (section.id == currentSectionId) {
+
+                    // ✅ Preselect the student's current section
+                    if (preselect && section.id == currentSectionId) {
                         option.selected = true;
                     }
+
                     sectionSelect.appendChild(option);
                 });
                 sectionSelect.disabled = false;
@@ -127,10 +131,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    classSelect.addEventListener('change', updateSections);
+    // ✅ When class changes, reload sections (without preselect)
+    classSelect.addEventListener('change', () => updateSections(false));
 
-    // On page load, run the function to populate sections for the pre-selected class
-    updateSections();
+    // ✅ On page load, populate and preselect the section
+    updateSections(true);
 });
 </script>
 

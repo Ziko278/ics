@@ -1379,7 +1379,9 @@ class StaffBankDetailCreateView(LoginRequiredMixin, PermissionRequiredMixin, Fla
     model = StaffBankDetail
     permission_required = 'finance.add_salaryrecord'
     form_class = StaffBankDetailForm
-    success_url = reverse_lazy('finance_staff_bank_detail_list')
+
+    def get_success_url(self):
+        return reverse('finance_staff_bank_detail_list')
 
     def form_valid(self, form):
         messages.success(self.request, "Bank Detail Created Successfully.")

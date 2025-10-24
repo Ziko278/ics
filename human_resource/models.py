@@ -87,6 +87,8 @@ class StaffModel(models.Model):
             if self.group:
                 user.groups.clear()
                 self.group.user_set.add(user)
+            else:
+                user.groups.clear()
 
         except ObjectDoesNotExist:
             pass
@@ -123,6 +125,15 @@ class StaffModel(models.Model):
 
         # Ultimate fallback if 10 attempts fail, ensuring no crash
         return f"STF-ERR-{uuid.uuid4().hex[:6].upper()}"
+
+
+class StaffWalletModel(models.Model):
+    staff = models.OneToOneField(StaffModel, on_delete=models.CASCADE, related_name='staff_wallet')
+    # Use DecimalField for financial accuracy
+    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    def __str__(self):
+        return f"{self.staff}'s Wallet"
 
 
 class StaffProfileModel(models.Model):

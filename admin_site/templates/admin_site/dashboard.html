@@ -1,22 +1,31 @@
 {% extends 'admin_site/layout.html' %}
 {% load static %}
-{% load humanize %}
+{% load humanize %} {# For comma formatting numbers #}
+
 {% block 'main' %}
 <section class="section dashboard">
     <div class="row">
+        {# Main Content Column #}
         <div class="col-lg-12">
             <div class="row">
+
+                {# --- General Info (Always Show) --- #}
                 <div class="col-md-6">
                     <div class="card info-card sales-card">
                         <div class="card-body">
-                            <h5 class="card-title">{{ academic_info.session }}
-                                <span>| {{ academic_info.term.name|upper }}</span></h5>
+                            <h5 class="card-title">
+                                {% if academic_info %}
+                                    {{ academic_info.session }} <span>| {{ academic_info.term.name|upper }}</span>
+                                {% else %}
+                                    Academic Period
+                                {% endif %}
+                            </h5>
                             <div class="d-flex align-items-center">
                                 <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
                                     <i class="bi bi-calendar2-fill"></i>
                                 </div>
                                 <div class="ps-3">
-                                    <h6>{% now "D, d M Y" %}</h6>
+                                    <h6>{{ today_date|date:"D, d M Y" }}</h6>
                                     <span class="text small pt-1 fw-bold">Today's Date</span>
                                 </div>
                             </div>
@@ -24,59 +33,248 @@
                     </div>
                 </div>
 
-                <div class="col-md-6">
+                {# --- Welcome Message --- #}
+                 <div class="col-md-6">
                     <div class="card info-card revenue-card">
                         <div class="card-body">
-                            <h5 class="card-title">Students <span>| Active</span></h5>
+                            <h5 class="card-title">Welcome</h5>
                             <div class="d-flex align-items-center">
                                 <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                                    <i class="bi bi-people"></i>
+                                   <i class="bi bi-person-check-fill"></i>
                                 </div>
                                 <div class="ps-3">
-                                    <h6>{{ active_students|intcomma }}</h6>
-                                    <span class="text-grey small pt-1 fw-bold">Number of Students</span>
+                                    {% if is_staff_view %}
+                                        <h6>{{ staff_member.first_name }} {{ staff_member.last_name }}</h6>
+                                        <span class="text small pt-1 fw-bold">{{ staff_member.group.name|default:"Staff" }}</span>
+                                    {% elif user.is_superuser %}
+                                         <h6>{{ user.username|title }}</h6>
+                                         <span class="text small pt-1 fw-bold">Administrator</span>
+                                    {% else %}
+                                         <h6>{{ user.username|title }}</h6>
+                                         <span class="text small pt-1 fw-bold">User</span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="col-md-6">
-                    <div class="card info-card sales-card">
-                        <div class="card-body">
-                            <h5 class="card-title">Staff <span>| Total</span></h5>
-                            <div class="d-flex align-items-center">
-                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-dark text-white">
-                                    <i class="bi bi-person-badge"></i>
-                                </div>
-                                <div class="ps-3">
-                                    <h6>{{ total_staff|intcomma }}</h6>
-                                    <span class="text small pt-1 fw-bold">Registered Staff</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card info-card revenue-card">
-                        <div class="card-body">
-                            <h5 class="card-title">Stock Alert <span>| Low Stock</span></h5>
-                            <div class="d-flex align-items-center">
-                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-warning text-white">
-                                    <i class="bi bi-exclamation-triangle"></i>
-                                </div>
-                                <div class="ps-3">
-                                    <h6>{{ low_stock|intcomma }}</h6>
-                                    <span class="text small pt-1 fw-bold">Items Below Reorder Level</span>
+                {# --- Staff Specific Cards --- #}
+                {% if is_staff_view %}
+                    <div class="col-md-6">
+                        <div class="card info-card wallet-card"> {# Custom class for potential styling #}
+                            <div class="card-body">
+                                <h5 class="card-title">My Wallet <span>| Balance</span></h5>
+                                <div class="d-flex align-items-center">
+                                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-success text-white">
+                                        <i class="bi bi-wallet2"></i>
+                                    </div>
+                                    <div class="ps-3">
+                                        <h6>₦{{ staff_wallet_balance|floatformat:2|intcomma }}</h6>
+                                        <span class="text small pt-1 fw-bold">Available Balance</span>
+                                        {# Optional: Link to wallet history if you build that view #}
+                                        {# <a href="#" class="small">View History</a> #}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-            </div>
-        </div>
-    </div>
+                    <div class="col-md-6">
+                        <div class="card info-card debt-card"> {# Custom class #}
+                            <div class="card-body">
+                                <h5 class="card-title">Outstanding <span>| Loans & Advances</span></h5>
+                                <div class="d-flex align-items-center">
+                                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-danger text-white">
+                                        <i class="bi bi-cash-coin"></i>
+                                    </div>
+                                    <div class="ps-3">
+                                        <h6>₦{{ outstanding_loan_balance|add:outstanding_advance_balance|floatformat:2|intcomma }}</h6>
+                                        <span class="text small pt-1 fw-bold">Total Due</span> <br>
+                                        <small class="text-muted">
+                                            Advance: ₦{{ outstanding_advance_balance|floatformat:2|intcomma }} |
+                                            Loan: ₦{{ outstanding_loan_balance|floatformat:2|intcomma }}
+                                        </small>
+                                        {# Optional: Link to details #}
+                                        <br><a href="{% url 'staff_salary_profile' %}" class="small pt-2">View Details</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# --- Recent Payslips (Staff) --- #}
+                     <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Recent Payslips <span>| Last 3 Months</span></h5>
+                                {% if recent_payslips %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-borderless">
+                                        <thead>
+                                            <tr>
+                                                <th>Period</th>
+                                                <th class="text-end">Net Salary (₦)</th>
+                                                <th class="text-end">Amount Paid (₦)</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                        {% for payslip in recent_payslips %}
+                                            <tr>
+                                                <td>{{ payslip.month_name }} {{ payslip.year }}</td>
+                                                <td class="text-end">{{ payslip.net_salary|floatformat:2|intcomma }}</td>
+                                                <td class="text-end">{{ payslip.amount_paid|floatformat:2|intcomma }}</td>
+                                                <td><span class="badge {% if payslip.payment_status == 'Paid' %}bg-success{% elif payslip.payment_status == 'Partially Paid' %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ payslip.payment_status }}</span></td>
+                                            </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                    <div class="text-end">
+                                        <a href="{% url 'staff_salary_profile' %}">View Full History</a>
+                                    </div>
+                                </div>
+                                {% else %}
+                                    <div class="alert alert-light text-center" role="alert">
+                                        <i class="bi bi-info-circle me-1"></i> No payslip history found.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                {# --- Admin Specific Cards (Hide for regular staff) --- #}
+                {% elif user.is_superuser %} {# Show these only for superuser #}
+                    <div class="col-md-6">
+                        <div class="card info-card revenue-card">
+                            <div class="card-body">
+                                <h5 class="card-title">Students <span>| Active</span></h5>
+                                <div class="d-flex align-items-center">
+                                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-people"></i>
+                                    </div>
+                                    <div class="ps-3">
+                                        <h6>{{ active_students|intcomma }}</h6>
+                                        <span class="text-grey small pt-1 fw-bold">Number of Students</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card info-card sales-card">
+                            <div class="card-body">
+                                <h5 class="card-title">Staff <span>| Total</span></h5>
+                                <div class="d-flex align-items-center">
+                                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-dark text-white">
+                                        <i class="bi bi-person-badge"></i>
+                                    </div>
+                                    <div class="ps-3">
+                                        <h6>{{ total_staff|intcomma }}</h6>
+                                        <span class="text small pt-1 fw-bold">Registered Staff</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card info-card revenue-card">
+                            <div class="card-body">
+                                <h5 class="card-title">Stock Alert <span>| Low Stock</span></h5>
+                                <div class="d-flex align-items-center">
+                                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center bg-warning text-white">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                    </div>
+                                    <div class="ps-3">
+                                        <h6>{{ low_stock|intcomma }}</h6>
+                                        <span class="text small pt-1 fw-bold">Items Below Reorder Level</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                     <div class="col-md-6">
+                        <div class="card info-card sales-card">
+                            <div class="card-body">
+                                <h5 class="card-title">Sales <span>| Today</span></h5>
+                                <div class="d-flex align-items-center">
+                                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-cart"></i>
+                                    </div>
+                                    <div class="ps-3">
+                                        <h6>₦{{ total_sales_today|floatformat:2|intcomma }}</h6>
+                                        <span class="text-success small pt-1 fw-bold">Profit:</span> <span class="text-muted small pt-2 fw-bold">₦{{ total_profit_today|floatformat:2|intcomma }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# --- Student Distribution Chart (Admin Only) --- #}
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Student Distribution <span>| By Class</span></h5>
+                                {% if student_class_list %}
+                                    <div id="studentDistributionChart" style="min-height: 400px;" class="echart"></div>
+                                {% else %}
+                                    <p class="text-muted">No student data available for distribution chart.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+            </div> {# End inner row #}
+        </div> {# End col-lg-12 #}
+
+        {# Optional: Add a right sidebar column if needed for admins #}
+        {# <div class="col-lg-4"> ... </div> #}
+
+    </div> {# End outer row #}
 </section>
-{% endblock %}
+
+{# --- JavaScript for Charts (Admin Only) --- #}
+{% if user.is_superuser and student_class_list %}
+    <script src="{% static 'admin_site/vendor/echarts/echarts.min.js' %}"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const chartData = [
+                {% for item in student_class_list %}
+                    { value: {{ item.number_of_students }}, name: '{{ item.student_class__name|default:"Unknown Class"|escapejs }}' },
+                {% endfor %}
+            ];
+
+            if (chartData.length > 0) {
+                echarts.init(document.querySelector("#studentDistributionChart")).setOption({
+                    tooltip: {
+                        trigger: 'item',
+                        formatter: '{a} <br/>{b}: {c} ({d}%)'
+                    },
+                    legend: {
+                        orient: 'vertical',
+                        left: 'left'
+                    },
+                    series: [{
+                        name: 'Students',
+                        type: 'pie',
+                        radius: '70%', // Make pie larger
+                        data: chartData,
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowOffsetX: 0,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        }
+                    }]
+                });
+            }
+        });
+    </script>
+{% endif %}
+
+{% endblock %} {# <<<--- THE MISSING END TAG ---<<< #}

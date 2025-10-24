@@ -35,9 +35,9 @@ class ItemModel(models.Model):
     """Core item/product model for both shop and store"""
 
     class Location(models.TextChoices):
-        SHOP = 'shop', 'Shop Only'
+        SHOP = 'shop', 'Tuck Shop Only'
         STORE = 'store', 'Store Only'
-        BOTH = 'both', 'Both Shop & Store'
+        BOTH = 'both', 'Both Tuck Shop & Store'
 
     class Unit(models.TextChoices):
         PIECE = 'piece', 'Piece'
@@ -451,7 +451,7 @@ class StockTransferModel(models.Model):
     """The parent document for a single, multi-item stock transfer event."""
 
     class Direction(models.TextChoices):
-        STORE_TO_SHOP = 'store_to_shop', 'Store to Shop'
+        STORE_TO_SHOP = 'store_to_shop', 'Store to Tuck Shop'
         SHOP_TO_STORE = 'shop_to_store', 'Shop to Store'
 
     receipt_number = models.CharField(max_length=50, unique=True, blank=True)

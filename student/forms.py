@@ -1,7 +1,7 @@
 import re
 from django import forms
 from django.core.exceptions import ValidationError
-from admin_site.models import ClassesModel, ClassSectionModel
+from admin_site.models import ClassesModel, ClassSectionModel, ClassSectionInfoModel
 from .models import StudentModel, ParentModel, StudentSettingModel
 
 
@@ -108,10 +108,6 @@ class ParentForm(forms.ModelForm):
 
 
 class StudentForm(forms.ModelForm):
-    """
-    Form for registering a new student and assigning them to a parent and class.
-    """
-
     class Meta:
         model = StudentModel
         fields = [
@@ -123,45 +119,67 @@ class StudentForm(forms.ModelForm):
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'gender': forms.Select(attrs={'class': 'form-control'}),
             'image': forms.FileInput(attrs={'class': 'form-control'}),
-            'parent': forms.Select(attrs={'class': 'form-control select2'}),  # select2 class for better UI
+            'parent': forms.Select(attrs={'class': 'form-control select2'}),
             'student_class': forms.Select(attrs={'class': 'form-control'}),
             'class_section': forms.Select(attrs={'class': 'form-control'}),
             'status': forms.Select(attrs={'class': 'form-control'}),
         }
 
     def __init__(self, *args, **kwargs):
+        # Pull out the user (if passed)
+        user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
-        # Set up querysets and empty labels for dropdowns
+
+        # --- Parent dropdown setup ---
         self.fields['parent'].queryset = ParentModel.objects.all().order_by('first_name', 'last_name')
         self.fields['parent'].empty_label = "Select a Parent/Guardian"
 
-        self.fields['student_class'].queryset = ClassesModel.objects.all().order_by('name')
+        # --- Default class querysets ---
+        all_classes = ClassesModel.objects.all().order_by('name')
+        all_sections = ClassSectionModel.objects.all().order_by('name')
+
+        # --- Determine filtering rules ---
+        if user and user.has_perm('student.add_studentmodel'):
+            # Full access: show all classes and sections
+            self.fields['student_class'].queryset = all_classes
+            self.fields['class_section'].queryset = all_sections
+        else:
+            try:
+                staff = user.staff_profile.staff
+
+                # Classes where this teacher is form teacher
+                assigned_infos = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+                assigned_class_ids = assigned_infos.values_list('student_class_id', flat=True)
+                assigned_section_ids = assigned_infos.values_list('section_id', flat=True)
+
+                # Limit visible classes and sections
+                self.fields['student_class'].queryset = all_classes.filter(id__in=assigned_class_ids)
+                self.fields['class_section'].queryset = all_sections.filter(id__in=assigned_section_ids)
+
+            except Exception:
+                self.fields['student_class'].queryset = ClassesModel.objects.none()
+                self.fields['class_section'].queryset = ClassSectionModel.objects.none()
+
+        # --- Always include currently assigned class/section during edit ---
+        if self.instance and self.instance.pk:
+            current_class = self.instance.student_class
+            current_section = self.instance.class_section
+            if current_class:
+                self.fields['student_class'].queryset = (
+                        self.fields['student_class'].queryset | ClassesModel.objects.filter(pk=current_class.pk)
+                ).distinct()
+            if current_section:
+                self.fields['class_section'].queryset = (
+                        self.fields['class_section'].queryset | ClassSectionModel.objects.filter(pk=current_section.pk)
+                ).distinct()
+
+            # Lock parent field during edit
+            self.fields['parent'].disabled = True
+            self.fields['parent'].initial = self.instance.parent
+
+        # --- Empty labels ---
         self.fields['student_class'].empty_label = "Select a Class"
-
-        self.fields['class_section'].queryset = ClassSectionModel.objects.all().order_by('name')
         self.fields['class_section'].empty_label = "Select a Class Section"
-
-    def clean_first_name(self):
-        first_name = self.cleaned_data.get('first_name')
-        if not first_name:
-            raise ValidationError("First name is required.")
-        return first_name.strip().title()
-
-    def clean_last_name(self):
-        last_name = self.cleaned_data.get('last_name')
-        if not last_name:
-            raise ValidationError("Last name is required.")
-        return last_name.strip().title()
-
-    def clean_image(self):
-        image = self.cleaned_data.get('image')
-        if image:
-            if image.size > 2 * 1024 * 1024:
-                raise ValidationError("Image file size cannot exceed 2MB.")
-            allowed_types = ['image/jpeg', 'image/png']
-            if image.content_type not in allowed_types:
-                raise ValidationError("Please upload a valid image file (JPEG, PNG).")
-        return image
 
 
 class ParentStudentUploadForm(forms.Form):

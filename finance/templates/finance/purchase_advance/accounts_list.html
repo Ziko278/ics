@@ -25,9 +25,9 @@
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label for="term" class="form-label">Term</label>
+                        <label for="term" class="form-label">Quarter</label>
                         <select name="term" id="term" class="form-select form-select-sm">
-                            <option value="">All Terms</option>
+                            <option value="">All Quarter</option>
                              {% for term in terms %}
                                 <option value="{{ term.pk }}" {% if selected_term.pk == term.pk %}selected{% endif %}>
                                     {{ term.name|title }}

@@ -1,6 +1,8 @@
 import logging
+from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
+from django.db.models.functions import Coalesce
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.contrib import messages
@@ -11,10 +13,11 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 from django.views.generic import View, TemplateView, ListView, DetailView, CreateView, UpdateView, DeleteView
-from django.db.models import Sum, F, Count
+from django.db.models import Sum, F, Count, DecimalField, Q
 from django.db import OperationalError
 from django.utils.timezone import now
 
+from finance.models import SalaryRecord, StaffLoan, SalaryAdvance
 from inventory.models import ItemModel, SaleItemModel, SaleModel, SupplierModel
 from .models import (
     ActivityLogModel, SchoolInfoModel, SchoolSettingModel, ClassSectionModel,
@@ -25,7 +28,7 @@ from .forms import (
 )
 
 # Preserving imports from your other apps as requested
-from human_resource.models import StaffModel
+from human_resource.models import StaffModel, StaffProfileModel, StaffWalletModel
 from student.models import StudentModel
 
 logger = logging.getLogger(__name__)
@@ -53,49 +56,92 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        user = self.request.user # Get the logged-in user
+        today = timezone.now().date()
+
         try:
-            today = timezone.now().date()
-
-            # --- Academic & General Info ---
+            # --- Academic & General Info (Always shown) ---
             context['academic_info'] = SchoolSettingModel.objects.select_related('session', 'term').first()
-            context['active_students'] = StudentModel.objects.filter(status='active').count()
-            context['total_staff'] = StaffModel.objects.count()
+            context['today_date'] = today # Pass today's date
 
-            # --- Inventory & Sales Info ---
-            context['total_products'] = ItemModel.objects.count()
+            # --- Staff Specific Data ---
+            context['is_staff_view'] = False # Flag for template logic
+            if hasattr(user, 'staff_profile') and not user.is_superuser:
+                context['is_staff_view'] = True
+                try:
+                    staff_member = user.staff_profile.staff
+                    context['staff_member'] = staff_member
 
-            # Use the efficient low-stock query we created
-            low_stock_query = ItemModel.objects.annotate(
-                total_quantity=F('shop_quantity') + F('store_quantity')
-            ).filter(total_quantity__lte=F('reorder_level'))
-            context['low_stock'] = low_stock_query.count()
+                    # Get or Create Staff Wallet
+                    staff_wallet, created = StaffWalletModel.objects.get_or_create(staff=staff_member)
+                    context['staff_wallet_balance'] = staff_wallet.balance
 
-            # Calculate today's sales and profit
-            sales_items_today = SaleItemModel.objects.filter(sale__created_at__date=today)
-            total_sales_data = sales_items_today.aggregate(
-                total_revenue=Sum(F('quantity') * F('unit_price'))
-            )
-            total_discounts_today = SaleModel.objects.filter(created_at__date=today).aggregate(
-                total_discount=Sum('discount')
-            )['total_discount'] or 0
+                    # Get Outstanding Salary Advance Balance
+                    outstanding_advance = SalaryAdvance.objects.filter(
+                        staff=staff_member,
+                        status__in=[SalaryAdvance.Status.DISBURSED] # Only count active debts
+                    ).aggregate(
+                        total_due=Coalesce(Sum(F('amount') - F('repaid_amount')), Decimal('0.00'), output_field=DecimalField())
+                    )['total_due']
+                    context['outstanding_advance_balance'] = outstanding_advance
 
-            context['total_sales_today'] = (total_sales_data['total_revenue'] or 0) - total_discounts_today
+                    # Get Outstanding Loan Balance
+                    outstanding_loan = StaffLoan.objects.filter(
+                        staff=staff_member,
+                        status__in=[StaffLoan.Status.DISBURSED] # Only count active debts
+                    ).aggregate(
+                         total_due=Coalesce(Sum(F('amount') - F('repaid_amount')), Decimal('0.00'), output_field=DecimalField())
+                    )['total_due']
+                    context['outstanding_loan_balance'] = outstanding_loan
 
-            profit_data = sales_items_today.aggregate(
-                total_profit=Sum((F('unit_price') - F('unit_cost')) * F('quantity'))
-            )
-            context['total_profit_today'] = profit_data['total_profit'] or 0
+                    # Get Recent Payslips (e.g., last 3)
+                    context['recent_payslips'] = SalaryRecord.objects.filter(
+                        staff=staff_member
+                    ).order_by('-year', '-month')[:3]
 
-            context['total_suppliers'] = SupplierModel.objects.filter(is_active=True).count()
+                except StaffProfileModel.DoesNotExist:
+                     messages.warning(self.request, "Could not load staff-specific details.")
+                except StaffModel.DoesNotExist:
+                     messages.warning(self.request, "Staff record not found for your profile.")
+                except Exception as e_staff:
+                    logger.error(f"Error fetching staff data for {user}: {e_staff}", exc_info=True)
+                    messages.error(self.request, "An error occurred fetching your specific dashboard data.")
 
-            # --- Data for Student Distribution Pie Chart ---
-            context['student_class_list'] = StudentModel.objects.filter(
-                status='active'
-            ).values(
-                'student_class__name'  # Group by the class name
-            ).annotate(
-                number_of_students=Count('id')  # Count students in each group
-            ).order_by('student_class__name')
+            # --- Admin Specific Data (Only for superusers or potentially managers) ---
+            # You might want more refined permission checks here later
+            if user.is_superuser:
+                context['active_students'] = StudentModel.objects.filter(status='active').count()
+                context['total_staff'] = StaffModel.objects.count() # Total staff count
+
+                # Inventory & Sales Info (Admin)
+                context['total_products'] = ItemModel.objects.count()
+                low_stock_query = ItemModel.objects.annotate(
+                    total_quantity=F('shop_quantity') + F('store_quantity')
+                ).filter(total_quantity__lte=F('reorder_level'))
+                context['low_stock'] = low_stock_query.count()
+
+                sales_items_today = SaleItemModel.objects.filter(sale__created_at__date=today)
+                total_sales_data = sales_items_today.aggregate(
+                    total_revenue=Coalesce(Sum(F('quantity') * F('unit_price')), Decimal('0.00'), output_field=DecimalField())
+                )
+                total_discounts_today = SaleModel.objects.filter(created_at__date=today).aggregate(
+                    total_discount=Coalesce(Sum('discount'), Decimal('0.00'), output_field=DecimalField())
+                )['total_discount']
+                context['total_sales_today'] = total_sales_data['total_revenue'] - total_discounts_today
+
+                profit_data = sales_items_today.aggregate(
+                     total_profit=Coalesce(Sum((F('unit_price') - F('unit_cost')) * F('quantity')), Decimal('0.00'), output_field=DecimalField())
+                )
+                context['total_profit_today'] = profit_data['total_profit']
+
+                context['total_suppliers'] = SupplierModel.objects.filter(is_active=True).count()
+
+                # Student Distribution (Admin)
+                context['student_class_list'] = StudentModel.objects.filter(
+                    status='active'
+                ).values('student_class__name').annotate(
+                    number_of_students=Count('id')
+                ).order_by('student_class__name')
 
         except OperationalError as e:
             logger.error(f"DATABASE ERROR in AdminDashboardView: {e}")
@@ -105,7 +151,6 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
             messages.warning(self.request, "An unexpected error occurred while loading dashboard data.")
 
         return context
-
 
 class ActivityLogView(LoginRequiredMixin, ListView):
     model = ActivityLogModel
@@ -331,6 +376,9 @@ class ClassSectionInfoDetailView(LoginRequiredMixin, PermissionRequiredMixin, Te
         context['student_class'] = student_class
         context['class_section'] = section
         context['class_section_info'] = info
+        context['teacher_list'] = StaffModel.objects.filter(
+            Q(group__name__iexact='teacher') | Q(group__name__iexact='teachers')
+        ).order_by('first_name')
         context['form'] = ClassSectionInfoForm(instance=info)
         return context
 
