@@ -450,7 +450,12 @@
                     {% if 'finance.add_studentfundingmodel' in perms %}
                     <li>
                         <a href="{% url 'deposit_select_student' %}">
-                            <i class="bi bi-circle"></i><span>Wallet Deposit</span>
+                            <i class="bi bi-circle"></i><span>Student Wallet Deposit</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{% url 'deposit_select_staff' %}">
+                            <i class="bi bi-circle"></i><span>Staff Wallet Deposit</span>
                         </a>
                     </li>
                     {% endif %}
@@ -458,7 +463,13 @@
                     {% if 'finance.view_studentfundingmodel' in perms %}
                     <li>
                         <a href="{% url 'deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
-                            <i class="bi bi-circle"></i><span>Deposit History</span>
+                            <i class="bi bi-circle"></i><span>Student Deposit History</span>
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="{% url 'staff_deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
+                            <i class="bi bi-circle"></i><span>Staff Deposit History</span>
                         </a>
                     </li>
                     {% endif %}

@@ -289,10 +289,6 @@ class FeeUploadView(ParentPortalMixin, FormView):
         return self.render_to_response(self.get_context_data(form=form))
 
 
-# parent_portal/views.py
-# ... other imports ...
-from finance.models import StudentFundingModel, FeePaymentModel
-
 class FeeUploadHistoryView(ParentPortalMixin, ListView):
     # --- ADD THIS LINE BACK ---
     model = StudentFundingModel # Provide a base model for ListView

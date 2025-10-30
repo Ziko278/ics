@@ -13,7 +13,7 @@ from admin_site.models import TermModel, ClassesModel, SessionModel, SchoolSetti
 from finance.models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePaymentModel, FeeModel, \
     FeeGroupModel, FeeMasterModel, InvoiceGenerationJob, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryStructure, SalaryAdvance, \
-    SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan
+    SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan, StaffFundingModel
 from human_resource.models import StaffModel
 from inventory.models import PurchaseOrderModel
 
@@ -745,6 +745,29 @@ class StudentFundingForm(forms.ModelForm):
     """Form for creating a new funding record."""
     class Meta:
         model = StudentFundingModel
+        # Be explicit about the fields a user can fill
+        fields = [
+             'amount', 'method', 'mode',
+             'proof_of_payment', 'teller_number', 'reference'
+        ]
+        widgets = {
+            'amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'method': forms.Select(attrs={'class': 'form-select'}),
+            'mode': forms.Select(attrs={'class': 'form-select'}),
+            'proof_of_payment': forms.FileInput(attrs={'class': 'form-control'}),
+            'teller_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'reference': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # You can hide the student field if it's set by the URL
+
+
+class StaffFundingForm(forms.ModelForm):
+    """Form for creating a new funding record."""
+    class Meta:
+        model = StaffFundingModel
         # Be explicit about the fields a user can fill
         fields = [
              'amount', 'method', 'mode',

@@ -84,6 +84,64 @@ class StudentFundingModel(models.Model):
         super().save(*args, **kwargs)
 
 
+class StaffFundingModel(models.Model):
+    # ✔️ REFACTOR: Enforced data integrity using TextChoices.
+    class PaymentMethod(models.TextChoices):
+        CASH = 'cash', 'Cash'
+        POS = 'pos', 'POS'
+        BANK_TELLER = 'bank teller', 'Bank Teller'
+        BANK_TRANSFER = 'bank transfer', 'Bank Transfer'
+
+    class PaymentMode(models.TextChoices):
+        OFFLINE = 'offline', 'Offline'
+        ONLINE = 'online', 'Online'
+
+    class PaymentStatus(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        CONFIRMED = 'confirmed', 'Confirmed'
+        FAILED = 'failed', 'Failed'
+
+    staff = models.ForeignKey(StaffModel, on_delete=models.CASCADE, related_name='staff_funding_list')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    proof_of_payment = models.FileField(blank=True, null=True, upload_to='images/funding')
+    method = models.CharField(max_length=100, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
+    mode = models.CharField(max_length=100, choices=PaymentMode.choices, blank=True, default=PaymentMode.OFFLINE)
+    status = models.CharField(max_length=30, choices=PaymentStatus.choices, default=PaymentStatus.CONFIRMED)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(StaffModel, on_delete=models.SET_NULL, null=True, blank=True,
+                                   help_text="Staff member who recorded this funding transaction.")
+    # ✔️ REFACTOR: Linked to SessionModel and the new TermModel for consistency.
+    session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL, null=True, blank=True)
+    term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True)
+    teller_number = models.CharField(max_length=50, null=True, blank=True)
+    decline_reason = models.CharField(max_length=250, null=True, blank=True)
+    reference = models.CharField(max_length=250, null=True, blank=True, help_text="Unique reference for this transaction.")
+
+    class Meta:
+        verbose_name = "Student Funding Record"
+        verbose_name_plural = "Student Funding Records"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Funding for {self.staff} - {self.amount}"
+
+    def save(self, *args, **kwargs):
+        # ✔️ ROBUSTNESS: Improved logic to safely auto-populate session and term.
+        if self.session is None or self.term is None:
+            try:
+                setting = SchoolSettingModel.objects.first()
+                if setting:
+                    if self.session is None: self.session = setting.session
+                    if self.term is None: self.term = setting.term
+                else:
+                    logger.warning("No SchoolSettingModel found. Cannot auto-set session/term for funding.")
+            except (OperationalError, Exception) as e:
+                logger.error(f"Error fetching SchoolSettingModel for funding record: {e}", exc_info=True)
+
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+
+
 # ===================================================================
 # Fee Structure Setup Models (The "Price List")
 # ===================================================================

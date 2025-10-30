@@ -24,7 +24,7 @@ from openpyxl.styles import Font
 
 from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ActivityLogModel
 from admin_site.views import FlashFormErrorsMixin
-from human_resource.models import StaffModel, StaffProfileModel
+from human_resource.models import StaffModel, StaffProfileModel, StaffWalletModel
 from inventory.models import PurchaseOrderModel, PurchaseAdvanceModel
 from student.models import StudentModel, StudentWalletModel
 from student.signals import get_day_ordinal_suffix
@@ -32,12 +32,12 @@ from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePa
     FeeMasterModel, InvoiceGenerationJob, InvoiceModel, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryRecord, SalaryAdvance, \
     SalaryStructure, StudentFundingModel, InvoiceItemModel, AdvanceSettlementModel, \
-    SchoolBankDetail, StaffLoan, StaffLoanRepayment
+    SchoolBankDetail, StaffLoan, StaffLoanRepayment, StaffFundingModel
 from .forms import FinanceSettingForm, SupplierPaymentForm, PurchaseAdvancePaymentForm, FeeForm, FeeGroupForm, \
     InvoiceGenerationForm, FeePaymentForm, ExpenseCategoryForm, ExpenseForm, IncomeCategoryForm, \
     IncomeForm, TermlyFeeAmountFormSet, FeeMasterCreateForm, BulkPaymentForm, StaffBankDetailForm, PaysheetRowForm, \
     SalaryAdvanceForm, SalaryStructureForm, StudentFundingForm, SchoolBankDetailForm, \
-    StaffLoanForm, StaffLoanRepaymentForm
+    StaffLoanForm, StaffLoanRepaymentForm, StaffFundingForm
 from finance.tasks import generate_invoices_task
 from pytz import timezone as pytz_timezone
 
@@ -1985,6 +1985,17 @@ class DepositPaymentSelectStudentView(LoginRequiredMixin, PermissionRequiredMixi
         return context
 
 
+class DepositPaymentSelectStaffView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
+    template_name = 'finance/funding/select_staff.html'
+    permission_required = 'student.add_studentfundingmodel'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        staff_list = StaffModel.objects.all()
+        context['staff_list'] = serializers.serialize("json", staff_list)
+        return context
+
+
 @login_required
 def deposit_get_class_students(request):
     class_pk = request.GET.get('class_pk')
@@ -2019,7 +2030,7 @@ def deposit_get_class_students_by_reg_number(request):
 
 
 @login_required
-@permission_required("student.view_studentfundingmodel", raise_exception=True)
+@permission_required("finance.view_studentfundingmodel", raise_exception=True)
 def deposit_payment_list_view(request):
     session_id = request.GET.get('session', None)
     school_setting = SchoolSettingModel.objects.first()
@@ -2039,6 +2050,29 @@ def deposit_payment_list_view(request):
         'session_list': session_list
     }
     return render(request, 'finance/funding/index.html', context)
+
+
+@login_required
+@permission_required("finance.view_studentfundingmodel", raise_exception=True)
+def staff_deposit_payment_list_view(request):
+    session_id = request.GET.get('session', None)
+    school_setting = SchoolSettingModel.objects.first()
+    if not session_id:
+        session = school_setting.session
+    else:
+        session = SessionModel.objects.get(id=session_id)
+    session_list = SessionModel.objects.all()
+    term = request.GET.get('term', None)
+    if not term:
+        term = school_setting.term
+    fee_payment_list = StaffFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
+    context = {
+        'fee_payment_list': fee_payment_list,
+        'session': session,
+        'term': term,
+        'session_list': session_list
+    }
+    return render(request, 'finance/funding/staff_index.html', context)
 
 
 @login_required
@@ -2154,6 +2188,97 @@ def deposit_detail_view(request, pk):
 
     # Compute total profit here
     return render(request, 'finance/funding/detail.html', {
+        'funding': deposit,
+    })
+
+
+@login_required
+@permission_required("staff.add_studentfundingmodel", raise_exception=True)
+def staff_deposit_create_view(request, staff_pk):
+    staff = StaffModel.objects.get(pk=staff_pk)
+    setting = SchoolSettingModel.objects.first()
+
+    if request.method == 'POST':
+        form = StaffFundingForm(request.POST, request.FILES)  # Pass request.FILES for file uploads
+        if form.is_valid():
+            deposit = form.save(commit=False)  # Don't save yet, we need to set the staff
+            deposit.staff = staff  # Associate the funding with the staff
+
+            try:
+                profile = StaffProfileModel.objects.get(user=request.user)
+                deposit.created_by = profile.staff
+            except Exception:
+                pass
+            # Set session and term based on school setting if not provided by form
+            if not deposit.session:
+                deposit.session = setting.session
+            if not deposit.term:
+                deposit.term = setting.term
+
+            amount = deposit.amount  # Get amount directly from the saved instance
+            messages.success(request, f'Deposit of ₦{amount} successful!')
+
+            # Update staff wallet
+            staff_wallet, created = StaffWalletModel.objects.get_or_create(staff=staff)  # Get or create wallet
+
+            staff_wallet.balance += amount
+
+            staff_wallet.save()
+
+            deposit.balance = staff_wallet.balance
+            deposit.save()  # Now save the deposit
+
+            target_timezone = pytz_timezone('Africa/Lagos')
+
+            localized_created_at = timezone.localtime(deposit.created_at, timezone=target_timezone)
+
+            formatted_time = localized_created_at.strftime(
+                f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
+            )
+
+            log = f"""
+                       <div class='text-white bg-success' style='padding:5px;'>
+                       <p class=''>Staff Wallet Funding: <a href={reverse('staff_deposit_detail', kwargs={'pk': deposit.id})}><b>₦{amount}</b></a> deposit to wallet of
+                       <a href={reverse('staff_detail', kwargs={'pk': deposit.staff.id})}><b>{deposit.staff.__str__().title()}</b></a>
+                        by <a href={reverse('staff_detail', kwargs={'pk': deposit.created_by.id})}><b>{deposit.created_by.__str__().title()}</b></a>
+                       <br><span style='float:right'>{formatted_time}</span>
+                       </p>
+
+                       </div>
+                       """
+
+            activity = ActivityLogModel.objects.create(log=log)
+            activity.save()
+
+            return redirect('staff_deposit_detail',
+                        pk=deposit.pk)  # Redirect to prevent form resubmission on refresh
+        else:
+            # If form is not valid, messages.error can show form errors
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field.replace('_', ' ').title()}: {error}")
+    else:
+        form = StaffFundingForm()  # Instantiate an empty form for GET request
+
+    staff_wallet, created = StaffWalletModel.objects.get_or_create(staff=staff)  # Get or create wallet
+
+    context = {
+        'staff': staff,
+        'form': form,
+        'payment_list': StaffFundingModel.objects.filter(staff=staff, term=setting.term,
+                                                           session=setting.session).order_by('-created_at'),
+        'setting': setting
+    }
+    return render(request, 'finance/funding/staff_create.html', context)
+
+
+@login_required
+@permission_required("finance.view_studentfundingmodel", raise_exception=True)
+def staff_deposit_detail_view(request, pk):
+    deposit = get_object_or_404(StaffFundingModel, pk=pk)
+
+    # Compute total profit here
+    return render(request, 'finance/funding/staff_detail.html', {
         'funding': deposit,
     })
 
@@ -2656,6 +2781,7 @@ def finance_dashboard(request):
     # Calculate unpaid salaries manually since net_salary is a property
     unpaid_salaries = Decimal('0.00')
     salary_records = SalaryRecord.objects.filter(combined_filter)
+
     for record in salary_records:
         if record.net_salary > record.amount_paid:
             unpaid_salaries += (record.net_salary - record.amount_paid)
@@ -2867,3 +2993,4 @@ def my_salary_profile_view(request):
         'selected_month': selected_month
     }
     return render(request, 'finance/staff_profile/salary_profile.html', context)
+

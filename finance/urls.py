@@ -21,7 +21,8 @@ from finance.views import (
     decline_payment_view, deposit_detail_view, InvoiceReceiptView, FeePaymentListView, finance_dashboard, fee_dashboard,
     SchoolBankDetailListView, SchoolBankDetailUpdateView, SchoolBankDetailCreateView, SchoolBankDetailDeleteView,
     StaffLoanListView, StaffLoanCreateView, StaffLoanDetailView, StaffLoanActionView, StaffLoanDebtorsListView,
-    StaffLoanDebtDetailView, record_staff_loan_repayment, my_salary_profile_view,
+    StaffLoanDebtDetailView, record_staff_loan_repayment, my_salary_profile_view, DepositPaymentSelectStaffView,
+    staff_deposit_payment_list_view, staff_deposit_detail_view, staff_deposit_create_view,
 )
 
 urlpatterns = [
@@ -170,6 +171,12 @@ urlpatterns = [
     path('deposit/<int:student_pk>/create', deposit_create_view, name='deposit_create'),
     path('deposit/<int:payment_id>/confirm/', confirm_payment_view, name='confirm_payment'),
     path('deposit/<int:payment_id>/cancel/', decline_payment_view, name='decline_payment'),
+
+
+    path('staff-deposit/select-staff', DepositPaymentSelectStaffView.as_view(), name='deposit_select_staff'),
+    path('staff-deposit/payment/index', staff_deposit_payment_list_view, name='staff_deposit_index'),
+    path('staff-deposit/<int:pk>/detail', staff_deposit_detail_view, name='staff_deposit_detail'),
+    path('staff-deposit/<int:staff_pk>/create', staff_deposit_create_view, name='staff_deposit_create'),
 
     path('fee/dashboard/', fee_dashboard, name='fee_dashboard'),
     path('dashboard/', finance_dashboard, name='finance_dashboard'),

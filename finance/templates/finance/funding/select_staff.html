@@ -1,0 +1,145 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+<input type="hidden" id="staff_list" value="{{ staff_list }}">
+<div class="card">
+    <div class="card-body ">
+        <h5 class="card-title">Search Staff  </h5>
+        <div class="row">
+
+
+            <div class="col-md-12">
+                <div class="form-floating">
+                    <input type="search" id="id_staff_name" class="form-control" />
+                    <label for="floatingName">Search Staff Name </label>
+                    <br />
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body ">
+        <h5 class="card-title">Select Staff: <span id="search_query"></span></h5>
+        <div class="row">
+            <div class="col-md-6">
+                <ul id="staff_search_result">
+
+              </ul>
+            </div>
+
+            <div class="col-md-6">
+                <div id="staff_detail_div" class="">
+                    <p class="card-description"> STAFF INFORMATION </p>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <p id="staff_image"></p>
+                            <img id="default_image" style='width:100px;height:100px;border-radius:5px;' src='{% static "admin_site/images/default_image.jpg" %}' />
+                        </div>
+                        <div class="col-md-8">
+                          <p id="staff_fullname"></p>
+                          <p id="staff_reg_no"></p>
+                          <p id="staff_class"></p>
+                          <p id="staff_gender"></p>
+                          <p><a id="proceed_button" class="btn btn-primary" href="" />Proceed</a></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+<script>
+$(document).ready(function(){
+    $('#id_staff_class').change(function(){
+        section = $('option:selected', this).attr('section')
+        $('#id_class_section').html(section)
+    })
+    $('#staff_detail_div').hide()
+
+    staff_list = $('#staff_list').val()
+    staff_list = JSON.parse(staff_list)
+    staff_name_list = {}
+    staff_name_list = {}
+    for(const key in staff_list){
+        staff_name_list[staff_list[key]['pk']] = staff_list[key]['fields']['first_name']  + " " + staff_list[key]['fields']['last_name']
+        staff_name_list[staff_list[key]['pk']] = staff_name_list[staff_list[key]['pk']].toLowerCase()
+
+    }
+
+    $('#id_staff_name').keyup(function(){
+
+        staff_detail_list = ''
+        search_value = $(this).val().toLowerCase()
+        search_value_array = search_value.split(" ")
+
+        if(search_value==''){
+            $('#staff_detail_div').fadeOut()
+        }else{
+            for(const key in staff_name_list){
+                staff_search_result = true
+
+                for(const search_key in search_value_array){
+                    if(!staff_name_list[key].includes(search_value_array[search_key])){
+                        staff_search_result = false
+                    }
+                }
+                if(staff_search_result==true){
+                    staff_detail_list += "<li staff_id='"+key+"' class='list-group-item d-flex justify-content-between align-items-center select_staff'>" +
+                    staff_name_list[key].toUpperCase() + "</li>"
+                }
+            }
+
+            if(staff_detail_list == ''){
+                staff_detail_list += "<li class='list-group-item d-flex justify-content-between align-items-center bg-danger text-white'> No Staff in for Search Query</li>"
+            }
+        }
+        $('#search_query').text(search_value)
+        $('#staff_search_result').html(staff_detail_list)
+
+    })
+
+
+    $(document).on('click','.select_staff', function(){
+        staff_id = $(this).attr('staff_id')
+        staff_fullname = staff_name_list[staff_id]
+        $('#staff_fullname').text(staff_fullname.toUpperCase())
+
+        for(const key in staff_list){
+            if(staff_list[key]['pk'] == staff_id){
+                staff_full_detail = staff_list[key]['fields']
+            }
+        }
+        staff_reg_no = staff_full_detail['registration_number']
+        $('#staff_reg_no').text(staff_reg_no)
+
+        staff_gender = staff_full_detail['gender']
+        $('#staff_gender').text(staff_gender)
+
+        staff_image = staff_full_detail['image']
+        staff_image_src = '/' + staff_image
+        if(staff_image == null || staff_image==''){
+            $('#staff_image').hide()
+            $('#default_image').show()
+        }else{
+            staff_image = "<img style='width:100px;height:100px;border-radius:5px;' src='"+staff_image_src+"' />"
+            $('#staff_image').html(staff_image)
+            $('#staff_image').show()
+            $('#default_image').hide()
+        }
+
+        proceed_button_href =  staff_id + "/create"
+        $('#proceed_button').attr('href', proceed_button_href)
+
+        $('#staff_detail_div').fadeIn()
+    })
+})
+
+</script>
+{% endblock %}
