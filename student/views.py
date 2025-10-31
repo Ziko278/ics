@@ -286,6 +286,45 @@ class ParentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
     template_name = 'student/parent/edit.html'
     context_object_name = "parent"
 
+    def has_permission(self):
+        """
+        Override permission logic:
+        - Allow if user has 'view_parentmodel' permission
+        - Allow if user is superuser
+        - Allow if staff is form teacher for any class containing a ward of this parent
+        """
+        user = self.request.user
+
+        # Superusers always allowed
+        if user.is_superuser:
+            return True
+
+        # Has global permission
+        if user.has_perm(self.permission_required):
+            return True
+
+        # Otherwise, check if this staff is a form teacher for any ward of this parent
+        try:
+            staff = user.staff_profile.staff
+        except Exception:
+            return False
+
+        parent = self.get_object()
+
+        # Get all class-section assignments for this staff
+        assigned_infos = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+        assigned_class_ids = assigned_infos.values_list('student_class_id', flat=True)
+        assigned_section_ids = assigned_infos.values_list('section_id', flat=True)
+
+        # Check if any of this parent's wards belong to those classes or sections
+        has_access = StudentModel.objects.filter(
+            parent=parent
+        ).filter(
+            Q(student_class_id__in=assigned_class_ids) | Q(class_section_id__in=assigned_section_ids)
+        ).exists()
+
+        return has_access
+
     def get_success_url(self):
         messages.success(self.request, "Parent details updated successfully.")
         return reverse('parent_detail', kwargs={'pk': self.object.pk})
