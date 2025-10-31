@@ -1975,7 +1975,7 @@ def payroll_dashboard_view(request):
 
 class DepositPaymentSelectStudentView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
     template_name = 'finance/funding/select_student.html'
-    permission_required = 'student.add_studentfundingmodel'
+    permission_required = 'finance.add_studentfundingmodel'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1987,7 +1987,7 @@ class DepositPaymentSelectStudentView(LoginRequiredMixin, PermissionRequiredMixi
 
 class DepositPaymentSelectStaffView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
     template_name = 'finance/funding/select_staff.html'
-    permission_required = 'student.add_studentfundingmodel'
+    permission_required = 'finance.add_studentfundingmodel'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -2076,7 +2076,7 @@ def staff_deposit_payment_list_view(request):
 
 
 @login_required
-@permission_required("student.view_studentfundingmodel", raise_exception=True)
+@permission_required("finance.view_studentfundingmodel", raise_exception=True)
 def pending_deposit_payment_list_view(request):
     session_id = request.GET.get('session', None)
     session = SessionModel.objects.get(id=session_id)
@@ -2096,7 +2096,7 @@ def pending_deposit_payment_list_view(request):
 
 
 @login_required
-@permission_required("student.add_studentfundingmodel", raise_exception=True)
+@permission_required("finance.add_studentfundingmodel", raise_exception=True)
 def deposit_create_view(request, student_pk):
     student = StudentModel.objects.get(pk=student_pk)
     setting = SchoolSettingModel.objects.first()
@@ -2193,7 +2193,7 @@ def deposit_detail_view(request, pk):
 
 
 @login_required
-@permission_required("staff.add_studentfundingmodel", raise_exception=True)
+@permission_required("finance.add_studentfundingmodel", raise_exception=True)
 def staff_deposit_create_view(request, staff_pk):
     staff = StaffModel.objects.get(pk=staff_pk)
     setting = SchoolSettingModel.objects.first()
@@ -2284,7 +2284,7 @@ def staff_deposit_detail_view(request, pk):
 
 
 @login_required
-@permission_required("student.change_studentfundingmodel", raise_exception=True)
+@permission_required("finance.change_studentfundingmodel", raise_exception=True)
 @transaction.atomic
 def confirm_payment_view(request, payment_id):
     payment = get_object_or_404(StudentFundingModel, pk=payment_id)
@@ -2364,7 +2364,7 @@ def confirm_payment_view(request, payment_id):
 
 # --- Decline Payment View ---
 @login_required
-@permission_required("student.change_studentfundingmodel", raise_exception=True)
+@permission_required("finance.change_studentfundingmodel", raise_exception=True)
 @transaction.atomic
 def decline_payment_view(request, payment_id):
     payment = get_object_or_404(StudentFundingModel, pk=payment_id)
