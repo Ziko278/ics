@@ -647,6 +647,11 @@ class StudentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView)
         messages.success(self.request, "Student details updated successfully.")
         return reverse('student_detail', kwargs={'pk': self.object.pk})
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user  # Pass the logged-in user
+        return kwargs
+
 
 class StudentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = StudentModel
