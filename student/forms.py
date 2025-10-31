@@ -139,7 +139,7 @@ class StudentForm(forms.ModelForm):
         all_sections = ClassSectionModel.objects.all().order_by('name')
 
         # --- Determine filtering rules ---
-        if user and user.has_perm('student.add_studentmodel'):
+        if (user and user.has_perm('student.add_studentmodel')) or user.is_superuser:
             # Full access: show all classes and sections
             self.fields['student_class'].queryset = all_classes
             self.fields['class_section'].queryset = all_sections
