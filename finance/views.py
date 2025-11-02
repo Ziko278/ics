@@ -2113,27 +2113,6 @@ def staff_deposit_payment_list_view(request):
     }
     return render(request, 'finance/funding/staff_index.html', context)
 
-
-@login_required
-@permission_required("finance.view_studentfundingmodel", raise_exception=True)
-def pending_deposit_payment_list_view(request):
-    session_id = request.GET.get('session', None)
-    session = SessionModel.objects.get(id=session_id)
-    term_id = request.GET.get('session', None)
-    term = TermModel.objects.get(id=session_id)
-    session_list = SessionModel.objects.all()
-    term_list = TermModel.objects.all().order_by('order')
-    fee_payment_list = StudentFundingModel.objects.filter(session=session, term=term, status='pending').order_by('-id')
-    context = {
-        'fee_payment_list': fee_payment_list,
-        'session': session,
-        'term': term,
-        'session_list': session_list,
-        'term_list': term_list,
-    }
-    return render(request, 'finance/funding/pending.html', context)
-
-
 @login_required
 @permission_required("finance.add_studentfundingmodel", raise_exception=True)
 def deposit_create_view(request, student_pk):
@@ -2218,7 +2197,6 @@ def deposit_create_view(request, student_pk):
         'setting': setting
     }
     return render(request, 'finance/funding/create.html', context)
-
 
 @login_required
 @permission_required("finance.view_studentfundingmodel", raise_exception=True)
@@ -2320,6 +2298,260 @@ def staff_deposit_detail_view(request, pk):
     return render(request, 'finance/funding/staff_detail.html', {
         'funding': deposit,
     })
+
+
+@login_required
+@permission_required("finance.view_studentfundingmodel", raise_exception=True)
+def staff_pending_deposit_payment_list_view(request):
+    session_id = request.GET.get('session', None)
+    session = SessionModel.objects.get(id=session_id)
+    term_id = request.GET.get('session', None)
+    term = TermModel.objects.get(id=term_id)
+    session_list = SessionModel.objects.all()
+    term_list = TermModel.objects.all().order_by('order')
+    fee_payment_list = StaffFundingModel.objects.filter(session=session, term=term, status='pending').order_by('-id')
+    context = {
+        'fee_payment_list': fee_payment_list,
+        'session': session,
+        'term': term,
+        'session_list': session_list,
+        'term_list': term_list,
+    }
+    return render(request, 'finance/funding/staff_pending.html', context)
+
+
+@login_required
+@permission_required("finance.change_studentfundingmodel", raise_exception=True)
+@transaction.atomic
+def staff_confirm_payment_view(request, payment_id):
+    payment = get_object_or_404(StaffFundingModel, pk=payment_id)
+    staff = payment.staff # Get the staff associated with this payment
+
+    if request.method == 'POST':
+        # Check if the payment is already confirmed or declined
+        if payment.status != 'pending':
+            messages.warning(request, f"Payment is already {payment.status.capitalize()}. Cannot confirm.")
+            # Redirect to a list of payments or the payment detail page
+            return redirect(reverse('pending_deposit_index')) # Replace with your actual URL name
+
+        # Get or create staff wallet
+        staff_wallet, created = StaffWalletModel.objects.get_or_create(staff=staff)
+
+        # Apply the payment amount to the wallet balance
+        # Keeping calculations as float as per original deposit_create_view
+        staff_wallet.balance += payment.amount
+
+        staff_wallet.save() # Save the updated wallet
+
+        # Update the payment status and its internal balance field
+        payment.status = 'confirmed'
+        # Replicate the balance update from the original view
+        payment.save() # Save the updated payment record
+
+        # Log wallet confirmation
+        from pytz import timezone as pytz_timezone
+        localized_created_at = timezone.localtime(now(), timezone=pytz_timezone('Africa/Lagos'))
+        formatted_time = localized_created_at.strftime(
+            f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
+        )
+
+        payment_url = reverse('staff_deposit_detail', kwargs={'pk': payment.pk})
+        staff = StaffProfileModel.objects.get(user=request.user).staff
+        staff_url = reverse('staff_detail', kwargs={'pk': staff.pk}) if staff else '#'
+
+        log = f"""
+        <div class='text-white bg-success p-2' style='border-radius:5px;'>
+          <p>
+            Payment of <a href="{payment_url}"><b>₦{payment.amount:.2f}</b></a> for
+            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a> was
+            <b>confirmed</b> by
+            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a>.
+            <br>
+            <b>Status:</b> Confirmed &nbsp; | &nbsp;
+            <b>Wallet Balance:</b> ₦{staff_wallet.balance:.2f}
+            <span class='float-end'>{now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+          </p>
+        </div>
+        """
+
+        ActivityLogModel.objects.create(
+            log=log,
+        )
+
+        messages.success(request, f"Payment of ₦{payment.amount} for {staff.first_name} {staff.last_name} confirmed successfully.")
+        return redirect(reverse('staff_deposit_index')) # Replace with your actual URL name
+
+    else:
+        # For GET requests to this URL, you might want to display a confirmation prompt
+        # or just redirect with a message. Assuming redirect for simplicity.
+        messages.info(request, "Please use a POST request to confirm this payment.")
+        return redirect(reverse('staff_pending_deposit_index'))  # Replace with your actual URL name
+
+
+# --- Decline Payment View ---
+@login_required
+@permission_required("finance.change_studentfundingmodel", raise_exception=True)
+@transaction.atomic
+def staff_decline_payment_view(request, payment_id):
+    payment = get_object_or_404(StaffFundingModel, pk=payment_id)
+    staff = payment.staff # Get the staff associated with this payment
+
+    if request.method == 'POST':
+        # Check if the payment is already confirmed or declined
+        if payment.status != 'pending':
+            messages.warning(request, f"Payment is already {payment.status.capitalize()}. Cannot decline.")
+            # Redirect to a list of payments or the payment detail page
+            return redirect(reverse('staff_pending_deposit_index')) # Replace with your actual URL name
+
+        # Update the payment status to 'declined'
+        payment.status = 'declined'
+        payment.save()
+
+        # Log wallet deposit decline
+        from pytz import timezone as pytz_timezone
+        localized_created_at = timezone.localtime(now(), timezone=pytz_timezone('Africa/Lagos'))
+        formatted_time = localized_created_at.strftime(
+            f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
+        )
+
+        payment_url = reverse('staff_deposit_detail', kwargs={'pk': payment.pk})
+        staff = StaffProfileModel.objects.get(user=request.user).staff
+        staff_url = reverse('staff_detail', kwargs={'pk': staff.pk}) if staff else '#'
+
+        log = f"""
+        <div class='text-white bg-danger p-2' style='border-radius:5px;'>
+          <p>
+            Payment of <a href="{payment_url}"><b>₦{payment.amount:.2f}</b></a> for
+            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a> was
+            <b>declined</b> by
+            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a>.
+            <br>
+            <b>Status:</b> Declined
+            <span class='float-end'>{now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+          </p>
+        </div>
+        """
+
+        ActivityLogModel.objects.create(
+            log=log,
+        )
+
+        messages.success(request, f"Payment of ₦{payment.amount} for {staff.first_name} {staff.last_name} has been declined.")
+        return redirect(reverse('staff_deposit_index'))  # Replace with your actual URL name
+    else:
+        # For GET requests to this URL, you might want to display a confirmation prompt
+        # or just redirect with a message. Assuming redirect for simplicity.
+        messages.info(request, "Method Not Supported.")
+        return redirect(reverse('staff_pending_deposit_index'))  # Replace with your actual URL name
+
+
+class StaffUploadDepositView(LoginRequiredMixin, CreateView):
+    """
+    A view for a logged-in staff member to submit a deposit request (e.g., a teller).
+    This creates a StaffFundingModel instance with a 'pending' status.
+    It does NOT credit their wallet.
+    """
+    model = StaffFundingModel
+    form_class = StaffFundingForm
+    template_name = 'finance/funding/staff_upload_form.html'
+    success_url = reverse_lazy('staff_deposit_history')  # Redirect to their history page
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = "Upload Deposit Teller"
+        context['bank_detail'] = SchoolSettingModel.objects.first()
+        return context
+
+    def form_valid(self, form):
+        try:
+            # Get the logged-in user's Staff profile and Staff instance
+            staff_member = self.request.user.staff_profile.staff
+        except StaffProfileModel.DoesNotExist:
+            messages.error(self.request, "Your user account is not linked to a staff profile. Cannot submit deposit.")
+            return super().form_invalid(form)
+        except AttributeError:
+            messages.error(self.request, "Could not find a staff profile for your user.")
+            return super().form_invalid(form)
+
+        deposit = form.save(commit=False)
+        deposit.staff = staff_member
+        deposit.created_by = staff_member  # Record who submitted it
+
+        # --- THIS IS THE KEY ---
+        # Set status to PENDING and do NOT touch the wallet
+        deposit.status = StaffFundingModel.PaymentStatus.PENDING
+        # --- END KEY ---
+
+        # Set session and term from settings
+        setting = SchoolSettingModel.objects.first()
+        if setting:
+            if not deposit.session:
+                deposit.session = setting.session
+            if not deposit.term:
+                deposit.term = setting.term
+
+        # We must save the object before we can log about it
+        super().form_valid(form)
+
+        messages.success(self.request,
+                         f"Your deposit request of ₦{deposit.amount:,.2f} has been submitted for review.")
+
+        # Note: We are calling super().form_valid() which handles saving and redirection
+        return redirect(self.get_success_url())
+
+
+# --- 2. STAFF: VIEW MY DEPOSIT HISTORY (LIST VIEW) ---
+
+class StaffDepositHistoryView(LoginRequiredMixin, ListView):
+    """
+    Shows a logged-in staff member a paginated list of their
+    own deposit submissions and their current status.
+    """
+    model = StaffFundingModel
+    template_name = 'finance/funding/staff_history_list.html'
+    context_object_name = 'payment_list'
+    paginate_by = 20
+
+    def get_queryset(self):
+        try:
+            # Get the logged-in user's Staff profile
+            staff_member = self.request.user.staff_profile.staff
+            # Return ONLY this staff member's deposits, newest first
+            return StaffFundingModel.objects.filter(staff=staff_member).order_by('-created_at')
+        except (StaffProfileModel.DoesNotExist, AttributeError):
+            messages.warning(self.request, "Your user account is not linked to a staff profile.")
+            return StaffFundingModel.objects.none()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = "My Deposit History"
+        return context
+
+
+@login_required
+@permission_required("finance.view_studentfundingmodel", raise_exception=True)
+def pending_deposit_payment_list_view(request):
+    session_id = request.GET.get('session', None)
+    school_setting = SchoolSettingModel.objects.first()
+    if not session_id:
+        session = school_setting.session
+    else:
+        session = SessionModel.objects.get(id=session_id)
+    term = request.GET.get('term', None)
+    if not term:
+        term = school_setting.term
+
+    session_list = SessionModel.objects.all()
+    term_list = TermModel.objects.all().order_by('order')
+    fee_payment_list = StudentFundingModel.objects.filter(session=session, term=term, status='pending').order_by('-id')
+    context = {
+        'fee_payment_list': fee_payment_list,
+        'session': session,
+        'term': term,
+        'session_list': session_list,
+        'term_list': term_list,
+    }
+    return render(request, 'finance/funding/pending.html', context)
 
 
 @login_required

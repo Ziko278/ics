@@ -16,7 +16,7 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <input type="text" name="search" class="form-control"
-                           placeholder="Search by Transaction ID, Student Name, or Reg Number..."
+                           placeholder="Search by Transaction ID, Customer Name, or ID..."
                            value="{{ search_query }}">
                 </div>
                 <div class="col-md-2">
@@ -62,10 +62,10 @@
                     <tr>
                         <th>Transaction ID</th>
                         <th>Date</th>
-                        <th>Student</th>
+                        <th>Customer</th>
                         <th>Total (₦)</th>
                         <th>Status</th>
-                        <th>Staff</th>
+                        <th>Processed By</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -78,13 +78,23 @@
                         <td>{{ order.sale_date|date:"M d, Y H:i" }}</td>
                         <td>
                             {% if order.customer %}
+                                <span class="badge bg-primary me-1">Student</span>
                                 <a href="{% url 'student_detail' order.customer.id %}"
                                    class="text-decoration-none">
                                     {{ order.customer|title }}
                                     <br>
                                     <small class="text-muted">{{ order.customer.registration_number }}</small>
                                 </a>
+                            {% elif order.staff_customer %}
+                                <span class="badge bg-success me-1">Staff</span>
+                                <a href="{% url 'staff_detail' order.staff_customer.id %}"
+                                   class="text-decoration-none">
+                                    {{ order.staff_customer|title }}
+                                    <br>
+                                    <small class="text-muted">{{ order.staff_customer.staff_id }}</small>
+                                </a>
                             {% else %}
+                                <span class="badge bg-secondary me-1">Walk-in</span>
                                 <span class="text-muted">Walk-in Customer</span>
                             {% endif %}
                         </td>
@@ -204,7 +214,7 @@
                 <div class="modal-body">
                     <p>Are you sure you want to process a refund for this order?</p>
                     <div class="alert alert-warning">
-                        <strong>Note:</strong> This action will restore the items to inventory and refund the amount to the customer's wallet.
+                        <strong>Note:</strong> This action will restore the items to inventory and refund the amount to the customer's wallet (if applicable).
                     </div>
                 </div>
                 <div class="modal-footer">

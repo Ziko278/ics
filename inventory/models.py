@@ -682,6 +682,7 @@ class SaleModel(models.Model):
     class PaymentMethod(models.TextChoices):
         CASH = 'cash', 'Cash'
         STUDENT_WALLET = 'student_wallet', 'Student Wallet'
+        STAFF_WALLET = 'staff_wallet', 'Staff Wallet'  # NEW
         POS = 'pos', 'POS'
 
     class Status(models.TextChoices):
@@ -691,6 +692,7 @@ class SaleModel(models.Model):
     transaction_id = models.CharField(max_length=50, unique=True, blank=True)
     sale_date = models.DateTimeField(default=timezone.now)
     customer = models.ForeignKey(StudentModel, on_delete=models.SET_NULL, null=True, blank=True)
+    staff_customer = models.ForeignKey(StaffModel, on_delete=models.SET_NULL, null=True, blank=True, related_name='purchases')  # NEW
     discount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.COMPLETED)
@@ -724,25 +726,21 @@ class SaleModel(models.Model):
         Sum of (quantity * unit_price) across related sale items.
         Uses an ExpressionWrapper so we don't rely on a non-existent 'line_total' DB field.
         """
-        # Build expression: quantity * unit_price
         line_expr = ExpressionWrapper(
             F('quantity') * F('unit_price'),
             output_field=DecimalField(max_digits=14, decimal_places=2)
         )
 
-        # Aggregate sum at DB level; Coalesce to return 0 if no rows
         agg = self.items.aggregate(
             total=Coalesce(Sum(line_expr), Decimal('0.00'), output_field=DecimalField())
         )
 
         total = agg.get('total') or Decimal('0.00')
-        # Normalize to 2 decimal places
         return total.quantize(Decimal('0.01'))
 
     @property
     def total_amount(self):
         return self.subtotal - self.discount
-
 
 class SaleItemModel(models.Model):
     """A single line item within a sale transaction."""

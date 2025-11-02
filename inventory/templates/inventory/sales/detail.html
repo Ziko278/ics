@@ -56,19 +56,34 @@
           <div class="card-body">
             <h6 class="card-title">Customer Information</h6>
             {% if sale.customer %}
+              <span class="badge bg-primary mb-2">Student Customer</span>
               <div class="d-flex align-items-center">
-                <img src="{% if sale.customer.photo %}{{ sale.customer.photo.url }}{% else %}{% static 'admin_site/images/default_image.jpg' %}{% endif %}"
+                <img src="{% if sale.customer.image %}{{ sale.customer.image.url }}{% else %}{% static 'admin_site/images/default_image.jpg' %}{% endif %}"
                      class="rounded me-3" style="width:50px;height:50px;object-fit:cover;" alt="Student Photo">
                 <div>
                   <strong>{{ sale.customer.first_name }} {{ sale.customer.last_name }}</strong><br>
-                  <small class="text-muted">{{ sale.customer.registration_number }}</small><br>
+                  <small class="text-muted">Reg: {{ sale.customer.registration_number }}</small><br>
                   {% if sale.customer.current_class %}
-                  <small class="text-muted">{{ sale.customer.current_class }}</small>
+                  <small class="text-muted">Class: {{ sale.customer.current_class }}</small>
+                  {% endif %}
+                </div>
+              </div>
+            {% elif sale.staff_customer %}
+              <span class="badge bg-success mb-2">Staff Customer</span>
+              <div class="d-flex align-items-center">
+                <img src="{% if sale.staff_customer.image %}{{ sale.staff_customer.image.url }}{% else %}{% static 'admin_site/images/default_image.jpg' %}{% endif %}"
+                     class="rounded me-3" style="width:50px;height:50px;object-fit:cover;" alt="Staff Photo">
+                <div>
+                  <strong>{{ sale.staff_customer.first_name }} {{ sale.staff_customer.last_name }}</strong><br>
+                  <small class="text-muted">Staff ID: {{ sale.staff_customer.staff_id }}</small><br>
+                  {% if sale.staff_customer.group %}
+                  <small class="text-muted">{{ sale.staff_customer.group.name }}</small>
                   {% endif %}
                 </div>
               </div>
             {% else %}
-              <p class="text-muted mb-0">Walk-in Customer</p>
+              <span class="badge bg-secondary mb-2">Walk-in Customer</span>
+              <p class="text-muted mb-0">No customer information available</p>
             {% endif %}
           </div>
         </div>
@@ -84,7 +99,7 @@
             <h6 class="card-title">Processed By</h6>
             <p class="mb-0">
               <strong>{{ sale.created_by.first_name }} {{ sale.created_by.last_name }}</strong><br>
-              <small class="text-muted">{{ sale.created_by.position|default:"Staff" }}</small>
+              <small class="text-muted">Staff ID: {{ sale.created_by.staff_id }}</small>
             </p>
           </div>
         </div>
@@ -200,6 +215,10 @@
       <a class="btn btn-info" href="{% url 'student_detail' sale.customer.id %}">
         <i class="fas fa-user"></i> Customer Profile
       </a>
+      {% elif sale.staff_customer %}
+      <a class="btn btn-info" href="{% url 'staff_detail' sale.staff_customer.id %}">
+        <i class="fas fa-user"></i> Customer Profile
+      </a>
       {% endif %}
     </div>
   </div>
@@ -222,7 +241,15 @@
             <ul class="mb-2">
               <li><strong>Transaction ID:</strong> {{ sale.transaction_id }}</li>
               <li><strong>Amount:</strong> ₦{{ sale.total_amount|floatformat:2 }}</li>
-              <li><strong>Customer:</strong> {{ sale.customer|default:"Walk-in Customer" }}</li>
+              <li><strong>Customer:</strong>
+                {% if sale.customer %}
+                  {{ sale.customer }} (Student)
+                {% elif sale.staff_customer %}
+                  {{ sale.staff_customer }} (Staff)
+                {% else %}
+                  Walk-in Customer
+                {% endif %}
+              </li>
             </ul>
           </div>
 

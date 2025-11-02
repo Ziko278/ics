@@ -318,21 +318,54 @@ class PurchaseAdvanceItemForm(forms.ModelForm):
 class SaleForm(forms.ModelForm):
     """
     Form for the sale header in the Point of Sale (POS) interface.
-    Handles customer selection, payment method, and overall discount.
+    Handles customer selection (student or staff), payment method, and overall discount.
     """
+
     class Meta:
         model = SaleModel
-        fields = ['customer', 'payment_method', 'discount']
+        fields = ['customer', 'staff_customer', 'payment_method', 'discount']
         widgets = {
             'customer': forms.Select(attrs={'class': 'form-select'}),
+            'staff_customer': forms.Select(attrs={'class': 'form-select'}),
             'payment_method': forms.Select(attrs={'class': 'form-select'}),
             'discount': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '0.00'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Populate the customer dropdown with all active students
-        self.fields['customer'].queryset = StudentModel.objects.filter(is_active=True).select_related('student_profile__user')
-        # A sale does not always have to be to a specific student
+
+        # Populate student dropdown
+        self.fields['customer'].queryset = StudentModel.objects.filter(is_active=True).select_related(
+            'student_profile__user')
         self.fields['customer'].required = False
-        self.fields['customer'].empty_label = "Cash Customer (None)"
+        self.fields['customer'].empty_label = "-- Select Student --"
+        self.fields['customer'].label = "Student Customer"
+
+        # Populate staff dropdown
+        self.fields['staff_customer'].queryset = StaffModel.objects.filter(status='active')
+        self.fields['staff_customer'].required = False
+        self.fields['staff_customer'].empty_label = "-- Select Staff --"
+        self.fields['staff_customer'].label = "Staff Customer"
+
+        # Help text
+        self.fields['customer'].help_text = "Leave both empty for walk-in customers"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        customer = cleaned_data.get('customer')
+        staff_customer = cleaned_data.get('staff_customer')
+        payment_method = cleaned_data.get('payment_method')
+
+        # Validation: Can't select both student and staff
+        if customer and staff_customer:
+            raise forms.ValidationError("Cannot select both a student and a staff member. Please choose only one.")
+
+        # Validation: Student wallet requires a student
+        if payment_method == 'student_wallet' and not customer:
+            raise forms.ValidationError("Student Wallet payment requires a student to be selected.")
+
+        # Validation: Staff wallet requires a staff member
+        if payment_method == 'staff_wallet' and not staff_customer:
+            raise forms.ValidationError("Staff Wallet payment requires a staff member to be selected.")
+
+        return cleaned_data

@@ -15,7 +15,17 @@
     .suggestion-item { cursor: pointer; }
     .suggestion-item:hover { background-color: #f8f9fa; }
 
-    /* Make the top items list look like clickable tags */
+    /* Type badges for student/staff */
+    .type-badge {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin-right: 5px;
+    }
+    .type-student { background-color: #0d6efd; color: white; }
+    .type-staff { background-color: #198754; color: white; }
+
+    /* Top items list */
     .top-item-badge {
         cursor: pointer;
         transition: all 0.2s ease-in-out;
@@ -35,26 +45,28 @@
 
             <div class="row mb-3 p-3 border rounded bg-light">
                 <div class="col-md-4 suggestions-container">
-                    <label for="student-search" class="form-label">Search Student (Optional)</label>
-                    <input autocomplete="off" class="form-control" id="student-search" placeholder="Name or Reg Number..." type="search">
+                    <label for="person-search" class="form-label">Search Customer (Optional)</label>
+                    <input autocomplete="off" class="form-control" id="person-search" placeholder="Student or Staff name..." type="search">
                     <input id="student-id" name="student_id" type="hidden">
-                    <div id="student-suggestions" class="suggestions-list list-group"></div>
+                    <input id="staff-id" name="staff_id" type="hidden">
+                    <div id="person-suggestions" class="suggestions-list list-group"></div>
                 </div>
                 <div class="col-md-5">
-                    <div class="student-info">
-    <p class="mb-1">
-        <strong>Student:</strong> <span id="student-name">—</span> <small id="student-reg" class="text-muted"></small>
-        <br>
-        <strong>Class:</strong> <span id="student-class" class="text-muted">—</span>
-    </p>
-    <p class="mb-0">
-        <strong>Wallet:</strong> <span id="wallet-balance" class="text-success fw-bold">₦0.00</span>
-        <strong class="ms-3">Debt:</strong> <span id="wallet-debt" class="text-danger fw-bold">₦0.00</span>
-    </p>
-</div>
+                    <div class="customer-info">
+                        <p class="mb-1">
+                            <strong>Customer:</strong> <span id="customer-name">—</span>
+                            <small id="customer-identifier" class="text-muted"></small>
+                            <br>
+                            <strong>Type:</strong> <span id="customer-type" class="text-muted">—</span>
+                            <span id="customer-class-label" style="display:none;"><strong class="ms-2">Class:</strong> <span id="customer-class" class="text-muted">—</span></span>
+                        </p>
+                        <p class="mb-0">
+                            <strong>Wallet:</strong> <span id="wallet-balance" class="text-success fw-bold">₦0.00</span>
+                        </p>
+                    </div>
                 </div>
                 <div class="col-md-3 text-end">
-                    <img id="student-image" class="img-fluid rounded border" src="{% static 'admin_site/images/default_image.jpg' %}" style="max-height:80px; width: 80px; object-fit: cover;" alt="Student Image">
+                    <img id="customer-image" class="img-fluid rounded border" src="{% static 'admin_site/images/default_image.jpg' %}" style="max-height:80px; width: 80px; object-fit: cover;" alt="Customer Image">
                 </div>
             </div>
 
@@ -85,8 +97,7 @@
                             <th style="width: 15%;">Total (₦)</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        </tbody>
+                    <tbody></tbody>
                 </table>
             </div>
 
@@ -101,7 +112,15 @@
                     <div class="row g-3">
                         <div class="col-6"><label class="form-label">Subtotal</label><input class="form-control" id="subtotal" readonly></div>
                         <div class="col-6"><label class="form-label">Discount</label><input class="form-control" id="discount" name="discount" type="number" min="0" step="0.01" value="0.00"></div>
-                        <div class="col-6"><label class="form-label">Payment Method</label><select name="payment_method" id="payment-method" class="form-select" required><option value="cash">Cash</option><option value="pos">POS</option><option value="student_wallet" disabled>Student Wallet</option></select></div>
+                        <div class="col-6">
+                            <label class="form-label">Payment Method</label>
+                            <select name="payment_method" id="payment-method" class="form-select" required>
+                                <option value="cash">Cash</option>
+                                <option value="pos">POS</option>
+                                <option value="student_wallet" disabled>Student Wallet</option>
+                                <option value="staff_wallet" disabled>Staff Wallet</option>
+                            </select>
+                        </div>
                         <div class="col-6"><label class="form-label">Grand Total</label><input class="form-control fs-5 fw-bold" id="grand-total" readonly></div>
                     </div>
                 </div>
@@ -133,93 +152,127 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // --- CONFIGURATION ---
-    const studentSearchUrl = "{% url 'api_student_search' %}";
+    const personSearchUrl = "{% url 'api_person_search' %}";
     const itemSearchUrl = "{% url 'api_item_search' %}";
     const barcodeLookupUrl = "{% url 'api_barcode_lookup' %}";
-    const maxDebt = {{ settings.max_student_debt|default:0 }};
     const defaultImage = "{% static 'admin_site/images/default_image.jpg' %}";
 
     // --- DOM ELEMENTS ---
     const orderForm = document.getElementById('order-form');
-    const studentSearchInput = document.getElementById('student-search');
-    const studentSuggestions = document.getElementById('student-suggestions');
+    const personSearchInput = document.getElementById('person-search');
+    const personSuggestions = document.getElementById('person-suggestions');
     const studentIdInput = document.getElementById('student-id');
+    const staffIdInput = document.getElementById('staff-id');
     const paymentMethodSelect = document.getElementById('payment-method');
     const orderTableBody = document.querySelector('#order-table tbody');
     const rowTemplate = document.getElementById('order-row-template');
 
     let rowIndex = 0;
+    let currentCustomerType = null; // 'student', 'staff', or null
 
-    // --- STUDENT LOGIC ---
-    studentSearchInput.addEventListener('input', debounce(function() {
+    // --- CUSTOMER SEARCH (STUDENT & STAFF) ---
+    personSearchInput.addEventListener('input', debounce(function() {
         const query = this.value;
-        if (query.length < 2) { studentSuggestions.innerHTML = ''; return; }
+        if (query.length < 2) { personSuggestions.innerHTML = ''; return; }
 
-        fetch(`${studentSearchUrl}?q=${query}`)
+        fetch(`${personSearchUrl}?q=${query}`)
             .then(res => res.json())
             .then(data => {
                 let html = '';
                 if (data.length) {
-                    data.forEach(s => {
-                        html += `<a href="#" class="list-group-item list-group-item-action suggestion-item student-option" data-student='${JSON.stringify(s)}'>${s.name} (${s.reg_number})</a>`;
+                    data.forEach(person => {
+                        const badgeClass = person.type === 'student' ? 'type-student' : 'type-staff';
+                        const typeLabel = person.type === 'student' ? 'Student' : 'Staff';
+                        html += `<a href="#" class="list-group-item list-group-item-action suggestion-item person-option" data-person='${JSON.stringify(person)}'>
+                            <span class="type-badge ${badgeClass}">${typeLabel}</span>
+                            ${person.name} (${person.identifier})
+                        </a>`;
                     });
                 } else {
-                    html = '<div class="list-group-item">No students found.</div>';
+                    html = '<div class="list-group-item">No customers found.</div>';
                 }
-                studentSuggestions.innerHTML = html;
+                personSuggestions.innerHTML = html;
             });
     }, 300));
 
     document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('student-option')) {
+        if (e.target.classList.contains('person-option') || e.target.closest('.person-option')) {
             e.preventDefault();
-            const studentData = JSON.parse(e.target.dataset.student);
-            populateStudent(studentData);
+            const optionEl = e.target.classList.contains('person-option') ? e.target : e.target.closest('.person-option');
+            const personData = JSON.parse(optionEl.dataset.person);
+            populateCustomer(personData);
         }
         if (!e.target.closest('.suggestions-container')) {
             document.querySelectorAll('.suggestions-list').forEach(el => el.innerHTML = '');
         }
     });
 
-    function populateStudent(student) {
-        studentIdInput.value = student.id;
-        document.getElementById('student-name').textContent = student.name;
-        document.getElementById('student-reg').textContent = `(${student.reg_number})`;
-        document.getElementById('student-class').textContent = student.student_class;
-        document.getElementById('wallet-balance').textContent = parseFloat(student.wallet_balance || 0).toFixed(2);
-        document.getElementById('wallet-debt').textContent = parseFloat(student.wallet_debt || 0).toFixed(2);
-        document.getElementById('student-image').src = student.image_url || defaultImage;
-        studentSearchInput.value = student.name;
-        studentSuggestions.innerHTML = '';
+    function populateCustomer(person) {
+        // Clear both IDs first
+        studentIdInput.value = '';
+        staffIdInput.value = '';
 
-        // Requirement #2: Set payment method
-        paymentMethodSelect.value = 'student_wallet';
-        paymentMethodSelect.querySelector('option[value="student_wallet"]').disabled = false;
+        // Set appropriate ID based on type
+        if (person.type === 'student') {
+            studentIdInput.value = person.id;
+            currentCustomerType = 'student';
+
+            // Show class for students
+            document.getElementById('customer-class-label').style.display = '';
+            document.getElementById('customer-class').textContent = person.display_class || '—';
+
+            // Enable student wallet
+            paymentMethodSelect.value = 'student_wallet';
+            paymentMethodSelect.querySelector('option[value="student_wallet"]').disabled = false;
+            paymentMethodSelect.querySelector('option[value="staff_wallet"]').disabled = true;
+        } else {
+            staffIdInput.value = person.id;
+            currentCustomerType = 'staff';
+
+            // Hide class for staff
+            document.getElementById('customer-class-label').style.display = 'none';
+
+            // Enable staff wallet
+            paymentMethodSelect.value = 'staff_wallet';
+            paymentMethodSelect.querySelector('option[value="staff_wallet"]').disabled = false;
+            paymentMethodSelect.querySelector('option[value="student_wallet"]').disabled = true;
+        }
+
+        // Populate common fields
+        document.getElementById('customer-name').textContent = person.name;
+        document.getElementById('customer-identifier').textContent = `(${person.identifier})`;
+        document.getElementById('customer-type').textContent = person.type === 'student' ? 'Student' : 'Staff';
+        document.getElementById('wallet-balance').textContent = parseFloat(person.wallet_balance || 0).toFixed(2);
+        document.getElementById('customer-image').src = person.image_url || defaultImage;
+        personSearchInput.value = person.name;
+        personSuggestions.innerHTML = '';
     }
 
-    function clearStudent() {
+    function clearCustomer() {
         studentIdInput.value = '';
-        document.getElementById('student-name').textContent = '—';
-        document.getElementById('student-reg').textContent = '';
-        document.getElementById('student-class').textContent = '—';
-        document.getElementById('wallet-balance').textContent = '0.00';
-        document.getElementById('wallet-debt').textContent = '0.00';
-        document.getElementById('student-image').src = defaultImage;
-        studentSearchInput.value = '';
+        staffIdInput.value = '';
+        currentCustomerType = null;
 
-        // Requirement #2: Set payment method
+        document.getElementById('customer-name').textContent = '—';
+        document.getElementById('customer-identifier').textContent = '';
+        document.getElementById('customer-type').textContent = '—';
+        document.getElementById('customer-class').textContent = '—';
+        document.getElementById('customer-class-label').style.display = 'none';
+        document.getElementById('wallet-balance').textContent = '0.00';
+        document.getElementById('customer-image').src = defaultImage;
+        personSearchInput.value = '';
+
+        // Reset payment method
         paymentMethodSelect.value = 'cash';
         paymentMethodSelect.querySelector('option[value="student_wallet"]').disabled = true;
+        paymentMethodSelect.querySelector('option[value="staff_wallet"]').disabled = true;
     }
 
     // --- ITEM & ROW LOGIC ---
     function addNewRow() {
         const newRow = rowTemplate.content.cloneNode(true);
         const rowElement = newRow.querySelector('tr');
-
-        // Update name attributes with unique index
         rowElement.innerHTML = rowElement.innerHTML.replace(/__INDEX__/g, rowIndex);
-
         orderTableBody.appendChild(newRow);
         rowIndex++;
         bindRowEvents(orderTableBody.lastElementChild);
@@ -336,12 +389,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // --- BARCODE SCANNER ---
+    // --- BARCODE SCANNER (Items only, not staff) ---
     let barcodeBuffer = '';
     let barcodeTimer;
     document.addEventListener('keydown', function(e) {
         if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
-            return; // Don't interfere with normal typing
+            return;
         }
         if (e.key === 'Enter') {
             if (barcodeBuffer.length > 3) {
@@ -367,7 +420,15 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(res => res.json())
             .then(data => {
                 if (data.student) {
-                    populateStudent(data.student);
+                    populateCustomer({
+                        type: 'student',
+                        id: data.student.id,
+                        name: data.student.name,
+                        identifier: data.student.reg_number,
+                        display_class: data.student.student_class,
+                        wallet_balance: data.student.wallet_balance,
+                        image_url: data.student.image_url
+                    });
                 } else if (data.item) {
                     addItemToNextAvailableRow(data.item);
                 } else {
@@ -413,20 +474,30 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        if (paymentMethodSelect.value === 'student_wallet') {
+        const paymentMethod = paymentMethodSelect.value;
+        const grandTotal = parseFloat(document.getElementById('grand-total').value.replace('₦', '')) || 0;
+        const balance = parseFloat(document.getElementById('wallet-balance').textContent) || 0;
+
+        if (paymentMethod === 'student_wallet') {
             if (!studentIdInput.value) {
                 e.preventDefault();
                 alert('Please select a student for wallet payment.');
                 return;
             }
-            const grandTotal = parseFloat(document.getElementById('grand-total').value.replace('₦', '')) || 0;
-            const balance = parseFloat(document.getElementById('wallet-balance').textContent) || 0;
-            const debt = parseFloat(document.getElementById('wallet-debt').textContent) || 0;
-            const available = balance + (maxDebt - debt);
-
-            if (grandTotal > available) {
+            if (grandTotal > balance) {
                 e.preventDefault();
-                alert(`Insufficient funds. Available: ₦${available.toFixed(2)}, Required: ₦${grandTotal.toFixed(2)}`);
+                alert(`Insufficient funds. Available: ₦${balance.toFixed(2)}, Required: ₦${grandTotal.toFixed(2)}`);
+                return;
+            }
+        } else if (paymentMethod === 'staff_wallet') {
+            if (!staffIdInput.value) {
+                e.preventDefault();
+                alert('Please select a staff member for wallet payment.');
+                return;
+            }
+            if (grandTotal > balance) {
+                e.preventDefault();
+                alert(`Insufficient funds. Available: ₦${balance.toFixed(2)}, Required: ₦${grandTotal.toFixed(2)}`);
                 return;
             }
         }
@@ -441,9 +512,9 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
-    clearStudent();
+    clearCustomer();
     addNewRow();
-    studentSearchInput.focus();
+    personSearchInput.focus();
 });
 </script>
 {% endblock %}

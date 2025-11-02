@@ -15,7 +15,7 @@ from .views import (
     assignment_list_view, generate_collections_view, collection_job_status_view, collection_job_status_ajax,
     student_collection_search_view, ajax_get_students_by_class, ajax_get_students_by_reg_no,
     student_collection_dashboard_view, process_collection_view, create_direct_collection_view, create_assignment_view,
-    delete_assignment_view, edit_assignment_view,
+    delete_assignment_view, edit_assignment_view, api_person_search,
 )
 
 
@@ -93,6 +93,7 @@ urlpatterns = [
     path('orders/<int:pk>/', order_detail, name='order_detail'),
     path('orders/<int:pk>/refund/', process_refund, name='process_refund'),
     path('place-order/', place_order_view, name='place_order'),
+    path('api/person-search/', api_person_search, name='api_person_search'),
 
     path('api/student-search/', api_student_search, name='api_student_search'),
     path('api/item-search/', api_item_search, name='api_item_search'),

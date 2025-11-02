@@ -23,6 +23,8 @@ from finance.views import (
     StaffLoanListView, StaffLoanCreateView, StaffLoanDetailView, StaffLoanActionView, StaffLoanDebtorsListView,
     StaffLoanDebtDetailView, record_staff_loan_repayment, my_salary_profile_view, DepositPaymentSelectStaffView,
     staff_deposit_payment_list_view, staff_deposit_detail_view, staff_deposit_create_view,
+    staff_pending_deposit_payment_list_view, staff_confirm_payment_view, staff_decline_payment_view,
+    StaffUploadDepositView, StaffDepositHistoryView,
 )
 
 urlpatterns = [
@@ -167,8 +169,9 @@ urlpatterns = [
          name='deposit_get_class_students_by_reg_number'),
     path('deposit/payment/index', deposit_payment_list_view, name='deposit_index'),
     path('deposit/<int:pk>/detail', deposit_detail_view, name='deposit_detail'),
-    path('deposit/payment/pending/index', pending_deposit_payment_list_view, name='pending_deposit_index'),
     path('deposit/<int:student_pk>/create', deposit_create_view, name='deposit_create'),
+
+    path('deposit/payment/pending/index', pending_deposit_payment_list_view, name='pending_deposit_index'),
     path('deposit/<int:payment_id>/confirm/', confirm_payment_view, name='confirm_payment'),
     path('deposit/<int:payment_id>/cancel/', decline_payment_view, name='decline_payment'),
 
@@ -177,6 +180,15 @@ urlpatterns = [
     path('staff-deposit/payment/index', staff_deposit_payment_list_view, name='staff_deposit_index'),
     path('staff-deposit/<int:pk>/detail', staff_deposit_detail_view, name='staff_deposit_detail'),
     path('staff-deposit/<int:staff_pk>/create', staff_deposit_create_view, name='staff_deposit_create'),
+
+    path('staff-deposit/payment/pending/index', staff_pending_deposit_payment_list_view, name='staff_pending_deposit_index'),
+    path('staff-deposit/<int:payment_id>/confirm/', staff_confirm_payment_view, name='staff_confirm_payment'),
+    path('staff-deposit/<int:payment_id>/cancel/', staff_decline_payment_view, name='staff_decline_payment'),
+
+    path('my-funding/upload/', StaffUploadDepositView.as_view(), name='staff_upload_deposit'),
+
+    # 2. STAFF: Page for staff to see their own deposit history
+    path('my-funding/history/', StaffDepositHistoryView.as_view(), name='staff_deposit_history'),
 
     path('fee/dashboard/', fee_dashboard, name='fee_dashboard'),
     path('dashboard/', finance_dashboard, name='finance_dashboard'),

@@ -1,0 +1,79 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+{% block 'main' %}
+
+<div class="pagetitle">
+    <h1>My Wallet</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}">Home</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'staff_deposit_history' %}">My Deposit History</a></li>
+            <li class="breadcrumb-item active">Upload Deposit</li>
+        </ol>
+    </nav>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Upload Deposit Teller</h5>
+                <p>Submit your deposit details here. Your wallet will be credited once the payment is confirmed by an accountant.</p>
+                {% if bank_detail %}
+                <div class="card">
+                    <div class="card-body">
+                        <h3 class="card-title">Account Details</h3>
+                        <h5 class="text-dark">Bank: {% if bank_detail.bank %} {{ bank_detail.bank|upper }} {% else %} ----------- {% endif %}</h5>
+                        <h5 class="">Account Number: {% if bank_detail.account_number %} {{ bank_detail.account_number }} {% else %} ----------- {% endif %}</h5>
+                        <h5 class="">Account Name: {% if bank_detail.account_name %} {{ bank_detail.account_name|title }} {% else %} ----------- {% endif %}</h5>
+                    </div>
+                </div>
+                {% endif %}
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label">Amount</label>
+                            {{ form.amount }}
+                            {% if form.amount.errors %}<div class="text-danger small">{{ form.amount.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Payment Method</label>
+                            {{ form.method }}
+                            {% if form.method.errors %}<div class="text-danger small">{{ form.method.errors }}</div>{% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Payment Mode</label>
+                            {{ form.mode }}
+                            {% if form.mode.errors %}<div class="text-danger small">{{ form.mode.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label">Teller / Reference No.</label>
+                            {{ form.teller_number }}
+                            {% if form.teller_number.errors %}<div class="text-danger small">{{ form.teller_number.errors }}</div>{% endif %}
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <label class="form-label">Proof of Payment (Image/PDF)</label>
+                            {{ form.proof_of_payment }}
+                            {% if form.proof_of_payment.errors %}<div class="text-danger small">{{ form.proof_of_payment.errors }}</div>{% endif %}
+                        </div>
+                        
+                        <div class="col-12 text-center">
+                            <button type="submit" class="btn btn-primary px-5">Submit for Review</button>
+                        </div>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+

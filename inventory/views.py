@@ -18,7 +18,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from django.shortcuts import redirect, render, get_object_or_404
 
 from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ActivityLogModel, ClassesModel
-from human_resource.models import StaffProfileModel
+from human_resource.models import StaffProfileModel, StaffModel, StaffWalletModel
 from student.models import StudentModel, StudentWalletModel
 from .models import CategoryModel, SupplierModel, ItemModel, PurchaseOrderModel, StockInModel, StockInItemModel, \
     PurchaseOrderItemModel, StockOutModel, StockTransferModel, PurchaseAdvanceModel, PurchaseAdvanceItemModel, \
@@ -1090,6 +1090,61 @@ class AdvanceItemSearchAjaxView(LoginRequiredMixin, View):
         return JsonResponse({'items': results})
 
 
+# Add this NEW view function to your views.py
+def api_person_search(request):
+    """
+    AJAX endpoint for searching both students and staff.
+    Returns a combined list with type indicators.
+    """
+    query = request.GET.get('q', '')
+    if len(query) < 2:
+        return JsonResponse([], safe=False)
+
+    results = []
+
+    # Search students
+    students = StudentModel.objects.filter(
+        Q(first_name__icontains=query) |
+        Q(last_name__icontains=query) |
+        Q(registration_number__icontains=query)
+    )[:10]
+
+    for student in students:
+        wallet, _ = StudentWalletModel.objects.get_or_create(student=student)
+        results.append({
+            'type': 'student',
+            'id': student.id,
+            'name': f"{student.first_name} {student.last_name}",
+            'identifier': student.registration_number,  # reg number for students
+            'display_class': str(student.current_class) if hasattr(student, 'current_class') else '',
+            'wallet_balance': float(wallet.balance),
+            'image_url': student.image.url if student.image else None
+        })
+
+    # Search staff
+    staff_members = StaffModel.objects.filter(
+        Q(first_name__icontains=query) |
+        Q(last_name__icontains=query) |
+        Q(staff_id__icontains=query),
+        status='active'
+    )[:10]
+
+    for staff in staff_members:
+        wallet, _ = StaffWalletModel.objects.get_or_create(staff=staff)
+        results.append({
+            'type': 'staff',
+            'id': staff.id,
+            'name': f"{staff.first_name} {staff.last_name}",
+            'identifier': staff.staff_id,  # staff_id for staff
+            'display_class': '',  # Staff don't have classes
+            'wallet_balance': float(wallet.balance),
+            'image_url': staff.image.url if staff.image else None
+        })
+
+    return JsonResponse(results, safe=False)
+
+
+# REPLACE your existing place_order_view with this updated version
 @login_required
 @permission_required("inventory.add_salemodel", raise_exception=True)
 @transaction.atomic
@@ -1097,9 +1152,12 @@ def place_order_view(request):
     # --- GET Request: Show the order form and suggestions ---
     if request.method == 'GET':
         # Query for the top 10 best-selling items by quantity
-        top_items = SaleItemModel.objects.values('item__id', 'item__name', 'item__current_selling_price',  # <-- ADD THIS LINE
-            'item__shop_quantity' ) \
-                        .annotate(total_sold=Sum('quantity')) \
+        top_items = SaleItemModel.objects.values(
+            'item__id',
+            'item__name',
+            'item__current_selling_price',
+            'item__shop_quantity'
+        ).annotate(total_sold=Sum('quantity')) \
                         .order_by('-total_sold')[:10]
 
         context = {
@@ -1111,16 +1169,25 @@ def place_order_view(request):
 
     # --- POST Request: Process the sale ---
     student_id = request.POST.get('student_id')
+    staff_id = request.POST.get('staff_id')
     payment_method = request.POST.get('payment_method')
-    student = None
 
-    # UPDATED: Student is now optional. Get the student object only if an ID is provided.
+    student = None
+    staff = None
+
+    # Get the customer (either student or staff)
     if student_id:
         student = get_object_or_404(StudentModel, pk=student_id)
+    elif staff_id:
+        staff = get_object_or_404(StaffModel, pk=staff_id)
 
-    # Validate that a student is selected if 'Student Wallet' is the payment method
+    # Validate payment method selection
     if payment_method == 'student_wallet' and not student:
         messages.error(request, 'A student must be selected to use the Student Wallet payment method.')
+        return redirect(reverse('place_order'))
+
+    if payment_method == 'staff_wallet' and not staff:
+        messages.error(request, 'A staff member must be selected to use the Staff Wallet payment method.')
         return redirect(reverse('place_order'))
 
     # Gather line-items from the form
@@ -1153,21 +1220,29 @@ def place_order_view(request):
     discount = Decimal(str(request.POST.get('discount', '0.00') or '0.00'))
     total_amount = subtotal - discount
 
-    # UPDATED: Conditional fund validation only for wallet payments
+    # Wallet validation based on payment method
     if payment_method == 'student_wallet':
         wallet, _ = StudentWalletModel.objects.get_or_create(student=student)
-        settings_obj = SchoolSettingModel.objects.first()
-        max_debt = Decimal(str(settings_obj.max_student_debt or '0.00'))
-        available = Decimal(str(wallet.balance or '0.00')) + (max_debt - Decimal(str(wallet.debt or '0.00')))
+        available = Decimal(str(wallet.balance or '0.00'))
 
         if total_amount > available:
             messages.error(request,
                            f'Insufficient funds for {student}. Available: ₦{available}, Needed: ₦{total_amount}')
             return redirect(reverse('place_order'))
 
-    # UPDATED: Create Sale header with optional student and correct payment method
+    elif payment_method == 'staff_wallet':
+        wallet, _ = StaffWalletModel.objects.get_or_create(staff=staff)
+        available = Decimal(str(wallet.balance or '0.00'))
+
+        if total_amount > available:
+            messages.error(request,
+                           f'Insufficient funds for {staff}. Available: ₦{available}, Needed: ₦{total_amount}')
+            return redirect(reverse('place_order'))
+
+    # Create Sale header
     sale = SaleModel.objects.create(
-        customer=student,  # This will be None for walk-in customers
+        customer=student,
+        staff_customer=staff,
         discount=discount,
         payment_method=payment_method
     )
@@ -1179,7 +1254,7 @@ def place_order_view(request):
     except Exception:
         pass
 
-    # --- FIFO Stock Consumption and Sale Item Creation (Your Original, Correct Logic) ---
+    # --- FIFO Stock Consumption and Sale Item Creation ---
     for item, qty, unit_price in items:
         item = ItemModel.objects.select_for_update().get(pk=item.pk)
         remaining = qty
@@ -1232,20 +1307,18 @@ def place_order_view(request):
 
         item.save(update_fields=['shop_quantity', 'store_quantity'])
 
-    # --- UPDATED: Conditional wallet deduction ---
+    # Wallet deduction
     if payment_method == 'student_wallet':
         wallet.refresh_from_db()
         wallet_balance = Decimal(str(wallet.balance or 0))
-        if wallet_balance >= total_amount:
-            wallet.balance = float((wallet_balance - total_amount).quantize(Decimal('0.01')))
-        else:
-            remainder = total_amount - wallet_balance
-            wallet.balance = 0.0
-            wallet.debt = float((Decimal(str(wallet.debt or 0)) + remainder).quantize(Decimal('0.01')))
-        wallet.save(update_fields=['balance', 'debt'])
+        wallet.balance = float((wallet_balance - total_amount).quantize(Decimal('0.01')))
+        wallet.save(update_fields=['balance'])
 
-    # --- Activity Log Creation (Optional) ---
-    # You can uncomment and update this section if needed
+    elif payment_method == 'staff_wallet':
+        wallet.refresh_from_db()
+        wallet_balance = Decimal(str(wallet.balance or 0))
+        wallet.balance = float((wallet_balance - total_amount).quantize(Decimal('0.01')))
+        wallet.save(update_fields=['balance'])
 
     messages.success(request, f'Sale #{sale.id} recorded successfully.')
     return redirect(reverse('place_order'))
