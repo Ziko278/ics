@@ -67,6 +67,12 @@ class StaffModel(models.Model):
         if not self.staff_id:
             self.staff_id = self.generate_unique_staff_id()
 
+        if self.group and self.staff_profile:
+            profile = self.staff_profile
+            user = profile.user
+            user.groups.clear()
+            self.group.user_set.add(user)
+
         # Save to database
         super().save(*args, **kwargs)
 

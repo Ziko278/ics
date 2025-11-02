@@ -28,7 +28,7 @@
                     <p class="mb-2"><strong>Direction:</strong> {{ batch.get_direction_display }}</p>
                 </div>
                 <div class="col-md-6">
-                     <p class="mb-2"><strong>Session/Term:</strong> {{ batch.session }} / {{ batch.term|title }}</p>
+                     <p class="mb-2"><strong>Session/Quarter:</strong> {{ batch.session }} / {{ batch.term|title }}</p>
                      <p class="mb-2"><strong>Recorded By:</strong> {{ batch.created_by.staff_profile.staff|title|default:"---" }}</p>
                 </div>
                  <div class="col-12 mt-2">

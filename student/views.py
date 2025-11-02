@@ -179,7 +179,7 @@ class ParentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
 
             # 2. Generate a random password.
             # You can use your make_random_password function or a simple one here.
-            password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+            password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 
             # 3. Create the Django User object.
             user = User.objects.create_user(

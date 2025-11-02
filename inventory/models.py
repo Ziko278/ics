@@ -452,7 +452,7 @@ class StockTransferModel(models.Model):
 
     class Direction(models.TextChoices):
         STORE_TO_SHOP = 'store_to_shop', 'Store to Tuck Shop'
-        SHOP_TO_STORE = 'shop_to_store', 'Shop to Store'
+        SHOP_TO_STORE = 'shop_to_store', 'Tuck Shop to Store'
 
     receipt_number = models.CharField(max_length=50, unique=True, blank=True)
     direction = models.CharField(max_length=20, choices=Direction.choices)

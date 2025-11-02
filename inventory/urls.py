@@ -115,7 +115,7 @@ urlpatterns = [
     path('students/ajax/by-reg/', ajax_get_students_by_reg_no, name='ajax_get_students_by_reg_no'),
 
     # Collection Management
-    path('students/<int:student_pk>/collections/', student_collection_dashboard_view,
+    path('student/<int:student_pk>/collections/', student_collection_dashboard_view,
          name='student_collection_dashboard'),
     path('collections/<int:collection_pk>/process/', process_collection_view, name='process_collection'),
     path('student/<int:student_pk>/direct-purchase/', create_direct_collection_view,
