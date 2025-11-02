@@ -743,11 +743,6 @@ class InvoiceDetailView(LoginRequiredMixin, PermissionRequiredMixin, CreateView)
         context['payments'] = self.invoice.payments.all().order_by('-date')
         return context
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs['invoice'] = get_object_or_404(InvoiceModel, pk=self.kwargs['pk'])
-        return kwargs
-
     def form_valid(self, form):
         invoice = get_object_or_404(InvoiceModel, pk=self.kwargs['pk'])
         payment = form.save(commit=False)

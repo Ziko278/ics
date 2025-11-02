@@ -30,9 +30,9 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label for="term-filter" class="form-label">Term</label>
+                <label for="term-filter" class="form-label">Quaters</label>
                 <select name="term" id="term-filter" class="form-select">
-                    <option value="">All Terms</option>
+                    <option value="">All Quaters</option>
                     {% for term in term_list %}
                         <option value="{{ term.pk }}" {% if current_term_id == term.pk|stringformat:"s" %}selected{% endif %}>
                             {{ term.name|title }}
@@ -60,7 +60,7 @@
                         <th class="text-end">Amount Paid</th>
                         <th>Invoice #</th>
                         <th>Payment Date</th>
-                        <th>Session / Term</th>
+                        <th>Session / Quater</th>
                         <th>Status</th>
                         <th class="text-center">Action</th>
                     </tr>
