@@ -1,5 +1,6 @@
 import csv
 from datetime import date
+from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Q
@@ -212,10 +213,16 @@ class StudentSearchForMealAjaxView(LoginRequiredMixin, View):
 
             # Check 1: Fee payment
             if setting and setting.cafeteria_fee:
-                fee_paid = InvoiceModel.objects.filter(
-                    student=student, items__fee_master__fee=setting.cafeteria_fee, status=InvoiceModel.Status.PAID
+
+                # Check if an invoice item for this fee exists
+                # where the balance is still greater than 0
+                fee_is_unpaid = InvoiceItemModel.objects.filter(
+                    invoice__student=student,
+                    fee_master__fee=setting.cafeteria_fee,
+                    balance__gt=Decimal('0.00')
                 ).exists()
-                if not fee_paid:
+
+                if fee_is_unpaid:
                     is_eligible = False
                     eligibility_message = f"Required Fee Not Paid: '{setting.cafeteria_fee.name}'"
 
