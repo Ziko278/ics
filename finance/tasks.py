@@ -17,8 +17,7 @@ def generate_invoices_task(job_id):
     This is the Celery background task that performs the heavy lifting
     of generating invoices for a large number of students.
     """
-    # VERIFICATION: This will help us confirm new code is running
-    VERSION_CHECK = "VERSION_2024_11_02_FIX"
+    VERSION_CHECK = "VERSION_2024_11_02_FIX_V2"
     logger.info(f"Starting invoice generation task - {VERSION_CHECK}")
 
     job = None
@@ -28,7 +27,6 @@ def generate_invoices_task(job_id):
         # 1. Get the job record from the database
         job = InvoiceGenerationJob.objects.get(pk=job_id)
         job.status = InvoiceGenerationJob.Status.IN_PROGRESS
-        job.error_message = VERSION_CHECK  # Temporarily store version here
         job.save()
 
         # 2. Find all students in the classes selected for this job
@@ -57,9 +55,22 @@ def generate_invoices_task(job_id):
                 if student.student_class in f.student_classes.all()
             ]
 
-            # Loop through this student's fees and create one invoice PER fee
-            for fee_master in applicable_fees_for_student:
-                with transaction.atomic():
+            # Create ONE invoice per student per term/session
+            # Then add multiple items to it
+            with transaction.atomic():
+                # Get or create the invoice for this student/session/term
+                invoice, created = InvoiceModel.objects.get_or_create(
+                    student=student,
+                    session=job.session,
+                    term=job.term,
+                    defaults={
+                        'due_date': timezone.now().date(),
+                        'status': 'unpaid',  # Set appropriate default status
+                    }
+                )
+
+                # Now add all applicable fees as line items
+                for fee_master in applicable_fees_for_student:
                     # Get the amount for the correct term
                     termly_amount = None
                     for ta in fee_master.termly_amounts.all():
@@ -69,23 +80,18 @@ def generate_invoices_task(job_id):
 
                     amount = termly_amount.amount if termly_amount else Decimal('0.00')
 
-                    # Skip creating an invoice if the fee is zero for this term
+                    # Skip fees with zero amount
                     if amount <= 0:
                         continue
 
-                    # Use get_or_create to prevent creating duplicate invoices
-                    invoice, created = InvoiceModel.objects.get_or_create(
-                        student=student,
-                        session=job.session,
-                        term=job.term,
-                        fee=str(fee_master),
-                        defaults={
-                            'due_date': timezone.now().date(),
-                        }
-                    )
+                    # Check if this fee item already exists on the invoice
+                    existing_item = InvoiceItemModel.objects.filter(
+                        invoice=invoice,
+                        fee_master=fee_master
+                    ).first()
 
-                    # If an invoice was newly created, add its single line item
-                    if created:
+                    if not existing_item:
+                        # Add the fee as a line item
                         InvoiceItemModel.objects.create(
                             invoice=invoice,
                             fee_master=fee_master,
@@ -99,7 +105,7 @@ def generate_invoices_task(job_id):
 
         # 6. Mark the job as successful
         job.status = InvoiceGenerationJob.Status.SUCCESS
-        job.error_message = ""  # Clear the version check
+        job.error_message = ""
 
     except Exception as e:
         # 7. If any error occurs, mark the job as failed and record the error
@@ -113,3 +119,4 @@ def generate_invoices_task(job_id):
         if job:
             job.completed_at = timezone.now()
             job.save()
+            
