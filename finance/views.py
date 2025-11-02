@@ -2083,8 +2083,8 @@ def deposit_payment_list_view(request):
     fee_payment_list = StudentFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
     context = {
         'fee_payment_list': fee_payment_list,
-        'session': session,
-        'term': term,
+        'current_session': session,
+        'current_term': term,
         'session_list': session_list,
         'term_list': term_list
     }
