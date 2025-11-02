@@ -243,34 +243,27 @@ class InvoiceGenerationForm(forms.ModelForm):
 
 
 class FeePaymentForm(forms.ModelForm):
-    """Form for adding a payment to a specific invoice."""
+    """
+    Form for validating the PAYMENT DETAILS of a transaction.
+    The amount is calculated by the view, not this form.
+    """
 
     class Meta:
         model = FeePaymentModel
-        fields = ['amount', 'payment_mode', 'date', 'reference', 'notes', 'bank_account']
+
+        # --- THIS IS THE FIX ---
+        # We REMOVED 'amount' from this list.
+        fields = ['payment_mode', 'date', 'reference', 'notes', 'bank_account']
+        # --- END OF FIX ---
+
         widgets = {
-            'amount': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+            # We REMOVED the 'amount' widget
             'bank_account': forms.Select(attrs={'class': 'form-select form-select-sm'}),
             'payment_mode': forms.Select(attrs={'class': 'form-select form-select-sm'}),
             'date': forms.DateInput(attrs={'class': 'form-control form-control-sm', 'type': 'date'}),
             'reference': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
             'notes': forms.Textarea(attrs={'class': 'form-control form-control-sm', 'rows': 2}),
         }
-
-    def __init__(self, *args, **kwargs):
-        self.invoice = kwargs.pop('invoice', None)
-        super().__init__(*args, **kwargs)
-        if self.invoice:
-            balance = self.invoice.balance
-            self.fields['amount'].widget.attrs['max'] = balance
-            self.fields['amount'].widget.attrs['placeholder'] = f"Max: {balance:,.2f}"
-            self.fields['amount'].help_text = f"Balance due is ₦{balance:,.2f}"
-
-    def clean_amount(self):
-        amount = self.cleaned_data.get('amount')
-        if self.invoice and amount and amount > self.invoice.balance + Decimal('0.01'):
-            raise ValidationError(f"Payment cannot exceed the outstanding balance of ₦{self.invoice.balance:,.2f}.")
-        return amount
 
 
 class BulkPaymentForm(forms.Form):
