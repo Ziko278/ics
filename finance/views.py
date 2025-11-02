@@ -893,6 +893,7 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
                     amount=total_paid_in_transaction,
                     payment_mode=request.POST.get('payment_mode'),
                     date=request.POST.get('date'),
+                    bank_account=request.POST.get('bank_account'),
                     reference=request.POST.get('reference'),
                     status=FeePaymentModel.PaymentStatus.CONFIRMED,
                     confirmed_by=request.user
