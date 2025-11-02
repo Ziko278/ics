@@ -6,7 +6,7 @@
 
 {% block content %}
 <div class="pagetitle">
-    <h1>Dashboard</h1>
+    <h1>Dashboard <br> {{ academic_info.session }} {{ academic_info.term }} </h1>
     <nav>
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Home</a></li>
@@ -14,6 +14,7 @@
         </ol>
     </nav>
 </div>
+
 <section class="section dashboard">
     <div class="row">
         <div class="col-lg-4">
@@ -25,9 +26,9 @@
                     {% else %}
                     <img alt="Profile" class="rounded-circle" src="{% static 'admin_site/images/default_image.jpg' %}">
                     {% endif %}
-                    <h2 class="mt-2">{{ selected_ward.first_name }} {{ selected_ward.last_name }}</h2>
-                    <h3>{{ selected_ward.student_class }} {{ selected_ward.class_section }}</h3>
-                    <p class="text-muted small">Reg No: {{ selected_ward.registration_number }}</p>
+                    <h2 class="mt-2">{{ selected_ward|title }}</h2>
+                    <h3>{{ selected_ward.student_class|upper }} {{ selected_ward.class_section|upper }}</h3>
+                    <p class="text-muted small">Reg No: {{ selected_ward.registration_number|upper }}</p>
                 </div>
             </div>
             {# Add other right-side cards if needed, e.g., announcements #}
@@ -57,6 +58,25 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="col-xxl-6 col-md-6">
+                    <div class="card info-card revenue-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Wallet Balance</h5>
+                            <div class="d-flex align-items-center">
+                                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                                    <i class="bi bi-cash-stack"></i>
+                                </div>
+                                <div class="ps-3">
+                                    <h6>₦{{ selected_ward.student_wallet.balance|floatformat:2|intcomma }}</h6>
+                                    <span class="text-muted small pt-2 ps-1">Across {{ pending_invoices.count }} invoice{{ pending_invoices.count|pluralize }}</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
                 <div class="col-xxl-6 col-md-6">
                     <div class="card info-card sales-card">
                         <div class="card-body">

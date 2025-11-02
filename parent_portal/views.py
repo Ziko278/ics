@@ -9,6 +9,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.utils import timezone
 
+from admin_site.models import SchoolSettingModel
 # Import models from other apps (adjust paths as needed)
 from student.models import StudentModel, ParentProfileModel
 from finance.models import InvoiceModel, InvoiceItemModel, StudentFundingModel, SchoolBankDetail, FeePaymentModel
@@ -25,7 +26,7 @@ class ParentPortalMixin(LoginRequiredMixin):
     Includes auto-select logic for single ward.
     Provides parent_obj and selected_ward context.
     """
-    login_url = reverse_lazy('login') # Point to your project's actual login URL name
+    login_url = reverse_lazy('login')
 
     def dispatch(self, request, *args, **kwargs):
         # 1. Login check is handled by LoginRequiredMixin
@@ -39,56 +40,63 @@ class ParentPortalMixin(LoginRequiredMixin):
         # 3. Get Parent object
         self.parent_obj = request.user.parent_profile.parent
 
+        # 4. Initialize selected ward from session
+        self.selected_ward_id = request.session.get('selected_ward_id')
+        self.selected_ward = None
+
         # --- AUTO-SELECT LOGIC ---
-        wards = self.parent_obj.wards.filter(status='active')
-        if wards.count() == 1:
-            # If only one ward, select automatically and redirect to dashboard,
-            # unless we are already setting/selecting ward or on the dashboard itself.
-            view_class_name = self.__class__.__name__
-            # Add DashboardView to prevent redirect loop if already there
-            if view_class_name not in ('SelectWardView', 'SetWardView', 'DashboardView'):
+        # Only auto-select if NO ward is currently selected
+        if not self.selected_ward_id:
+            wards = self.parent_obj.wards.filter(status='active')
+            if wards.count() == 1:
+                # Auto-select the only ward
                 ward = wards.first()
                 request.session['selected_ward_id'] = ward.id
-                # Redirect straight to dashboard; dashboard view can show the welcome message
-                return redirect(reverse('parent_portal:dashboard'))
+                self.selected_ward_id = ward.id
+                self.selected_ward = ward
+
+                # Only redirect to dashboard if we're NOT already on SelectWardView or SetWardView
+                view_class_name = self.__class__.__name__
+                if view_class_name not in ('SelectWardView', 'SetWardView'):
+                    messages.info(request, f"Automatically selected {ward.first_name}'s dashboard.")
+                    return redirect(reverse('parent_dashboard'))
         # --- END AUTO-SELECT ---
 
-        # 4. Initialize and attempt to load selected ward from session (if not auto-selected)
-        self.selected_ward_id = request.session.get('selected_ward_id')
-        self.selected_ward = None # Initialize to None
-
-        if self.selected_ward_id:
+        # 5. Validate selected ward if one is set
+        if self.selected_ward_id and not self.selected_ward:
             try:
                 self.selected_ward = self.parent_obj.wards.get(pk=self.selected_ward_id, status='active')
             except StudentModel.DoesNotExist:
-                if 'selected_ward_id' in request.session: del request.session['selected_ward_id']
+                # Ward not found or inactive
+                if 'selected_ward_id' in request.session:
+                    del request.session['selected_ward_id']
                 self.selected_ward_id = None
                 self.selected_ward = None
+
                 view_class_name = self.__class__.__name__
                 allowed_views = ('SelectWardView', 'SetWardView', 'ParentLoginView', 'ParentLogoutView')
                 if view_class_name not in allowed_views:
-                     messages.warning(request, "Selected student not found or inactive. Please select again.")
-                     return redirect(reverse('parent_portal:select_ward'))
+                    messages.warning(request, "Selected student not found or inactive. Please select again.")
+                    return redirect(reverse('parent_select_ward'))
 
-        # 5. Redirect if no ward is selected (and view requires it)
+        # 6. Redirect if no ward is selected (and view requires it)
         view_class_name = self.__class__.__name__
         allowed_views = ('SelectWardView', 'SetWardView', 'ParentLoginView', 'ParentLogoutView')
         if not self.selected_ward and view_class_name not in allowed_views:
-            return redirect(reverse('parent_portal:select_ward'))
+            return redirect(reverse('parent_select_ward'))
 
-        # All checks passed, proceed via MRO to the actual view's dispatch/get/post
+        # All checks passed
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        # This now gets called correctly via super() from inheriting views' get_context_data
         context = super().get_context_data(**kwargs)
-        context['selected_ward'] = self.selected_ward # Might be None
+        context['selected_ward'] = self.selected_ward
         context['parent_wards'] = self.parent_obj.wards.filter(status='active').order_by('first_name')
         try:
             from admin_site.models import SchoolInfoModel
             context['school_info'] = SchoolInfoModel.objects.first()
         except (ImportError, Exception):
-             context['school_info'] = None
+            context['school_info'] = None
         return context
 
 
@@ -171,6 +179,17 @@ class FeeInvoiceListView(ParentPortalMixin, ListView):
         ).order_by('-session__start_year', '-term__order')
 
 
+class AccountDetailView(ParentPortalMixin, TemplateView):
+    model = InvoiceModel
+    template_name = 'parent_portal/account_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['funding_account'] = SchoolSettingModel.objects.first()
+        context['school_account_list'] = SchoolBankDetail.objects.all()
+        return context
+
+
 class FeeInvoiceDetailView(ParentPortalMixin, DetailView):
     model = InvoiceModel
     template_name = 'parent_portal/fee_invoice_detail.html' # New template needed
@@ -190,7 +209,7 @@ class FeeUploadView(ParentPortalMixin, FormView):
     form_class = FeeUploadForm
     template_name = 'parent_portal/fee_upload.html'
     # Redirect to history to see the upload status
-    success_url = reverse_lazy('parent_portal:fee_history')
+    success_url = reverse_lazy('parent_fee_history')
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()

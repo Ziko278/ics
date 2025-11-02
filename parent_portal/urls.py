@@ -12,6 +12,7 @@ urlpatterns = [
     path('dashboard/', views.DashboardView.as_view(), name='parent_dashboard'),
 
     # --- Fees ---
+    path('account-details/', views.AccountDetailView.as_view(), name='parent_account_detail'),
     path('fees/', views.FeeInvoiceListView.as_view(), name='parent_fee_list'),
     path('fees/invoice/<int:pk>/', views.FeeInvoiceDetailView.as_view(), name='parent_fee_invoice_detail'), # Added detail view
     path('fees/upload/', views.FeeUploadView.as_view(), name='parent_fee_upload'),

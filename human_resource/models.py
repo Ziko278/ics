@@ -33,7 +33,6 @@ class StaffModel(models.Model):
     """
     Represents a staff member in the school.
     """
-
     class Gender(models.TextChoices):
         MALE = 'MALE', 'MALE'
         FEMALE = 'FEMALE', 'FEMALE'
