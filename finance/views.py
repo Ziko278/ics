@@ -852,8 +852,12 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
         context['invoice_history'] = student.invoices.order_by('-session__start_year', '-term__order')
         context['all_payments'] = FeePaymentModel.objects.filter(invoice__student=student).order_by('-date')
 
-        # Pass other necessary form fields for payment mode, date, etc.
-        context['payment_form'] = FeePaymentForm()  # Assuming FeePaymentForm exists for mode/date fields
+        # Pass the form for payment details, bound to the current invoice
+        if current_invoice:
+            context['payment_form'] = FeePaymentForm(invoice=current_invoice)
+        else:
+            context['payment_form'] = FeePaymentForm()
+
         return context
 
     def post(self, request, *args, **kwargs):
@@ -861,55 +865,90 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
         invoice_id = request.POST.get('invoice_id')
         invoice = get_object_or_404(InvoiceModel, pk=invoice_id)
 
-        with transaction.atomic():
-            total_paid_in_transaction = Decimal('0.00')
-            payments_made = []
+        # 1. Instantiate the form that holds the payment details (mode, date, bank)
+        # We pass the `invoice` so its clean methods (like max amount) work
+        payment_form = FeePaymentForm(request.POST, invoice=invoice)
 
-            # Loop through the submitted form data to find item payments
-            for key, value in request.POST.items():
-                if key.startswith('item_') and value:
-                    try:
-                        item_id = int(key.split('_')[1])
-                        amount_for_item = Decimal(value)
+        # 2. Loop through item payments to calculate total and prep data
+        total_paid_in_transaction = Decimal('0.00')
+        item_payment_data = {}  # Stores {item_instance: amount_to_pay}
 
-                        if amount_for_item > 0:
-                            item = get_object_or_404(InvoiceItemModel, pk=item_id, invoice=invoice)
+        for key, value in request.POST.items():
+            if key.startswith('item_') and value:
+                try:
+                    item_id = int(key.split('_')[1])
+                    amount_for_item = Decimal(value)
 
-                            # Don't allow overpayment on a single item
-                            payable_amount = min(amount_for_item, item.balance)
+                    if amount_for_item > 0:
+                        item = get_object_or_404(InvoiceItemModel, pk=item_id, invoice=invoice)
 
-                            item.amount_paid += payable_amount
-                            item.save()
+                        # Don't allow overpayment on a single item
+                        payable_amount = min(amount_for_item, item.balance)
 
-                            payments_made.append(f"{item.description} (₦{payable_amount})")
-                            total_paid_in_transaction += payable_amount
-                    except (ValueError, TypeError):
-                        continue
+                        # Store this for the atomic transaction
+                        item_payment_data[item] = payable_amount
+                        total_paid_in_transaction += payable_amount
 
-            # If any money was actually paid, create a single master payment record for the audit trail
-            if total_paid_in_transaction > 0:
-                FeePaymentModel.objects.create(
-                    invoice=invoice,
-                    amount=total_paid_in_transaction,
-                    payment_mode=request.POST.get('payment_mode'),
-                    date=request.POST.get('date'),
-                    bank_account=request.POST.get('bank_account'),
-                    reference=request.POST.get('reference'),
-                    status=FeePaymentModel.PaymentStatus.CONFIRMED,
-                    confirmed_by=request.user
-                )
+                except (ValueError, TypeError, InvoiceItemModel.DoesNotExist):
+                    # Malicious or bad data, just skip it
+                    logger.warning(f"Skipping invalid payment item data: {key} = {value}")
+                    continue
 
-                # Finally, update the parent invoice's status
-                invoice.refresh_from_db()
-                if invoice.balance <= Decimal('0.01'):
-                    invoice.status = InvoiceModel.Status.PAID
-                else:
-                    invoice.status = InvoiceModel.Status.PARTIALLY_PAID
-                invoice.save()
+        # 3. Check if any payment was made AND if the payment details are valid
+        if total_paid_in_transaction <= 0:
+            messages.warning(request, "No payment amount was entered.")
+            return redirect('finance_student_dashboard', pk=student.pk)
 
-                messages.success(request, f"Payment of ₦{total_paid_in_transaction} was applied successfully.")
-            else:
-                messages.warning(request, "No payment amount was entered.")
+        if payment_form.is_valid():
+            # --- This is the fix ---
+            # We have valid payment details from the form
+            # and a valid total from our item loop.
+            try:
+                with transaction.atomic():
+                    # First, apply the payments to the individual items
+                    for item, amount in item_payment_data.items():
+                        item.amount_paid += amount
+                        item.save(update_fields=['amount_paid'])
+
+                        # Now, create the single FeePaymentModel using the *cleaned form data*
+                    FeePaymentModel.objects.create(
+                        invoice=invoice,
+                        amount=total_paid_in_transaction,
+
+                        # Use cleaned_data, not request.POST
+                        payment_mode=payment_form.cleaned_data['payment_mode'],
+                        date=payment_form.cleaned_data['date'],  # This is now a clean date object
+                        bank_account=payment_form.cleaned_data['bank_account'],
+                        # This is now a SchoolBankDetail instance
+                        reference=payment_form.cleaned_data['reference'],
+                        notes=payment_form.cleaned_data['notes'],
+
+                        status=FeePaymentModel.PaymentStatus.CONFIRMED,
+                        confirmed_by=request.user
+                    )
+
+                    # Finally, update the parent invoice's status
+                    invoice.refresh_from_db()  # Get fresh balance calculations
+                    if invoice.balance <= Decimal('0.01'):
+                        invoice.status = InvoiceModel.Status.PAID
+                    else:
+                        invoice.status = InvoiceModel.Status.PARTIALLY_PAID
+                    invoice.save(update_fields=['status'])
+
+                    messages.success(request,
+                                     f"Payment of SAR {total_paid_in_transaction:,.2f} was applied successfully.")
+
+            except Exception as e:
+                # This will catch any unexpected errors during the transaction
+                messages.error(request, f"An error occurred while saving the payment: {e}")
+
+        else:
+            # The payment details (e.g., no date, no bank) were invalid.
+            messages.error(request, "Payment failed: The payment details (mode, date, or bank) were invalid.")
+            # Add the specific form errors
+            for field, errors in payment_form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field.title()}: {error}")
 
         return redirect('finance_student_dashboard', pk=student.pk)
 
