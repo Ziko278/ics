@@ -266,6 +266,7 @@ class FeePaymentForm(forms.ModelForm):
         }
 
 
+
 class BulkPaymentForm(forms.Form):
     """A simple form for accepting a single bulk payment amount."""
     amount = forms.DecimalField(

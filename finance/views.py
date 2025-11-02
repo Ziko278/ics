@@ -854,7 +854,7 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
 
         # Pass the form for payment details, bound to the current invoice
         if current_invoice:
-            context['payment_form'] = FeePaymentForm(invoice=current_invoice)
+            context['payment_form'] = FeePaymentForm()
         else:
             context['payment_form'] = FeePaymentForm()
 
@@ -867,8 +867,7 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
 
         # 1. Instantiate the form that holds the payment details (mode, date, bank)
         # We pass the `invoice` so its clean methods (like max amount) work
-        payment_form = FeePaymentForm(request.POST, invoice=invoice)
-        return HttpResponse(payment_form)
+        payment_form = FeePaymentForm(request.POST)
 
         # 2. Loop through item payments to calculate total and prep data
         total_paid_in_transaction = Decimal('0.00')
