@@ -13,7 +13,7 @@
                     <div class="col-md-6">
                         <p><strong>Job ID:</strong> {{ job.job_id }}</p>
                         <p><strong>Assignment:</strong> {{ job.assignment.item.name }}</p>
-                        <p><strong>Session/Term:</strong> {{ job.assignment.session.name }} - {{ job.assignment.term.name }}</p>
+                        <p><strong>Session/Quarter:</strong> {{ job.assignment.session }} - {{ job.assignment.term.name }}</p>
                         <p><strong>Created:</strong> {{ job.created_at|date:"d M Y, H:i" }}</p>
                     </div>
                     <div class="col-md-6">

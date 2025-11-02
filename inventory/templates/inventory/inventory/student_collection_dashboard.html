@@ -47,7 +47,7 @@
                         <thead>
                             <tr>
                                 <th>Item</th>
-                                <th>Session/Term</th>
+                                <th>Session/Quarter</th>
                                 <th>Assigned</th>
                                 <th>Collected</th>
                                 <th>Outstanding</th>
@@ -65,7 +65,7 @@
                                     <small class="text-muted">{{ collection.assignment.item.get_unit_display }}</small>
                                 </td>
                                 <td>
-                                    {{ collection.assignment.session.name }}<br>
+                                    {{ collection.assignment.session }}<br>
                                     <small>{{ collection.assignment.term.name }}</small>
                                 </td>
                                 <td>{{ collection.quantity_assigned }}</td>
