@@ -122,7 +122,12 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            </td>
+                                            {% if payment.status == 'confirmed' %}
+                                                <a href="{% url 'finance_fee_payment_receipt' payment.pk %}" class="btn btn-outline-info btn-sm" target="_blank" title="Print Receipt">
+                                                    <i class="bi bi-printer"></i>
+                                                </a>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% empty %}
                                     <tr><td colspan="5" class="text-center">No payments recorded for this invoice yet.</td></tr>
