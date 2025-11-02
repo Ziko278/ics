@@ -868,6 +868,7 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
         # 1. Instantiate the form that holds the payment details (mode, date, bank)
         # We pass the `invoice` so its clean methods (like max amount) work
         payment_form = FeePaymentForm(request.POST, invoice=invoice)
+        return HttpResponse(payment_form)
 
         # 2. Loop through item payments to calculate total and prep data
         total_paid_in_transaction = Decimal('0.00')
@@ -891,7 +892,6 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
 
                 except (ValueError, TypeError, InvoiceItemModel.DoesNotExist):
                     # Malicious or bad data, just skip it
-                    logger.warning(f"Skipping invalid payment item data: {key} = {value}")
                     continue
 
         # 3. Check if any payment was made AND if the payment details are valid
