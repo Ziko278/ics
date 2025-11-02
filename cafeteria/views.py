@@ -15,7 +15,7 @@ from django.shortcuts import redirect, get_object_or_404, render
 from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ClassSectionModel
 from cafeteria.models import MealModel, CafeteriaSettingModel, MealCollectionModel
 from cafeteria.forms import MealForm, CafeteriaSettingForm
-from finance.models import InvoiceModel, InvoiceItemModel
+from finance.models import InvoiceModel, InvoiceItemModel, FeePaymentModel
 from human_resource.models import StaffModel, StaffProfileModel
 from student.models import StudentModel
 from xhtml2pdf import pisa
@@ -264,7 +264,7 @@ class StudentSearchForMealAjaxView(LoginRequiredMixin, View):
             })
 
         return JsonResponse({'error': 'No search query or student ID provided.'}, status=400)
-    
+
 
 class RecordMealAjaxView(LoginRequiredMixin, View):
     """AJAX endpoint to quickly record a meal collection."""
