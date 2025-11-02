@@ -2067,21 +2067,26 @@ def deposit_get_class_students_by_reg_number(request):
 @permission_required("finance.view_studentfundingmodel", raise_exception=True)
 def deposit_payment_list_view(request):
     session_id = request.GET.get('session', None)
+    term_id = request.GET.get('term', None)
     school_setting = SchoolSettingModel.objects.first()
     if not session_id:
         session = school_setting.session
     else:
         session = SessionModel.objects.get(id=session_id)
-    session_list = SessionModel.objects.all()
-    term = request.GET.get('term', None)
-    if not term:
+    if not term_id:
         term = school_setting.term
+    else:
+        term = TermModel.objects.get(id=term_id)
+    session_list = SessionModel.objects.all()
+    term_list = TermModel.objects.all()
+
     fee_payment_list = StudentFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
     context = {
         'fee_payment_list': fee_payment_list,
         'session': session,
         'term': term,
-        'session_list': session_list
+        'session_list': session_list,
+        'term_list': term_list
     }
     return render(request, 'finance/funding/index.html', context)
 

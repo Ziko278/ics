@@ -23,10 +23,9 @@
                     <div class="col-4">
                         <select name="term" required class="form-control">
                             <option value="">-------------------</option>
-                            <option value="1st term">1st Term</option>
-                            <option value="2nd term">2nd Term</option>
-                            <option value="3rd term">3rd Term</option>
-
+                            {% for term in term_list %}
+                            <option value="{{term.id}}">{{ term|title }}</option>
+                            {% endfor %}
                         </select>
                     </div>
 
