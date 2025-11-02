@@ -1,6 +1,5 @@
 import csv
 from datetime import date
-from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Q
@@ -193,7 +192,7 @@ class StudentSearchForMealAjaxView(LoginRequiredMixin, View):
                 Q(registration_number__icontains=search_query) |
                 Q(first_name__icontains=search_query) |
                 Q(last_name__icontains=search_query)
-            ).filter(status='active').select_related('student_class', 'class_section')[:10]  # Limit to 10 results
+            ).filter(status='active').select_related('student_class', 'class_section')[:10]
 
             results = [{
                 'id': s.pk,
@@ -211,45 +210,61 @@ class StudentSearchForMealAjaxView(LoginRequiredMixin, View):
             is_eligible = True
             eligibility_message = "Eligible for Meal"
 
-            # Check 1: Fee payment
+            # Check 1: Fee payment using FeePaymentModel
             if setting and setting.cafeteria_fee:
+                # Find invoices for this student that contain the cafeteria fee
+                invoices_with_cafeteria_fee = InvoiceModel.objects.filter(
+                    student=student,
+                    items__fee_master__fee=setting.cafeteria_fee
+                ).distinct()
 
-                # Check if an invoice item for this fee exists
-                # where the balance is still greater than 0
-                fee_is_unpaid = InvoiceItemModel.objects.filter(
-                    invoice__student=student,
-                    fee_master__fee=setting.cafeteria_fee,
-                    balance__gt=Decimal('0.00')
-                ).exists()
+                if invoices_with_cafeteria_fee.exists():
+                    # Check if any of these invoices have confirmed payments
+                    fee_paid = FeePaymentModel.objects.filter(
+                        invoice__in=invoices_with_cafeteria_fee,
+                        status=FeePaymentModel.PaymentStatus.CONFIRMED
+                    ).exists()
 
-                if fee_is_unpaid:
+                    if not fee_paid:
+                        is_eligible = False
+                        eligibility_message = f"Payment Not Confirmed for '{setting.cafeteria_fee.name}'"
+                else:
+                    # No invoice exists with this fee
                     is_eligible = False
-                    eligibility_message = f"Required Fee Not Paid: '{setting.cafeteria_fee.name}'"
+                    eligibility_message = f"No Invoice Found for '{setting.cafeteria_fee.name}'"
 
             # Check 2: Daily meal limit
-            meals_today_count = MealCollectionModel.objects.filter(student=student,
-                                                                   collection_date=date.today()).count()
+            meals_today_count = MealCollectionModel.objects.filter(
+                student=student,
+                collection_date=date.today()
+            ).count()
+
             if setting and meals_today_count >= setting.max_meals_per_day:
                 is_eligible = False
                 eligibility_message = f"Daily Limit Reached ({meals_today_count} of {setting.max_meals_per_day} meals)"
 
             collected_meal_ids = MealCollectionModel.objects.filter(
-                student=student, collection_date=date.today()
+                student=student,
+                collection_date=date.today()
             ).values_list('meal_id', flat=True)
 
             return JsonResponse({
-                'student': {'id': student.pk, 'name': f"{student.first_name} {student.last_name}",
-                            'class': f"{student.student_class.name} {student.class_section.name}",
-                            'image_url': student.image.url if student.image else None, },
+                'student': {
+                    'id': student.pk,
+                    'name': f"{student.first_name} {student.last_name}",
+                    'class': f"{student.student_class.name} {student.class_section.name}",
+                    'image_url': student.image.url if student.image else None,
+                },
                 'is_eligible': is_eligible,
                 'eligibility_message': eligibility_message,
                 'meals_today_count': meals_today_count,
                 'available_meals': list(
-                    MealModel.objects.filter(is_active=True).exclude(id__in=collected_meal_ids).values('id', 'name'))
+                    MealModel.objects.filter(is_active=True).exclude(id__in=collected_meal_ids).values('id', 'name')
+                )
             })
 
         return JsonResponse({'error': 'No search query or student ID provided.'}, status=400)
-
+    
 
 class RecordMealAjaxView(LoginRequiredMixin, View):
     """AJAX endpoint to quickly record a meal collection."""
