@@ -119,4 +119,3 @@ def generate_invoices_task(job_id):
         if job:
             job.completed_at = timezone.now()
             job.save()
-            

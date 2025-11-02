@@ -800,8 +800,8 @@ class StudentFeeSearchView(LoginRequiredMixin, PermissionRequiredMixin, Template
                     'registration_number': student.registration_number,
                     'gender': student.gender,
                     'image': student.image.url if student.image else '',
-                    'student_class_id': student.student_class.id,
-                    'student_class_name': student.student_class.name,
+                    'student_class_id': student.student_class.id if student.student_class else '',
+                    'student_class_name': student.student_class.name if student.student_class else '',
                     'class_section_id': student.class_section.id if student.class_section else '',
                     'class_section_name': student.class_section.name if student.class_section else '',
                 }
