@@ -2,10 +2,13 @@ from decimal import Decimal
 from celery import shared_task
 from django.utils import timezone
 from django.db import transaction
+import logging
 
 from .models import InvoiceGenerationJob, InvoiceModel, InvoiceItemModel
 from student.models import StudentModel
 from finance.models import FeeMasterModel
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task
@@ -14,13 +17,18 @@ def generate_invoices_task(job_id):
     This is the Celery background task that performs the heavy lifting
     of generating invoices for a large number of students.
     """
+    # VERIFICATION: This will help us confirm new code is running
+    VERSION_CHECK = "VERSION_2024_11_02_FIX"
+    logger.info(f"Starting invoice generation task - {VERSION_CHECK}")
+
     job = None
-    students_processed = 0  # Initialize BEFORE the loop
+    students_processed = 0
 
     try:
         # 1. Get the job record from the database
         job = InvoiceGenerationJob.objects.get(pk=job_id)
         job.status = InvoiceGenerationJob.Status.IN_PROGRESS
+        job.error_message = VERSION_CHECK  # Temporarily store version here
         job.save()
 
         # 2. Find all students in the classes selected for this job
@@ -41,7 +49,7 @@ def generate_invoices_task(job_id):
 
         # 4. Loop through each student and generate their invoice(s)
         for i, student in enumerate(students_to_invoice):
-            students_processed = i + 1  # Update counter
+            students_processed = i + 1
 
             # Filter the fees that apply to this specific student's class
             applicable_fees_for_student = [
@@ -91,12 +99,14 @@ def generate_invoices_task(job_id):
 
         # 6. Mark the job as successful
         job.status = InvoiceGenerationJob.Status.SUCCESS
+        job.error_message = ""  # Clear the version check
 
     except Exception as e:
         # 7. If any error occurs, mark the job as failed and record the error
         if job:
             job.status = InvoiceGenerationJob.Status.FAILURE
-            job.error_message = f"Error processing invoices (after {students_processed} students): {str(e)}"
+            job.error_message = f"[{VERSION_CHECK}] Error after {students_processed} students: {str(e)}"
+            logger.exception(f"Invoice generation failed for job {job_id}")
 
     finally:
         # 8. Always set the completion time
