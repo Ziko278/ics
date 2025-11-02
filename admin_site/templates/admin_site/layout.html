@@ -462,13 +462,13 @@
 
                     {% if 'finance.view_studentfundingmodel' in perms %}
                     <li>
-                        <a href="{% url 'deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
+                        <a href="{% url 'deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term.id}}">
                             <i class="bi bi-circle"></i><span>Student Deposit History</span>
                         </a>
                     </li>
 
                     <li>
-                        <a href="{% url 'staff_deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term}}">
+                        <a href="{% url 'staff_deposit_index' %}?session={{academic_info.session.id}}&term={{academic_info.term.id}}">
                             <i class="bi bi-circle"></i><span>Staff Deposit History</span>
                         </a>
                     </li>
