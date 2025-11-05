@@ -1,25 +1,38 @@
 {% extends "parent_portal/layout.html" %}
-{% load humanize %} {# Load humanize if needed for comma formatting, although not used directly here #}
+{% load humanize %}
 
-{% block title %}Upload Payment Proof - {{ selected_ward.first_name }}{% endblock %}
+{% block title %}{% if transaction_type == 'wallet' %}Fund Wallet{% else %}Upload Fee Proof{% endif %} - {{ selected_ward.first_name }}{% endblock %}
 
 {% block content %}
 <div class="pagetitle">
-  <h1>Upload Payment Proof</h1>
+  <h1>{% if transaction_type == 'wallet' %}Fund Student Wallet{% else %}Upload Fee Payment Proof{% endif %}</h1>
   <nav>
     <ol class="breadcrumb">
       <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Dashboard</a></li>
       <li class="breadcrumb-item">Fees</li>
-      <li class="breadcrumb-item active">Upload Proof</li>
+      <li class="breadcrumb-item active">{% if transaction_type == 'wallet' %}Fund Wallet{% else %}Upload Proof{% endif %}</li>
     </ol>
   </nav>
-</div><section class="section">
+</div>
+<section class="section">
     <div class="row">
         <div class="col-lg-7">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Submit Payment Details for {{ selected_ward.first_name }} {{ selected_ward.last_name }}</h5>
-                    <p>Please fill in the details of the payment you made and upload a clear picture or screenshot of the teller/transfer confirmation. You can optionally link this payment directly to an outstanding invoice.</p>
+                    <h5 class="card-title">
+                        {% if transaction_type == 'wallet' %}
+                        Submit Wallet Funding Details for {{ selected_ward.first_name }} {{ selected_ward.last_name }}
+                        {% else %}
+                        Submit Fee Payment Details for {{ selected_ward.first_name }} {{ selected_ward.last_name }}
+                        {% endif %}
+                    </h5>
+                    <p>
+                        {% if transaction_type == 'wallet' %}
+                        Please fill in the details of the payment you made to the wallet account and upload a clear picture or screenshot of the teller/transfer confirmation.
+                        {% else %}
+                        Please fill in the details of the payment you made and upload a clear picture or screenshot of the teller/transfer confirmation. You can optionally link this payment directly to an outstanding invoice.
+                        {% endif %}
+                    </p>
 
                     {# --- Display Messages (including form errors from view) --- #}
                     {% if messages %}
@@ -37,13 +50,34 @@
                     {# --- End Messages --- #}
 
                     {# --- Form --- #}
-                    <form method="post" enctype="multipart/form-data" class="row g-3 needs-validation" novalidate>
+                    <form method="post" enctype="multipart/form-data" class="row g-3 needs-validation">
                         {% csrf_token %}
+
+                        {# Target Invoice Field - Conditionally rendered #}
+                        {% if form.target_invoice %}
+                        <div class="col-12">
+                             <label for="{{ form.target_invoice.id_for_label }}" class="form-label">
+                                {{ form.target_invoice.label }}
+                                {% if form.target_invoice.field.required %}<span class="text-danger">*</span>{% endif %}
+                             </label>
+                             {{ form.target_invoice }}
+                             <small class="text-muted">
+                                {% if transaction_type == 'fee' %}
+                                Select the invoice this payment is for.
+                                {% else %}
+                                Select an invoice to apply this payment directly to it, or leave as 'General' to fund the student's wallet.
+                                {% endif %}
+                             </small>
+                             {% if form.target_invoice.errors %}
+                                <div class="text-danger small mt-1">{{ form.target_invoice.errors|striptags }}</div>
+                             {% endif %}
+                        </div>
+                        {% endif %} {# End conditional invoice field #}
 
                         {# Amount Field #}
                         <div class="col-md-6">
                             <label for="{{ form.amount.id_for_label }}" class="form-label">Amount Paid (₦) <span class="text-danger">*</span></label>
-                            {{ form.amount }} {# Assumes 'form-control' class is set in forms.py widget attrs #}
+                            {{ form.amount }}
                             {% if form.amount.errors %}
                                 <div class="text-danger small mt-1">{{ form.amount.errors|striptags }}</div>
                             {% endif %}
@@ -52,7 +86,7 @@
                         {# Payment Method Field #}
                         <div class="col-md-6">
                             <label for="{{ form.method.id_for_label }}" class="form-label">Payment Method <span class="text-danger">*</span></label>
-                            {{ form.method }} {# Assumes 'form-select' class is set in forms.py widget attrs #}
+                            {{ form.method }}
                              {% if form.method.errors %}
                                 <div class="text-danger small mt-1">{{ form.method.errors|striptags }}</div>
                              {% endif %}
@@ -61,29 +95,18 @@
                         {# Teller/Reference Field #}
                         <div class="col-12">
                             <label for="{{ form.teller_number.id_for_label }}" class="form-label">{{ form.teller_number.label }}</label>
-                            {{ form.teller_number }} {# Assumes 'form-control' class is set in forms.py widget attrs #}
+                            {{ form.teller_number }}
                              <small class="text-muted">Enter the bank teller number or the online transfer reference ID.</small>
                             {% if form.teller_number.errors %}
                                 <div class="text-danger small mt-1">{{ form.teller_number.errors|striptags }}</div>
                             {% endif %}
                         </div>
 
-                        {# Target Invoice Field #}
-                        <div class="col-12">
-                             <label for="{{ form.target_invoice.id_for_label }}" class="form-label">
-                                {{ form.target_invoice.label }}
-                             </label>
-                             {{ form.target_invoice }} {# Assumes 'form-select' class is set in forms.py widget attrs #}
-                             <small class="text-muted">Select an invoice to apply this payment directly to it, or leave as 'General' to fund the student's wallet.</small>
-                             {% if form.target_invoice.errors %}
-                                <div class="text-danger small mt-1">{{ form.target_invoice.errors|striptags }}</div>
-                             {% endif %}
-                        </div>
 
                         {# Proof of Payment Field #}
                         <div class="col-12">
                             <label for="{{ form.proof_of_payment.id_for_label }}" class="form-label">{{ form.proof_of_payment.label }} <span class="text-danger">*</span></label>
-                            {{ form.proof_of_payment }} {# Assumes 'form-control' class is set in forms.py widget attrs #}
+                            {{ form.proof_of_payment }}
                              <small class="text-muted">Max file size: 5MB. Allowed types: jpg, png, pdf.</small>
                              {% if form.proof_of_payment.errors %}
                                 <div class="text-danger small mt-1">{{ form.proof_of_payment.errors|striptags }}</div>
@@ -102,16 +125,64 @@
 
         {# --- Bank Details Column --- #}
         <div class="col-lg-5">
+
+            {% if transaction_type == 'wallet' %}
+            {# --- Wallet Account Details --- #}
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-wallet2 me-2 text-primary"></i>Wallet Funding Account</h5>
+                    <p class="small">
+                        Please use this account **only** for funding the student's personal wallet.
+                    </p>
+                    {% if funding_account.account_number %}
+                        <dl class="row mt-3">
+                            <dt class="col-sm-4">Bank</dt>
+                            <dd class="col-sm-8">{{ funding_account.bank }}</dd>
+                            <dt class="col-sm-4">Account Name</dt>
+                            <dd class="col-sm-8">{{ funding_account.account_name }}</dd>
+                            <dt class="col-sm-4">Account Number</dt>
+                            <dd class="col-sm-8">
+                                <span id="funding-acc-num">{{ funding_account.account_number }}</span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 ms-2"
+                                        onclick="copyToClipboard('{{ funding_account.account_number }}', this)">
+                                    <i class="bi bi-clipboard"></i>
+                                    <span class="copy-text">Copy</span>
+                                </button>
+                            </dd>
+                        </dl>
+                        <p class="small text-muted mt-2">Please use your child's full name or registration number as the payment reference/narration.</p>
+                    {% else %}
+                        <div class="alert alert-warning text-center">
+                            Student funding account details are not available at this time.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% else %}
+            {# --- Fee Account Details --- #}
             <div class="card">
                  <div class="card-body">
-                    <h5 class="card-title"><i class="bi bi-bank"></i> School Bank Account Details</h5>
+                    <h5 class="card-title"><i class="bi bi-bank"></i> School Fee Account Details</h5>
+                    <p class="small">
+                        Please use any of the accounts below when paying official school fees.
+                    </p>
                     {% if bank_details %}
                         <ul class="list-group list-group-flush">
                         {% for detail in bank_details %}
-                            <li class="list-group-item">
-                                <strong>Bank:</strong> {{ detail.bank_name }}<br>
-                                <strong>Account Name:</strong> {{ detail.account_name }}<br>
-                                <strong>Account Number:</strong> {{ detail.account_number }}
+                            <li class="list-group-item px-0">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">{{ detail.bank_name }}</h6>
+                                </div>
+                                <p class="mb-1">{{ detail.account_name }}</p>
+                                <div class="d-flex w-100 justify-content-between">
+                                    <strong class="text-dark" id="fee-acc-num-{{ forloop.counter }}">{{ detail.account_number }}</strong>
+                                    <button type="button" class="btn btn-outline-success btn-sm py-0 px-2"
+                                            onclick="copyToClipboard('{{ detail.account_number }}', this)">
+                                        <i class="bi bi-clipboard"></i>
+                                        <span class="copy-text">Copy</span>
+                                    </button>
+                                </div>
                             </li>
                         {% endfor %}
                         </ul>
@@ -120,13 +191,14 @@
                         <div class="alert alert-secondary">Bank details not available. Please contact the school administration.</div>
                     {% endif %}
                  </div>
-            </div> {# End Bank Details Card #}
+            </div>
+            {% endif %} {# End conditional bank details #}
+
 
             <div class="card">
                  <div class="card-body">
                      <h5 class="card-title"><i class="bi bi-question-circle"></i> Need Help?</h5>
                      <p>If you encounter any issues uploading your payment proof or have questions about fees, please contact the school administration office.</p>
-                     {# Optional: Add contact details from school_info model #}
                      {% if school_info.mobile or school_info.email %}
                         <p>
                             {% if school_info.mobile %}<strong>Phone:</strong> {{ school_info.mobile }}<br>{% endif %}
@@ -138,5 +210,55 @@
         </div> {# End Info Column #}
     </div> {# End Row #}
 </section>
+
+<textarea id="clipboard-helper" style="position: absolute; left: -9999px;"></textarea>
+
+<script>
+function copyToClipboard(text, buttonElement) {
+    const helperTextarea = document.getElementById('clipboard-helper');
+    if (!helperTextarea) {
+        console.error('Clipboard helper textarea not found');
+        return;
+    }
+    helperTextarea.value = text;
+    helperTextarea.select();
+    helperTextarea.setSelectionRange(0, 99999); // For mobile devices
+
+    try {
+        var successful = document.execCommand('copy');
+
+        if (successful && buttonElement) {
+            const copyText = buttonElement.querySelector('.copy-text');
+            const originalText = copyText.innerHTML;
+            const originalIcon = buttonElement.querySelector('i').className;
+
+            copyText.innerHTML = "Copied!";
+            buttonElement.querySelector('i').className = "bi bi-check-lg"; // Change icon to check
+
+            buttonElement.classList.remove('btn-outline-secondary', 'btn-outline-success');
+            buttonElement.classList.add('btn-success'); // Make button solid success
+
+            setTimeout(() => {
+                copyText.innerHTML = originalText;
+                buttonElement.querySelector('i').className = originalIcon; // Restore icon
+                buttonElement.classList.remove('btn-success');
+                // Restore correct outline color
+                if (buttonElement.closest('.card-body').querySelector('.text-primary')) {
+                     buttonElement.classList.add('btn-outline-secondary');
+                } else {
+                     buttonElement.classList.add('btn-outline-success');
+                }
+            }, 2000);
+        }
+
+    } catch (err) {
+        console.error('Failed to copy text: ', err);
+        if (buttonElement) {
+            const copyText = buttonElement.querySelector('.copy-text');
+            copyText.innerHTML = "Error!";
+        }
+    }
+}
+</script>
 
 {% endblock %}

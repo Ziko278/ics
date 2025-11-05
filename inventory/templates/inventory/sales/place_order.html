@@ -4,16 +4,23 @@
 {% block 'main' %}
 <style>
     /* Suggestions dropdown styles */
-    .suggestions-container { position: relative; }
+    .suggestions-container {
+    position: relative;
+    z-index: 8; /* <-- Add this line */
+}
     .suggestions-list {
         position: absolute; z-index: 1050; width: 100%;
         max-height: 250px; overflow-y: auto;
         background: #fff; border: 1px solid #ddd;
         border-radius: 0 0 0.25rem 0.25rem;
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        z-index:200;
     }
-    .suggestion-item { cursor: pointer; }
+    .suggestion-item { cursor: pointer; z-index:200}
     .suggestion-item:hover { background-color: #f8f9fa; }
+    .table-responsive {
+        overflow: visible;
+    }
 
     /* Type badges for student/staff */
     .type-badge {

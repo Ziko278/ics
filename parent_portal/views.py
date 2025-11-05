@@ -208,60 +208,71 @@ class FeeInvoiceDetailView(ParentPortalMixin, DetailView):
 class FeeUploadView(ParentPortalMixin, FormView):
     form_class = FeeUploadForm
     template_name = 'parent_portal/fee_upload.html'
-    # Redirect to history to see the upload status
     success_url = reverse_lazy('parent_fee_history')
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['student'] = self.selected_ward
+        # Pass the 'type' GET param to the form's __init__
+        # Default to 'fee' if not specified
+        kwargs['upload_type'] = self.request.GET.get('type', 'fee')
         return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['bank_details'] = SchoolBankDetail.objects.filter(is_active=True)
+        # Get the type, default to 'fee'
+        transaction_type = self.request.GET.get('type', 'fee')
+        context['transaction_type'] = transaction_type
+
+        # Conditionally load bank details based on the transaction type
+        if transaction_type == 'wallet':
+            # Load wallet funding account from SchoolSettingModel
+            try:
+                context['funding_account'] = SchoolSettingModel.objects.first()
+            except SchoolSettingModel.DoesNotExist:
+                context['funding_account'] = None
+            context['bank_details'] = None # Ensure fee accounts are not passed
+        else:
+            # Load fee payment accounts (original behavior)
+            context['bank_details'] = SchoolBankDetail.objects.all()
+            context['funding_account'] = None # Ensure wallet account is not passed
+
         return context
 
     def form_valid(self, form):
         cleaned_data = form.cleaned_data
+        # This logic works perfectly now:
+        # If type=wallet, form.__init__ removed target_invoice, so .get() returns None
+        # If type=fee, target_invoice is present and required
         target_invoice: InvoiceModel = cleaned_data.get('target_invoice')
-        proof_file = self.request.FILES.get('proof_of_payment') # Get the file object
-
-        parent_user = self.request.user # Get the logged-in parent user
+        proof_file = self.request.FILES.get('proof_of_payment')
+        parent_user = self.request.user
 
         if target_invoice:
             # --- Create FeePaymentModel ---
             try:
-                # Security check
                 if target_invoice.student != self.selected_ward:
                     messages.error(self.request, "Selected invoice does not belong to the current student.")
                     return self.form_invalid(form)
 
-                # Handle proof storage manually (Example: save to media/parent_proofs/)
-                # You MUST adapt the path and potentially filename logic
                 proof_file_name = None
                 if proof_file:
-                    # Basic filename example (consider adding timestamp/UUID for uniqueness)
                     file_name = f"parent_proofs/{self.selected_ward.registration_number}_{target_invoice.invoice_number}_{proof_file.name}"
                     proof_file_name = default_storage.save(file_name, proof_file)
-                    # proof_file_url = default_storage.url(proof_file_name) # Get URL if needed
 
                 FeePaymentModel.objects.create(
                     invoice=target_invoice,
-                    # No 'parent' field, use notes
                     amount=cleaned_data['amount'],
-                    payment_mode=cleaned_data['method'], # Ensure values match choices
+                    payment_mode=cleaned_data['method'],
                     date=timezone.now().date(),
                     reference=cleaned_data.get('teller_number', ''),
                     status=FeePaymentModel.PaymentStatus.PENDING,
-                    # No 'proof_of_payment' field, use notes
                     notes=f"Parent Upload via Portal.\nUser: {parent_user.username}.\nProof File: {proof_file_name or 'Not Saved'}.\nStudent: {self.selected_ward}.",
-                    # bank_account, confirmed_by are null initially
                 )
                 messages.success(self.request, "Payment proof for invoice submitted. Pending review.")
 
             except Exception as e:
                 messages.error(self.request, f"Error saving invoice payment proof: {e}")
-                # Consider deleting the saved file if creation fails halfway
                 if proof_file_name and default_storage.exists(proof_file_name):
                     default_storage.delete(proof_file_name)
                 return self.form_invalid(form)
@@ -269,26 +280,22 @@ class FeeUploadView(ParentPortalMixin, FormView):
         else:
             # --- Create StudentFundingModel (Wallet) ---
             try:
-                # StudentFundingModel might still have proof_of_payment field
                 funding = StudentFundingModel(
                     student=self.selected_ward,
                     amount=cleaned_data['amount'],
                     method=cleaned_data['method'],
                     teller_number=cleaned_data.get('teller_number', ''),
-                    proof_of_payment=proof_file, # Assign file directly if model has the field
+                    proof_of_payment=proof_file,
                     status='pending',
                     mode='online',
-                    # Add parent info to notes if model lacks parent field
-                    # notes=f"Uploaded by parent: {parent_user.username}"
                 )
-                # Set session/term automatically
                 try:
-                    from admin_site.models import SchoolSettingModel
+                    # from admin_site.models import SchoolSettingModel # Already imported
                     setting = SchoolSettingModel.objects.first()
                     if setting:
                         funding.session = setting.session
                         funding.term = setting.term
-                except (ImportError, Exception): pass
+                except Exception: pass
 
                 funding.save()
                 messages.success(self.request, "Wallet funding proof submitted. Pending review.")
@@ -297,11 +304,10 @@ class FeeUploadView(ParentPortalMixin, FormView):
                  messages.error(self.request, f"Error saving wallet funding proof: {e}")
                  return self.form_invalid(form)
 
-        return redirect(self.success_url) # Use redirect with success_url
+        return redirect(self.success_url)
 
     def form_invalid(self, form):
         for field, errors in form.errors.items():
-            # Handle non-field errors (like __all__)
             field_label = "__all__" if field == "__all__" else form.fields.get(field).label if form.fields.get(field) else field.replace('_', ' ').title()
             for error in errors:
                 messages.error(self.request, f"{field_label}: {error}")
@@ -345,10 +351,10 @@ class FeeUploadHistoryView(ParentPortalMixin, ListView):
         context.pop('object_list', None)
         context.pop('studentfundingmodel_list', None)
 
-
         return context
-# --- Shop ---
 
+
+# --- Shop ---
 class ShopHistoryView(ParentPortalMixin, ListView):
     model = SaleModel
     template_name = 'parent_portal/shop_history.html'

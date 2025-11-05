@@ -302,7 +302,7 @@ class FeePaymentModel(models.Model):
     class PaymentMode(models.TextChoices):
         CASH = 'cash', 'Cash'
         BANK_TRANSFER = 'bank_transfer', 'Bank Transfer'
-        # ... other choices ...
+        BANK_TELLER = 'bank_teller', 'Bank Teller'
 
     class PaymentStatus(models.TextChoices):
         PENDING = 'pending', 'Pending'

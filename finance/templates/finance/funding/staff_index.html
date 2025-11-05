@@ -15,7 +15,7 @@
                         <select name="session" required class="form-control">
                             <option value="">-------------------</option>
                             {% for session in session_list %}
-                            <option value="{{session.id}}">{{ session }}</option>
+                            <option {% if academic_info.session.id == session.id %} selected {% endif %} value="{{session.id}}">{{ session }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -23,9 +23,9 @@
                     <div class="col-4">
                         <select name="term" required class="form-control">
                             <option value="">-------------------</option>
-                            <option value="1st term">1st Term</option>
-                            <option value="2nd term">2nd Term</option>
-                            <option value="3rd term">3rd Term</option>
+                            {% for term in term_list %}
+                            <option {% if academic_info.term.id == term.id %} selected {% endif %} value="{{term.id}}">{{ term }}</option>
+                            {% endfor %}
 
                         </select>
                     </div>
@@ -43,7 +43,7 @@
     <div class="col-md-12">
         <div class="card">
             <div class="card-body pt-3" style="overflow-x:auto">
-                <h5 class="card-title">Fee Payments for {{ session }} Session - {{ term }}</h5>
+                <h5 class="card-title">Fee Payments for {{ current_session }} Session - {{ current_term }}</h5>
                 <table class="table table-bordered datatable" style="font-size:14px">
                     <thead>
                         <tr>

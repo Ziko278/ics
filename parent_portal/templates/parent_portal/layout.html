@@ -124,9 +124,11 @@
           </a>
           <ul class="dropdown-menu" aria-labelledby="feesDropdown">
             <li><a class="dropdown-item" href="{% url 'parent_fee_list' %}">View Invoices</a></li>
-            <li><a class="dropdown-item" href="{% url 'parent_fee_upload' %}">Upload Payment Proof</a></li>
-            <li><a class="dropdown-item" href="{% url 'parent_fee_history' %}">Uploaded Proof History</a></li>
-            <li><a class="dropdown-item" href="{% url 'parent_account_detail' %}">Payment Accounts</a></li>
+            <li><a class="dropdown-item" href="{% url 'parent_fee_upload' %}?type=fee">Upload Payment Teller</a></li>
+            <li><a class="dropdown-item" href="{% url 'parent_fee_upload' %}?type=wallet">Fund Ward Wallet</a></li>
+            <li><a class="dropdown-item" href="{% url 'parent_fee_history' %}">View Fee Payments</a></li>
+            <li><a class="dropdown-item" href="{% url 'parent_fee_history' %}">View Wallet Fundings</a></li>
+            <li><a class="dropdown-item" href="{% url 'parent_account_detail' %}">View Payment Accounts</a></li>
           </ul>
         </li>
          <li class="nav-item">
