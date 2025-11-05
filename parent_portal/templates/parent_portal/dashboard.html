@@ -144,8 +144,7 @@
                                         <tbody>
                                         {% for invoice in pending_invoices|slice:":5" %}
                                         <tr>
-                                            <th scope="row"><a href="{% url 'parent_fee_invoice_detail' invoice.pk %}">{{
-                                                invoice.invoice_number }}</a></th>
+                                            <th scope="row"><a href="{% url 'parent_fee_invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></th>
                                             <td>₦{{ invoice.balance|floatformat:2|intcomma }}</td>
                                             <td><span
                                                     class="badge {% if invoice.status == 'partially_paid' %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ invoice.get_status_display }}</span>
