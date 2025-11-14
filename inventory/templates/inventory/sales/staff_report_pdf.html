@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Staff Sales Report</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 1cm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2c3e50;
+        }
+
+        .header h1 {
+            margin: 0 0 5px 0;
+            font-size: 20px;
+            color: #2c3e50;
+        }
+
+        .header h2 {
+            margin: 0;
+            font-size: 16px;
+            color: #3498db;
+            font-weight: normal;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #34495e;
+            color: white;
+            font-weight: bold;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-end {
+            text-align: right;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+
+        tfoot td {
+            background-color: #ecf0f1;
+            font-weight: bold;
+            font-size: 12px;
+            border-top: 2px solid #2c3e50;
+        }
+
+        .total-amount {
+            color: #27ae60;
+            font-size: 13px;
+        }
+
+        .footer {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+            font-size: 9px;
+            color: #7f8c8d;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Staff Sales Report</h1>
+        <h2>{{ report_title }}</h2>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Staff Name</th>
+                <th>Staff ID</th>
+                <th class="text-center">Total Sales</th>
+                <th class="text-end">Total Amount (₦)</th>
+                <th class="text-end">Cash (₦)</th>
+                <th class="text-end">Student Wallet (₦)</th>
+                <th class="text-end">Staff Wallet (₦)</th>
+                <th class="text-end">POS (₦)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for staff in staff_summary %}
+            <tr>
+                <td>{{ staff.created_by__first_name|title }} {{ staff.created_by__last_name|title }}</td>
+                <td>{{ staff.created_by__staff_id }}</td>
+                <td class="text-center">
+                    <span class="badge">{{ staff.total_sales }}</span>
+                </td>
+                <td class="text-end">{{ staff.total_amount|floatformat:2 }}</td>
+                <td class="text-end">{{ staff.cash_total|floatformat:2 }}</td>
+                <td class="text-end">{{ staff.student_wallet_total|floatformat:2 }}</td>
+                <td class="text-end">{{ staff.staff_wallet_total|floatformat:2 }}</td>
+                <td class="text-end">{{ staff.pos_total|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        {% if staff_summary %}
+        <tfoot>
+            <tr>
+                <td colspan="2">GRAND TOTAL</td>
+                <td class="text-center">
+                    <span class="badge">{{ grand_totals.total_sales }}</span>
+                </td>
+                <td class="text-end total-amount">{{ grand_totals.total_amount|floatformat:2 }}</td>
+                <td class="text-end">{{ grand_totals.cash_total|floatformat:2 }}</td>
+                <td class="text-end">{{ grand_totals.student_wallet_total|floatformat:2 }}</td>
+                <td class="text-end">{{ grand_totals.staff_wallet_total|floatformat:2 }}</td>
+                <td class="text-end">{{ grand_totals.pos_total|floatformat:2 }}</td>
+            </tr>
+        </tfoot>
+        {% endif %}
+    </table>
+
+    <div class="footer">
+        Generated on {% now "F d, Y H:i" %}
+    </div>
+</body>
+</html>

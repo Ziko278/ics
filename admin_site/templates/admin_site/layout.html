@@ -274,13 +274,20 @@
             </li>
             {% endif %}
 
-        {% if 'inventory.view_itemmodel' in perms or 'inventory.view_stockinmodel' in perms or 'inventory.view_inventorycollectionmodel' in perms %}
+        {% if 'inventory.view_salemodel' in perms or  'inventory.view_itemmodel' in perms or 'inventory.view_stockinmodel' in perms or 'inventory.view_inventorycollectionmodel' in perms %}
         <li class="nav-item">
             <a class="nav-link collapsed" data-bs-target="#acad" data-bs-toggle="collapse" href="#">
                 <i class="ri-book-mark-fill"></i><span>Inventory</span><i class="bi bi-chevron-down ms-auto"></i>
             </a>
             <ul class="nav-content collapse " data-bs-parent="#sidebar-nav" id="acad">
 
+                {% if 'inventory.view_salemodel' in perms %}
+                <li>
+                    <a href="{% url 'staff_sales_report' %}">
+                        <i class="bi bi-circle"></i><span>Sales Report</span>
+                    </a>
+                </li>
+                {% endif %}
                 {% if 'inventory.view_itemmodel' in perms %}
                 <li>
                     <a href="{% url 'inventory_item_list' %}">

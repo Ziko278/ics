@@ -1,13 +1,18 @@
 import json
 import logging
+import tempfile
+from datetime import date
 from decimal import Decimal
+
+from django.template.loader import render_to_string
+
 from .tasks import generate_collections_task
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q, F, ExpressionWrapper, Sum, DecimalField
+from django.db.models import Q, F, ExpressionWrapper, Sum, DecimalField, Count, Case, When
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.urls import reverse_lazy, reverse
 from django.contrib import messages
@@ -1332,6 +1337,7 @@ def view_orders(request):
     status_filter = request.GET.get('status', '').strip()
     date_from = request.GET.get('date_from', '').strip()
     date_to = request.GET.get('date_to', '').strip()
+    staff_filter = request.GET.get('staff', '').strip()
 
     # Base queryset: include related customer + created_by for fewer queries
     orders_qs = SaleModel.objects.select_related('customer', 'created_by').all()
@@ -1382,6 +1388,9 @@ def view_orders(request):
     if status_filter:
         orders_qs = orders_qs.filter(status=status_filter)
 
+    if staff_filter:
+        orders_qs = orders_qs.filter(created_by_id=staff_filter)
+
     # Date filtering: prefer sale_date if present, else use created_at
     date_field = 'sale_date' if 'sale_date' in {f.name for f in SaleModel._meta.get_fields()} else 'created_at'
 
@@ -1402,9 +1411,283 @@ def view_orders(request):
         'date_from': date_from,
         'date_to': date_to,
         'status_choices': SaleModel.Status.choices,
+        'staff_filter': staff_filter,
+        'staff_list': StaffModel.objects.filter(
+            status='active',
+            salemodel__isnull=False  # Has at least one sale
+        ).distinct().order_by('first_name', 'last_name'),
     }
 
     return render(request, 'inventory/sales/index.html', context)
+
+
+@login_required
+@permission_required("inventory.view_salemodel", raise_exception=True)
+def staff_sales_report(request):
+    """Display staff sales summary with totals by payment method."""
+
+    # Get date parameters, default to today
+    today = date.today()
+    date_from = request.GET.get('date_from', '').strip() or str(today)
+    date_to = request.GET.get('date_to', '').strip() or str(today)
+    staff_filter = request.GET.get('staff', '').strip()
+    download_pdf = request.GET.get('download', '') == 'pdf'
+
+    # Validate date range
+    try:
+        from_date = date.fromisoformat(date_from)
+        to_date = date.fromisoformat(date_to)
+
+        if from_date > to_date:
+            from_date, to_date = to_date, from_date
+            date_from, date_to = date_to, date_from
+
+    except ValueError:
+        from_date = to_date = today
+        date_from = date_to = str(today)
+
+    # Generate title based on date range
+    if date_from == date_to:
+        report_title = from_date.strftime("%B %d, %Y")
+    else:
+        report_title = f"{from_date.strftime('%B %d, %Y')} - {to_date.strftime('%B %d, %Y')}"
+
+    # Base queryset - sales in date range
+    sales_qs = SaleModel.objects.filter(
+        sale_date__date__gte=from_date,
+        sale_date__date__lte=to_date,
+        status='completed'
+    )
+
+    # Filter by staff if provided
+    if staff_filter:
+        sales_qs = sales_qs.filter(created_by_id=staff_filter)
+
+    # Group by staff and aggregate
+    staff_summary = sales_qs.values(
+        'created_by__id',
+        'created_by__first_name',
+        'created_by__last_name',
+        'created_by__staff_id'
+    ).annotate(
+        total_sales=Count('id'),
+        cash_total=Sum(
+            Case(
+                When(payment_method='cash', then=F('items__quantity') * F('items__unit_price')),
+                default=0,
+                output_field=DecimalField()
+            )
+        ) - Sum(
+            Case(
+                When(payment_method='cash', then=F('discount')),
+                default=0,
+                output_field=DecimalField()
+            )
+        ),
+        student_wallet_total=Sum(
+            Case(
+                When(payment_method='student_wallet', then=F('items__quantity') * F('items__unit_price')),
+                default=0,
+                output_field=DecimalField()
+            )
+        ) - Sum(
+            Case(
+                When(payment_method='student_wallet', then=F('discount')),
+                default=0,
+                output_field=DecimalField()
+            )
+        ),
+        staff_wallet_total=Sum(
+            Case(
+                When(payment_method='staff_wallet', then=F('items__quantity') * F('items__unit_price')),
+                default=0,
+                output_field=DecimalField()
+            )
+        ) - Sum(
+            Case(
+                When(payment_method='staff_wallet', then=F('discount')),
+                default=0,
+                output_field=DecimalField()
+            )
+        ),
+        pos_total=Sum(
+            Case(
+                When(payment_method='pos', then=F('items__quantity') * F('items__unit_price')),
+                default=0,
+                output_field=DecimalField()
+            )
+        ) - Sum(
+            Case(
+                When(payment_method='pos', then=F('discount')),
+                default=0,
+                output_field=DecimalField()
+            )
+        ),
+    ).order_by('-total_sales')
+
+    # Calculate grand totals
+    grand_totals = {
+        'total_sales': 0,
+        'total_amount': Decimal('0.00'),
+        'cash_total': Decimal('0.00'),
+        'student_wallet_total': Decimal('0.00'),
+        'staff_wallet_total': Decimal('0.00'),
+        'pos_total': Decimal('0.00'),
+    }
+
+    for staff in staff_summary:
+        # Convert None to Decimal('0.00')
+        staff['cash_total'] = staff['cash_total'] or Decimal('0.00')
+        staff['student_wallet_total'] = staff['student_wallet_total'] or Decimal('0.00')
+        staff['staff_wallet_total'] = staff['staff_wallet_total'] or Decimal('0.00')
+        staff['pos_total'] = staff['pos_total'] or Decimal('0.00')
+
+        staff['total_amount'] = (
+                staff['cash_total'] +
+                staff['student_wallet_total'] +
+                staff['staff_wallet_total'] +
+                staff['pos_total']
+        )
+
+        grand_totals['total_sales'] += staff['total_sales']
+        grand_totals['total_amount'] += staff['total_amount']
+        grand_totals['cash_total'] += staff['cash_total']
+        grand_totals['student_wallet_total'] += staff['student_wallet_total']
+        grand_totals['staff_wallet_total'] += staff['staff_wallet_total']
+        grand_totals['pos_total'] += staff['pos_total']
+
+    context = {
+        'staff_summary': staff_summary,
+        'grand_totals': grand_totals,
+        'report_title': report_title,
+        'date_from': date_from,
+        'date_to': date_to,
+        'staff_filter': staff_filter,
+        'staff_list': StaffModel.objects.filter(
+            status='active',
+            salemodel__isnull=False  # Has at least one sale
+        ).distinct().order_by('first_name', 'last_name'),
+    }
+
+    # Generate PDF if requested (lazy import)
+    # Generate PDF if requested
+    if download_pdf:
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from io import BytesIO
+
+            # Create PDF buffer
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+            elements = []
+            styles = getSampleStyleSheet()
+
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                textColor=colors.HexColor('#2c3e50'),
+                spaceAfter=10,
+                alignment=1  # Center
+            )
+            elements.append(Paragraph("Staff Sales Report", title_style))
+
+            subtitle_style = ParagraphStyle(
+                'CustomSubtitle',
+                parent=styles['Normal'],
+                fontSize=14,
+                textColor=colors.HexColor('#3498db'),
+                spaceAfter=20,
+                alignment=1
+            )
+            elements.append(Paragraph(report_title, subtitle_style))
+            elements.append(Spacer(1, 0.2 * inch))
+
+            # Prepare table data
+            table_data = [
+                ['Staff Name', 'Staff ID', 'Sales', 'Total (₦)', 'Cash (₦)',
+                 'Student Wallet (₦)', 'Staff Wallet (₦)', 'POS (₦)']
+            ]
+
+            for staff in staff_summary:
+                table_data.append([
+                    f"{staff['created_by__first_name']} {staff['created_by__last_name']}",
+                    staff['created_by__staff_id'],
+                    str(staff['total_sales']),
+                    f"{staff['total_amount']:,.2f}",
+                    f"{staff['cash_total']:,.2f}",
+                    f"{staff['student_wallet_total']:,.2f}",
+                    f"{staff['staff_wallet_total']:,.2f}",
+                    f"{staff['pos_total']:,.2f}",
+                ])
+
+            # Grand total row
+            if staff_summary:
+                table_data.append([
+                    'GRAND TOTAL',
+                    '',
+                    str(grand_totals['total_sales']),
+                    f"{grand_totals['total_amount']:,.2f}",
+                    f"{grand_totals['cash_total']:,.2f}",
+                    f"{grand_totals['student_wallet_total']:,.2f}",
+                    f"{grand_totals['staff_wallet_total']:,.2f}",
+                    f"{grand_totals['pos_total']:,.2f}",
+                ])
+
+            # Create table
+            table = Table(table_data, repeatRows=1)
+            table.setStyle(TableStyle([
+                # Header
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+
+                # Data rows
+                ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),  # Right align numbers
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('GRID', (0, 0), (-1, -2), 1, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8f9fa')]),
+
+                # Grand total row (last row)
+                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ecf0f1')),
+                ('TEXTCOLOR', (0, -1), (-1, -1), colors.black),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, -1), (-1, -1), 11),
+                ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#2c3e50')),
+                ('TOPPADDING', (0, -1), (-1, -1), 12),
+            ]))
+
+            elements.append(table)
+
+            # Build PDF
+            doc.build(elements)
+
+            # Return response
+            pdf_content = buffer.getvalue()
+            buffer.close()
+
+            response = HttpResponse(pdf_content, content_type='application/pdf')
+            filename = f"staff_sales_report_{date_from}_{date_to}.pdf"
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+
+        except ImportError:
+            from django.contrib import messages
+            messages.error(request, 'PDF generation is not available. Please contact administrator.')
+            return redirect('staff_sales_report')
+
+    return render(request, 'inventory/sales/staff_report.html', context)
 
 
 @login_required
