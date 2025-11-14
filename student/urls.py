@@ -73,3 +73,4 @@ path(
         name='ajax_create_student'
     ),
 ]
+

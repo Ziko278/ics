@@ -1,0 +1,1014 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+{% load humanize %}
+
+<div class="row" data-student-id="{{ student.pk }}">
+    <!-- Profile Sidebar -->
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-body profile-card pt-4 d-flex flex-column align-items-center">
+                <img {% if student.image %} src="{{ student.image.url }}" {% else %} src="https://placehold.co/120x120/EFEFEF/AAAAAA?text={{ student.first_name|first|upper }}" {% endif %} alt="Profile" class="rounded-circle" style="width: 120px; height: 120px; object-fit: cover;">
+                <h2 class="mt-3">{{ student.first_name|title }} {{ student.last_name|title }}</h2>
+                <h3>Reg. No: {{ student.registration_number }}</h3>
+                <div class="mt-2">
+                    <span class="badge bg-{{ student.get_status_color }}"><i class="bi bi-info-circle me-1"></i> {{ student.get_status_display }}</span>
+                    {% if student.is_fingerprint_enrolled %}
+                        <span class="badge bg-success ms-2"><i class="bi bi-fingerprint me-1"></i> Enrolled</span>
+                    {% else %}
+                        <span class="badge bg-warning ms-2"><i class="bi bi-fingerprint me-1"></i> Not Enrolled</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Panel with Tabs -->
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-body pt-3">
+
+                <!-- Tab Navigation -->
+                <ul class="nav nav-tabs nav-tabs-bordered">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#profile-overview">Profile Details</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#fingerprint-management">
+                            <i class="bi bi-fingerprint me-1"></i>Fingerprint Management
+                            {% if fingerprint_list|length > 0 %}
+                                <span class="badge bg-primary ms-1">{{ fingerprint_list|length }}</span>
+                            {% endif %}
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content pt-2">
+                    <!-- Profile Details Tab -->
+                    <div class="tab-pane fade show active" id="profile-overview">
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                             <h5 class="card-title mb-0 pt-0">Student Profile</h5>
+                            <div class="btn-group">
+                                <a href="{% url 'student_edit' student.pk %}" class="btn btn-warning btn-sm" title="Edit Student"><i class="bi bi-pencil-square"></i> Edit</a>
+                                <button type="button" class="btn btn-danger btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                   <i class="bi bi-gear"></i> Actions
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#confirmInactiveModal">Set as Inactive</a></li>
+                                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#confirmGraduatedModal">Set as Graduated</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-danger" href="{% url 'student_delete' student.pk %}">Delete Student Record</a></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Academic Info -->
+                        <h6 class="card-subtitle mt-4 mb-2 text-muted">Academic Information</h6>
+                        <div class="row border-top pt-3">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Registration No.</div>
+                            <div class="col-lg-9 col-md-8">{{ student.registration_number }}</div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Current Class</div>
+                            <div class="col-lg-9 col-md-8">{{ student.student_class|default:"Not Assigned" }} {{ student.class_section|default:"" }}</div>
+                        </div>
+
+                        <h6 class="card-subtitle mt-4 mb-2 text-muted">Wallet Information</h6>
+                        <div class="row border-top pt-3">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Balance</div>
+                            <div class="col-lg-9 col-md-8">₦{{ student.student_wallet.balance|floatformat|intcomma }}</div>
+                        </div>
+
+                        <!-- Guardian Info -->
+                        <h6 class="card-subtitle mt-4 mb-2 text-muted">Parent / Guardian Information</h6>
+                        <div class="row border-top pt-3">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Name</div>
+                            <div class="col-lg-9 col-md-8">{{ student.parent }}</div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-lg-3 col-md-4 label fw-bold">Contact</div>
+                            <div class="col-lg-9 col-md-8">{{ student.parent.mobile }} | {{ student.parent.email }}</div>
+                        </div>
+                         <div class="row mt-2">
+                            <div class="col-lg-3 col-md-4 label fw-bold"></div>
+                            <div class="col-lg-9 col-md-8">
+                                <a href="{% url 'parent_detail' student.parent.pk %}" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-person-circle"></i> View Full Parent Profile
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fingerprint Management Tab -->
+                    <div class="tab-pane fade" id="fingerprint-management">
+                        <div class="mt-3">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="card-subtitle mb-3 text-muted">
+                                        <i class="bi bi-fingerprint me-2"></i>Registered Fingerprints
+                                        <span class="badge bg-info ms-2">{{ fingerprint_list|length }}/{{ max_fingerprints }}</span>
+                                    </h6>
+
+                                    {% if fingerprint_list %}
+                                        <div class="list-group">
+                                            {% for fp in fingerprint_list %}
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>{{ fp.get_finger_name_display }}</strong>
+                                                    <small class="text-muted d-block">
+                                                        Captured: {{ fp.created_at|date:"d M, Y H:i" }}
+                                                        {% if fp.quality_score %}
+                                                            <br>Quality: {{ fp.quality_score|floatformat:1 }}/1.0
+                                                        {% endif %}
+                                                        {% if fp.usage_count > 0 %}
+                                                            <br>Used {{ fp.usage_count }} time{{ fp.usage_count|pluralize }}
+                                                        {% endif %}
+                                                    </small>
+                                                </div>
+                                                <button class="btn btn-outline-danger btn-sm" onclick="deleteFingerprintPrompt({{ fp.id }}, '{{ fp.get_finger_name_display }}')">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <div class="alert alert-light text-center">
+                                            <i class="bi bi-fingerprint fs-2 text-muted"></i>
+                                            <p class="mb-0 mt-2">No fingerprints have been registered for this student yet.</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="col-md-6">
+                                    <h6 class="card-subtitle mb-3 text-muted">
+                                        <i class="bi bi-plus-circle me-2"></i>Capture New Fingerprint
+                                    </h6>
+
+                                    <!-- Scanner Status Card -->
+                                    <div class="card border-0 bg-light mb-3">
+                                        <div class="card-body p-2">
+                                            <div class="d-flex align-items-center">
+                                                <div id="scanner-status-icon" class="me-2">
+                                                    <i class="bi bi-question-circle text-warning"></i>
+                                                </div>
+                                                <small id="scanner-status-text" class="text-muted">Checking scanner...</small>
+                                            </div>
+                                            <small class="text-muted d-block mt-1">Agent and hardware statuses are shown separately.</small>
+                                        </div>
+                                    </div>
+
+                                     <div class="border p-3 rounded">
+                                        {% if can_add_more %}
+                                            <div class="mb-3">
+                                                <label for="finger-name-select" class="form-label">Select Finger to Register</label>
+                                                <select id="finger-name-select" class="form-select">
+                                                    <option value="">-- Choose a finger --</option>
+                                                    <option value="LEFT_THUMB">Left Thumb</option>
+                                                    <option value="LEFT_INDEX">Left Index</option>
+                                                    <option value="LEFT_MIDDLE">Left Middle</option>
+                                                    <option value="LEFT_RING">Left Ring</option>
+                                                    <option value="LEFT_LITTLE">Left Little</option>
+                                                    <option value="RIGHT_THUMB">Right Thumb</option>
+                                                    <option value="RIGHT_INDEX">Right Index</option>
+                                                    <option value="RIGHT_MIDDLE">Right Middle</option>
+                                                    <option value="RIGHT_RING">Right Ring</option>
+                                                    <option value="RIGHT_LITTLE">Right Little</option>
+                                                </select>
+                                            </div>
+
+                                            <button class="btn btn-primary w-100" id="scan-finger-btn" type="button" disabled>
+                                                <i class="bi bi-fingerprint"></i> Scan Finger
+                                            </button>
+
+                                            <div class="mt-2 d-grid">
+                                                <button class="btn btn-outline-secondary btn-sm" id="probe-hardware-btn" type="button">Probe Hardware</button>
+                                            </div>
+                                        {% else %}
+                                            <div class="alert alert-warning text-center">
+                                                <i class="bi bi-exclamation-triangle"></i>
+                                                <p class="mb-0 mt-2">Maximum {{ max_fingerprints }} fingerprints allowed per student.</p>
+                                                <small class="text-muted">Delete existing fingerprints to add new ones.</small>
+                                            </div>
+                                        {% endif %}
+
+                                        <div id="scan-status" class="mt-3"></div>
+
+                                        <!-- Scan Progress -->
+                                        <div id="scan-progress" class="mt-3" style="display: none;">
+                                            <div class="progress">
+                                                <div id="scan-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                            </div>
+                                            <small class="text-muted d-block mt-1">Scanning in progress...</small>
+                                        </div>
+                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Quick Actions -->
+                            <div class="mt-4 pt-3 border-top">
+                                <h6 class="text-muted mb-3">Quick Actions</h6>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-outline-info btn-sm" onclick="testScannerConnection()">
+                                        <i class="bi bi-gear"></i> Test Agent / Connection
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshFingerprints()">
+                                        <i class="bi bi-arrow-clockwise"></i> Refresh List
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Confirmation Modals -->
+<!-- Set as Inactive Modal -->
+<div class="modal fade" id="confirmInactiveModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Status Change</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to set this student's status to <strong>Inactive</strong>?
+      </div>
+      <div class="modal-footer">
+        <form method="post" action="{% url 'change_student_status' student.pk 'inactive' %}">
+          {% csrf_token %}
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Yes, Set as Inactive</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Set as Graduated Modal -->
+<div class="modal fade" id="confirmGraduatedModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Status Change</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to set this student's status to <strong>Graduated</strong>?
+      </div>
+      <div class="modal-footer">
+        <form method="post" action="{% url 'change_student_status' student.pk 'graduated' %}">
+          {% csrf_token %}
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Yes, Set as Graduated</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Fingerprint Modal -->
+<div class="modal fade" id="deleteFingerprintModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Fingerprint</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to delete the fingerprint for <strong id="delete-finger-name"></strong>?
+        <br><small class="text-muted">This action cannot be undone.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn">
+          <i class="bi bi-trash"></i> Delete Fingerprint
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Include DigitalPersona SDK -->
+<script src="{% static 'admin_site/scripts/digitapersona/websdk.client.min.js' %}"></script>
+
+<script>
+/* ========= Complete DigitalPersona U.are.U 4500 Integration ========= */
+
+let currentReader = null;
+let DPSDKInitialized = false;
+let agentConnected = false;
+let hardwareDetected = false;
+
+function updateScannerStatus(isConnected, message, hwDetected = null) {
+    const icon = document.getElementById('scanner-status-icon');
+    const text = document.getElementById('scanner-status-text');
+
+    if (isConnected) {
+        icon.innerHTML = '<i class="bi bi-check-circle text-success"></i>';
+        text.textContent = message;
+        text.className = 'text-success';
+    } else {
+        icon.innerHTML = '<i class="bi bi-x-circle text-danger"></i>';
+        text.textContent = message;
+        text.className = 'text-danger';
+    }
+
+    if (hwDetected !== null) {
+        const hwStr = hwDetected ? ' • Hardware found' : ' • No hardware';
+        text.textContent += hwStr;
+    }
+}
+
+function showStatus(type, message) {
+    const statusDiv = document.getElementById('scan-status');
+    const alertClass = `alert-${type}`;
+    const icons = { success: 'check-circle', danger: 'exclamation-triangle', warning: 'exclamation-triangle', info: 'info-circle' };
+    const icon = icons[type] || 'info-circle';
+
+    statusDiv.innerHTML = `
+        <div class="alert ${alertClass} p-2 mb-0">
+            <i class="bi bi-${icon} me-2"></i>${message}
+        </div>
+    `;
+}
+
+function showScanProgress() {
+    const progressDiv = document.getElementById('scan-progress');
+    const progressBar = document.getElementById('scan-progress-bar');
+
+    progressDiv.style.display = 'block';
+    let progress = 0;
+
+    const interval = setInterval(() => {
+        progress += Math.random() * 18;
+        if (progress > 90) progress = 90;
+        progressBar.style.width = progress + '%';
+    }, 450);
+
+    progressDiv.dataset.intervalId = interval;
+}
+
+function hideScanProgress() {
+    const progressDiv = document.getElementById('scan-progress');
+    const progressBar = document.getElementById('scan-progress-bar');
+
+    const intervalId = progressDiv.dataset.intervalId;
+    if (intervalId) {
+        clearInterval(intervalId);
+        delete progressDiv.dataset.intervalId;
+    }
+
+    progressBar.style.width = '100%';
+    setTimeout(() => {
+        progressDiv.style.display = 'none';
+        progressBar.style.width = '0%';
+    }, 500);
+}
+
+/**
+ * Initialize DigitalPersona WebSDK client with ALL possible handlers
+ */
+async function initializeDigitalPersonaSDK() {
+    try {
+        // FIRST: Intercept WebSocket to see ALL messages
+        if (typeof WebSocket !== 'undefined' && !window._wsIntercepted) {
+            console.log("🔧 Installing WebSocket interceptor...");
+            const OriginalWebSocket = WebSocket;
+            window._originalWebSocket = OriginalWebSocket;
+
+            window.WebSocket = function(url, protocols) {
+                console.log("🔌 WebSocket created:", url);
+                const ws = new OriginalWebSocket(url, protocols);
+
+                // Intercept message handler
+                const originalOnMessage = ws.onmessage;
+                Object.defineProperty(ws, 'onmessage', {
+                    get() { return originalOnMessage; },
+                    set(handler) {
+                        console.log("📝 WebSocket onmessage handler being set");
+                        ws._customMessageHandler = handler;
+                        ws.addEventListener('message', function(event) {
+                            console.log("📥 [WebSocket Message]", event.data);
+                            if (handler) handler(event);
+                        });
+                    }
+                });
+
+                ws.addEventListener('open', () => console.log("🔌 WebSocket opened"));
+                ws.addEventListener('close', () => console.log("🔌 WebSocket closed"));
+                ws.addEventListener('error', (e) => console.log("❌ WebSocket error:", e));
+
+                return ws;
+            };
+            window._wsIntercepted = true;
+        }
+
+        if (typeof WebSdk === 'undefined') {
+            throw new Error('DigitalPersona WebSDK not loaded - ensure websdk.client.min.js is present');
+        }
+
+        console.log("📦 WebSdk object:", WebSdk);
+        console.log("📦 WebSdk type:", typeof WebSdk);
+        console.log("📦 Available constructors:", Object.keys(WebSdk));
+
+        // Log what each constructor looks like
+        Object.keys(WebSdk).forEach(key => {
+            console.log(`📦 WebSdk.${key}:`, WebSdk[key]);
+            if (typeof WebSdk[key] === 'function') {
+                console.log(`   - Is constructor:`, WebSdk[key].prototype);
+            }
+        });
+
+        const client = new WebSdk.WebChannelClient("fingerprint");
+        currentReader = client;
+
+        console.log("📦 Client object:", client);
+        console.log("📦 Client prototype:", Object.getPrototypeOf(client));
+        console.log("📦 Client methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(client)));
+        console.log("📦 Client own properties:", Object.keys(client));
+
+        // Check the property descriptors
+        const descriptors = Object.getOwnPropertyDescriptors(client);
+        console.log("📦 Property descriptors:", descriptors);
+        console.log("📦 onDataReceivedTxt descriptor:", descriptors.onDataReceivedTxt);
+        console.log("📦 onConnectionSucceed descriptor:", descriptors.onConnectionSucceed);
+
+        // Check if handlers are properties or methods
+        console.log("📦 onDataReceivedTxt type:", typeof client.onDataReceivedTxt);
+        console.log("📦 onDataReceivedBin type:", typeof client.onDataReceivedBin);
+        console.log("📦 onConnectionSucceed type:", typeof client.onConnectionSucceed);
+        console.log("📦 sendDataTxt type:", typeof client.sendDataTxt);
+
+        // Try to see what's currently assigned
+        console.log("📦 Current onDataReceivedTxt value:", client.onDataReceivedTxt);
+        console.log("📦 Current onConnectionSucceed value:", client.onConnectionSucceed);
+
+        // Register ALL possible message handlers
+        client.onDataReceivedTxt = function(raw) {
+            console.log("📥 [onDataReceivedTxt] HANDLER CALLED!");
+            console.log("📥 [onDataReceivedTxt] raw:", raw);
+            console.log("📥 [Message Type]:", typeof raw);
+            console.log("📥 [Message Length]:", raw ? raw.length : 0);
+
+            // If we got ANY message, the scanner is responding!
+            if (!hardwareDetected) {
+                console.log("✅ First message received - marking hardware as detected!");
+                hardwareDetected = true;
+                updateScannerStatus(true, 'Agent connected', true);
+                syncScanButtonState();
+                showStatus('success', '✅ Scanner is responding! You can now scan fingerprints.');
+            }
+
+            // Try to parse and log structured data
+            try {
+                const parsed = JSON.parse(raw);
+                console.log("📊 [Parsed Message]:", parsed);
+                console.log("📊 [Parsed Keys]:", Object.keys(parsed));
+            } catch (e) {
+                console.log("📝 [Raw Text Message]:", raw);
+                // Check if it contains any device-related keywords
+                const lc = String(raw).toLowerCase();
+                if (lc.includes('reader') || lc.includes('device') || lc.includes('scanner') ||
+                    lc.includes('u.are.u') || lc.includes('4500') || lc.includes('fingerprint')) {
+                    console.log("🔍 [Device-related keyword detected in message!]");
+                }
+            }
+
+            // resolve pending promise if present
+            try {
+                if (currentReader && currentReader._pendingResolve) {
+                    currentReader._pendingResolve(raw);
+                    currentReader._pendingResolve = null;
+                }
+            } catch (e) {
+                console.warn("Error resolving pending capture:", e);
+            }
+        };
+
+        // Register binary data handler
+        client.onDataReceivedBin = function(bin) {
+            console.log("📥 [onDataReceivedBin] BINARY DATA RECEIVED!");
+            console.log("📥 [Binary Length]:", bin ? bin.length : 0);
+            console.log("📥 [Binary Data]:", bin);
+
+            if (currentReader && currentReader._pendingResolveBin) {
+                currentReader._pendingResolveBin(bin);
+                currentReader._pendingResolveBin = null;
+            }
+        };
+
+        // Register connection event handlers
+        client.onConnectionSucceed = function() {
+            console.log('✅ Agent connected (onConnectionSucceed)');
+            agentConnected = true;
+            DPSDKInitialized = true;
+            updateScannerStatus(true, 'Agent connected', null);
+            document.getElementById('probe-hardware-btn')?.removeAttribute('disabled');
+
+            // Simplified auto-detection: just assume hardware is present if agent connects
+            console.log('ℹ️ Agent connected - assuming scanner is available');
+            setTimeout(() => {
+                hardwareDetected = true;
+                updateScannerStatus(true, 'Agent connected', true);
+                syncScanButtonState();
+                showStatus('success', '✅ Agent ready! Select finger and click "Scan Finger" to test scanner.');
+            }, 500);
+        };
+
+        // Connection failed handler
+        client.onConnectionFailed = function() {
+            console.log('❌ Agent connection failed (onConnectionFailed)');
+            agentConnected = false;
+            DPSDKInitialized = false;
+            hardwareDetected = false;
+            updateScannerStatus(false, 'Agent not available', null);
+            document.getElementById('probe-hardware-btn')?.setAttribute('disabled', 'true');
+            showStatus('danger', '❌ Cannot connect to DigitalPersona agent. Please ensure it is installed and running.');
+        };
+
+        // Register any other available event handlers
+        if (typeof client.onCommunicationFailed === 'function') {
+            client.onCommunicationFailed = function() {
+                console.log('⚠️ Communication failed');
+            };
+        }
+
+        if (typeof client.onQualityReported === 'function') {
+            client.onQualityReported = function(quality) {
+                console.log('📊 Quality reported:', quality);
+            };
+        }
+
+        if (typeof client.onSampleAcquired === 'function') {
+            client.onSampleAcquired = function(sample) {
+                console.log('✅ Sample acquired!', sample);
+            };
+        }
+
+        console.log("🔌 Attempting to connect to agent...");
+        console.log("📦 Handlers set before connect:");
+        console.log("   - onDataReceivedTxt:", typeof client.onDataReceivedTxt);
+        console.log("   - onDataReceivedBin:", typeof client.onDataReceivedBin);
+        console.log("   - onConnectionSucceed:", typeof client.onConnectionSucceed);
+        console.log("   - onConnectionFailed:", typeof client.onConnectionFailed);
+
+        // Connect to local agent
+        client.connect();
+
+        // Try to intercept at a lower level - check if there's a WebSocket or message channel
+        setTimeout(() => {
+            console.log("📦 Checking for internal communication channels...");
+            console.log("📦 Client properties after connect:", Object.keys(client));
+
+            // Look for WebSocket or channel properties
+            for (const key of Object.keys(client)) {
+                const val = client[key];
+                if (val && typeof val === 'object') {
+                    console.log(`📦 client.${key}:`, val.constructor.name, val);
+                }
+            }
+
+            // Check if there's a WebSocket we can tap into
+            if (window.WebSocket) {
+                const originalWS = window.WebSocket;
+                console.log("📦 WebSocket available, checking for active connections...");
+
+                // This is a hack to see existing WebSockets
+                try {
+                    console.log("📦 Try sending a test message through client...");
+                    if (typeof client.sendDataTxt === 'function') {
+                        client.sendDataTxt(JSON.stringify({ Action: 'ping' }));
+                        console.log("📤 Sent ping via sendDataTxt");
+                    }
+                } catch (e) {
+                    console.error("❌ Error sending test ping:", e);
+                }
+            }
+        }, 1000);
+
+        // Double-check handlers are still set after connect
+        setTimeout(() => {
+            console.log("📦 Handlers after connect (500ms later):");
+            console.log("   - onDataReceivedTxt:", typeof client.onDataReceivedTxt);
+            console.log("   - onDataReceivedBin:", typeof client.onDataReceivedBin);
+        }, 500);
+
+        return client;
+
+    } catch (error) {
+        console.error('❌ SDK initialization failed:', error);
+        updateScannerStatus(false, `Scanner error: ${error.message}`, false);
+        return null;
+    }
+}
+
+/**
+ * Simplified probe - just try to send acquire command and see if we get a response
+ * Since enumerate commands aren't working, we'll test with actual capture
+ */
+async function probeHardwarePresence() {
+    if (!currentReader || typeof currentReader.sendDataTxt !== 'function') {
+        console.warn("No channel to agent (sendDataTxt not found)");
+        return false;
+    }
+
+    console.log("🔍 Testing scanner with actual acquire command (5s timeout)...");
+    showStatus('info', '🔍 Testing scanner... Place finger on scanner if prompted.');
+
+    const waitForAnyResponse = () => new Promise((resolve, reject) => {
+        let settled = false;
+
+        const originalHandler = currentReader.onDataReceivedTxt;
+
+        currentReader.onDataReceivedTxt = function(raw) {
+            console.log("📥 [Test Response] Got response:", raw);
+
+            if (!settled) {
+                settled = true;
+                currentReader.onDataReceivedTxt = originalHandler;
+                resolve(raw);
+            } else if (originalHandler) {
+                originalHandler(raw);
+            }
+        };
+
+        setTimeout(() => {
+            if (!settled) {
+                settled = true;
+                currentReader.onDataReceivedTxt = originalHandler;
+                reject(new Error('Test timeout - no response'));
+            }
+        }, 5000);
+    });
+
+    try {
+        // Try the acquire command directly
+        const testCmd = { Action: 'acquire', Quality: 50, Timeout: 4000 };
+        console.log("📤 Sending test acquire command:", testCmd);
+        currentReader.sendDataTxt(JSON.stringify(testCmd));
+
+        const response = await waitForAnyResponse();
+        console.log("✅ Got response from scanner test!");
+        return true;
+
+    } catch (err) {
+        console.warn("⚠️ Test failed:", err.message);
+        return false;
+    }
+}
+
+/**
+ * Capture fingerprint - waits for a meaningful sample response from agent
+ */
+async function captureFingerprint() {
+    if (!DPSDKInitialized || !currentReader) {
+        throw new Error('Scanner not initialized (agent not connected)');
+    }
+
+    showScanProgress();
+    showStatus('info', '👆 Place your finger on the scanner and hold steady...');
+
+    // One-shot message waiter (20s)
+    const waitForMessage = () => new Promise((resolve, reject) => {
+        currentReader._pendingResolve = function(raw) {
+            resolve(raw);
+        };
+        const t = setTimeout(() => {
+            if (currentReader._pendingResolve) {
+                currentReader._pendingResolve = null;
+            }
+            reject(new Error('Scan timeout - no response from scanner (20s)'));
+        }, 20000);
+    });
+
+    try {
+        const acquireCommand = { Action: 'acquire', Quality: 50, Timeout: 15000 };
+        console.log("📤 Sending acquire command:", acquireCommand);
+        currentReader.sendDataTxt(JSON.stringify(acquireCommand));
+
+        const raw = await waitForMessage();
+        console.log("📥 First raw response:", raw);
+
+        // Try to parse one or more JSON objects possibly embedded in raw
+        const segments = String(raw).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        let parsed = null;
+
+        for (const seg of segments) {
+            try {
+                parsed = JSON.parse(seg);
+            } catch (e) {
+                // Try to salvage substring between braces
+                const first = seg.indexOf('{'), last = seg.lastIndexOf('}');
+                if (first !== -1 && last !== -1 && last > first) {
+                    try {
+                        parsed = JSON.parse(seg.substring(first, last + 1));
+                    } catch (e2) { parsed = null; }
+                }
+            }
+            if (parsed) break;
+        }
+
+        if (!parsed) {
+            hideScanProgress();
+            throw new Error('Received response but could not parse JSON. Check console for raw message.');
+        }
+
+        console.log("📊 Parsed response:", parsed);
+        const samples = parsed.samples || parsed.Samples || parsed.Sample || parsed.sample;
+        if (samples && samples.length > 0) {
+            hideScanProgress();
+            const sample = samples[0];
+            return {
+                template: sample.Data || sample.data,
+                quality: sample.Quality || sample.quality || 0.8
+            };
+        }
+
+        hideScanProgress();
+        throw new Error('No fingerprint template found in the response. Inspect raw logs.');
+
+    } finally {
+        // Scan button re-enabled by caller on error
+    }
+}
+
+/* ===================== Event wiring & helpers ===================== */
+
+function syncScanButtonState() {
+    const scanButton = document.getElementById('scan-finger-btn');
+    const fingerSelect = document.getElementById('finger-name-select');
+    if (!scanButton) return;
+    const fingerSelected = fingerSelect && fingerSelect.value;
+    if (fingerSelected && DPSDKInitialized && agentConnected && hardwareDetected) {
+        scanButton.removeAttribute('disabled');
+    } else {
+        scanButton.setAttribute('disabled', 'true');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const scanButton = document.getElementById('scan-finger-btn');
+    const fingerSelect = document.getElementById('finger-name-select');
+    const probeBtn = document.getElementById('probe-hardware-btn');
+    const studentId = document.querySelector('[data-student-id]')?.dataset.studentId || "{{ student.pk }}";
+
+    // Probe hardware button handler
+    if (probeBtn) {
+        probeBtn.addEventListener('click', async function () {
+            probeBtn.setAttribute('disabled', 'true');
+            showStatus('info', '🔍 Testing scanner with acquire command...');
+            try {
+                const result = await probeHardwarePresence();
+                hardwareDetected = !!result;
+                updateScannerStatus(agentConnected, agentConnected ? 'Agent connected' : 'Agent not connected', hardwareDetected);
+
+                if (result) {
+                    showStatus('success', '✅ Scanner responded! Hardware is working.');
+                } else {
+                    showStatus('warning', '⚠️ No response from scanner. Check:<br>1. Scanner is plugged in<br>2. Green LED is lit<br>3. Drivers are installed<br>4. Try unplugging and replugging scanner');
+                }
+            } catch (e) {
+                console.error("Probe failed:", e);
+                showStatus('danger', '❌ Test failed — check console for details');
+            } finally {
+                probeBtn.removeAttribute('disabled');
+                syncScanButtonState();
+            }
+        });
+    }
+
+    // Finger selection handler
+    if (fingerSelect) {
+        fingerSelect.addEventListener('change', () => syncScanButtonState());
+    }
+
+    // Scan button handler
+    if (scanButton) {
+        scanButton.addEventListener('click', async function () {
+            const fingerName = document.getElementById('finger-name-select')?.value;
+            if (!fingerName) {
+                showStatus('warning', '⚠️ Please select a finger to register.');
+                return;
+            }
+
+            scanButton.setAttribute('disabled', 'true');
+            showStatus('info', 'Starting capture...');
+
+            try {
+                const result = await captureFingerprint();
+                if (!result || !result.template) {
+                    throw new Error('No template received');
+                }
+
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+                showStatus('info', '💾 Saving fingerprint to server...');
+
+                const response = await fetch(window.location.origin + '/api/capture-fingerprint/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        student_id: studentId,
+                        finger_name: fingerName,
+                        fingerprint_data: result.template,
+                        quality_score: result.quality
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showStatus('success', '✅ Fingerprint saved successfully! Refreshing...');
+                    setTimeout(() => location.reload(), 1200);
+                } else {
+                    throw new Error(data.message || 'Save failed');
+                }
+            } catch (err) {
+                console.error('Capture error:', err);
+                showStatus('danger', `❌ Error: ${err.message}`);
+                hideScanProgress();
+                scanButton.removeAttribute('disabled');
+            }
+        });
+    }
+
+    // Test scanner connection function
+    window.testScannerConnection = async function() {
+        showStatus('info', '🔍 Testing agent connection...');
+
+        if (currentReader && typeof currentReader.isConnected === 'function' && currentReader.isConnected()) {
+            agentConnected = true;
+            showStatus('success', '✅ Agent connection OK');
+
+            // Re-run hardware probe to update hardwareDetected
+            try {
+                hardwareDetected = await probeHardwarePresence();
+                updateScannerStatus(true, 'Agent connected', hardwareDetected);
+
+                if (hardwareDetected) {
+                    showStatus('success', '✅ Agent and hardware both connected!');
+                } else {
+                    showStatus('warning', '⚠️ Agent connected but no hardware detected');
+                }
+            } catch (e) {
+                console.warn('Probe failed during test:', e);
+                updateScannerStatus(true, 'Agent connected', false);
+                showStatus('warning', '⚠️ Agent connected but probe failed');
+            }
+        } else {
+            showStatus('warning', '⚠️ Agent not connected — attempting reconnect...');
+
+            if (currentReader && typeof currentReader.connect === 'function') {
+                try {
+                    currentReader.connect();
+                    showStatus('info', '🔄 Reconnecting...');
+                } catch (e) {
+                    console.warn("Reconnect attempt failed:", e);
+                    showStatus('danger', '❌ Reconnect failed');
+                }
+            } else {
+                // Try initializing fresh
+                showStatus('info', '🔄 Reinitializing SDK...');
+                await initializeDigitalPersonaSDK();
+            }
+        }
+
+        syncScanButtonState();
+    };
+
+    // Refresh fingerprints function
+    window.refreshFingerprints = function() {
+        location.reload();
+    };
+
+    // Delete fingerprint prompt handler
+    window.deleteFingerprintPrompt = function(fingerprintId, fingerName) {
+        document.getElementById('delete-finger-name').textContent = fingerName;
+        const confirmBtn = document.getElementById('confirm-delete-btn');
+        confirmBtn.onclick = () => deleteFingerprint(fingerprintId);
+        new bootstrap.Modal(document.getElementById('deleteFingerprintModal')).show();
+    };
+
+    // Delete fingerprint function
+    window.deleteFingerprint = async function(fingerprintId) {
+        try {
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+
+            const response = await fetch(window.location.origin + '/api/delete-fingerprint/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ fingerprint_id: fingerprintId })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('deleteFingerprintModal')).hide();
+                showStatus('success', '✅ Fingerprint deleted successfully! Refreshing...');
+                setTimeout(() => location.reload(), 1200);
+            } else {
+                throw new Error(data.message || 'Delete failed');
+            }
+        } catch (err) {
+            console.error('Delete error:', err);
+            showStatus('danger', `❌ Error deleting fingerprint: ${err.message}`);
+        }
+    };
+
+    // Initialize SDK on page load
+    console.log("🚀 Initializing DigitalPersona SDK for U.are.U 4500...");
+    initializeDigitalPersonaSDK();
+});
+
+/* Debug helper function */
+window.debugScanner = function() {
+    console.log("=== Scanner Debug Info ===");
+    console.log("DPSDKInitialized:", DPSDKInitialized);
+    console.log("Agent connected:", agentConnected);
+    console.log("Hardware detected:", hardwareDetected);
+    console.log("Current Reader object:", currentReader);
+    console.log("WebSdk available:", typeof WebSdk !== 'undefined');
+    console.log("==========================");
+
+    // Try to get more info from the reader
+    if (currentReader) {
+        console.log("Reader details:");
+        console.log("- isConnected:", typeof currentReader.isConnected === 'function' ? currentReader.isConnected() : 'N/A');
+        console.log("- Type:", currentReader.constructor.name);
+    }
+};
+
+/* Helper to send custom commands and see agent responses */
+window.sendTestCommand = function(command) {
+    if (!currentReader) {
+        console.error("❌ No reader initialized");
+        return;
+    }
+
+    console.log("📤 Sending test command:", command);
+    console.log("📦 Current reader object:", currentReader);
+    console.log("📦 Available send methods:",
+        ['sendDataTxt', 'sendDataBin', 'sendMessage', 'send', 'postMessage']
+        .filter(m => typeof currentReader[m] === 'function')
+    );
+
+    try {
+        // Try sendDataTxt first
+        if (typeof currentReader.sendDataTxt === 'function') {
+            if (typeof command === 'string') {
+                currentReader.sendDataTxt(command);
+            } else {
+                currentReader.sendDataTxt(JSON.stringify(command));
+            }
+            console.log("✅ Command sent via sendDataTxt! Waiting for response...");
+        }
+        // Also try alternative methods if they exist
+        else if (typeof currentReader.sendMessage === 'function') {
+            currentReader.sendMessage(command);
+            console.log("✅ Command sent via sendMessage!");
+        }
+        else if (typeof currentReader.send === 'function') {
+            currentReader.send(command);
+            console.log("✅ Command sent via send!");
+        }
+        else {
+            console.error("❌ No send method found!");
+        }
+
+        // Set a timer to check if we got a response
+        setTimeout(() => {
+            console.log("⏱️ 3 seconds elapsed - did you see any 📥 messages above?");
+        }, 3000);
+
+    } catch (e) {
+        console.error("❌ Error sending command:", e);
+    }
+};
+
+/* Helper to listen for all messages for X seconds */
+window.listenForMessages = function(seconds = 5) {
+    console.log(`👂 Listening for ALL agent messages for ${seconds} seconds...`);
+    console.log("📝 All messages will be logged above.");
+    console.log("💡 Try interacting with the scanner during this time!");
+
+    setTimeout(() => {
+        console.log(`⏱️ ${seconds} second listening period complete.`);
+    }, seconds * 1000);
+};
+
+console.log("💡 Debug commands available:");
+console.log("  - window.debugScanner() - Show current status");
+console.log("  - window.sendTestCommand({Action: 'YourCommand'}) - Send custom command");
+console.log("  - window.listenForMessages(5) - Listen for all messages for 5 seconds");
+</script>
+
+{% endblock %}

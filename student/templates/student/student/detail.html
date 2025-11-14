@@ -3,7 +3,7 @@
 {% load static %}
 {% load humanize %}
 
-<div class="row">
+<div class="row" data-student-id="{{ student.pk }}">
     <!-- Profile Sidebar -->
     <div class="col-xl-4">
         <div class="card">
@@ -77,10 +77,6 @@
                         <div class="row border-top pt-3">
                             <div class="col-lg-3 col-md-4 label fw-bold">Balance</div>
                             <div class="col-lg-9 col-md-8">₦{{ student.student_wallet.balance|floatformat|intcomma }}</div>
-                        </div>
-                        <div class="row mt-2">
-                            <div class="col-lg-3 col-md-4 label fw-bold">Current Class</div>
-                            <div class="col-lg-9 col-md-8">{{ student.student_class|default:"Not Assigned" }} {{ student.class_section|default:"" }}</div>
                         </div>
 
                         <!-- Guardian Info -->
@@ -157,6 +153,10 @@
                                                 </div>
                                                 <small id="scanner-status-text" class="text-muted">Checking scanner...</small>
                                             </div>
+                                            <div id="connected-readers" class="mt-2" style="display: none;">
+                                                <small class="text-muted d-block">Connected devices:</small>
+                                                <ul id="readers-list" class="mb-0" style="font-size: 0.85rem;"></ul>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -179,9 +179,19 @@
                                                 </select>
                                             </div>
 
-                                            <button class="btn btn-primary w-100" id="scan-finger-btn" type="button" disabled>
-                                                <i class="bi bi-fingerprint"></i> Scan Finger
+                                            <button class="btn btn-primary w-100" id="start-capture-btn" type="button" disabled>
+                                                <i class="bi bi-fingerprint"></i> Start Capture
                                             </button>
+
+                                            <button class="btn btn-danger w-100 mt-2" id="stop-capture-btn" type="button" style="display: none;">
+                                                <i class="bi bi-stop-circle"></i> Stop Capture
+                                            </button>
+
+                                            <div class="mt-2 d-grid">
+                                                <button class="btn btn-outline-secondary btn-sm" id="refresh-readers-btn" type="button">
+                                                    <i class="bi bi-arrow-clockwise"></i> Refresh Devices
+                                                </button>
+                                            </div>
                                         {% else %}
                                             <div class="alert alert-warning text-center">
                                                 <i class="bi bi-exclamation-triangle"></i>
@@ -192,12 +202,10 @@
 
                                         <div id="scan-status" class="mt-3"></div>
 
-                                        <!-- Scan Progress -->
-                                        <div id="scan-progress" class="mt-3" style="display: none;">
-                                            <div class="progress">
-                                                <div id="scan-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
-                                            </div>
-                                            <small class="text-muted d-block mt-1">Scanning in progress...</small>
+                                        <!-- Captured Image Preview -->
+                                        <div id="captured-preview" class="mt-3" style="display: none;">
+                                            <h6 class="text-muted mb-2">Captured Fingerprint:</h6>
+                                            <img id="captured-image" src="" alt="Captured fingerprint" class="img-fluid border rounded" style="max-width: 200px;">
                                         </div>
                                      </div>
                                 </div>
@@ -207,11 +215,11 @@
                             <div class="mt-4 pt-3 border-top">
                                 <h6 class="text-muted mb-3">Quick Actions</h6>
                                 <div class="btn-group" role="group">
-                                    <button type="button" class="btn btn-outline-info btn-sm" onclick="testScannerConnection()">
-                                        <i class="bi bi-gear"></i> Test Scanner
+                                    <button type="button" class="btn btn-outline-info btn-sm" onclick="testConnection()">
+                                        <i class="bi bi-gear"></i> Test Connection
                                     </button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshFingerprints()">
-                                        <i class="bi bi-arrow-clockwise"></i> Refresh List
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshPage()">
+                                        <i class="bi bi-arrow-clockwise"></i> Refresh Page
                                     </button>
                                 </div>
                             </div>
@@ -221,6 +229,7 @@
             </div>
         </div>
     </div>
+
 </div>
 
 <!-- Confirmation Modals -->
@@ -290,370 +299,513 @@
   </div>
 </div>
 
-<!-- Include DigitalPersona SDK -->
-<script src="{% static 'admin_site/scripts/digitapersona/websdk.client.min.js' %}"></script>
+<!-- Include DigitalPersona SDK - Use CDN like the working sample -->
+<script type="text/javascript" src="https://unpkg.com/@digitalpersona/websdk@v1"></script>
+<script type="text/javascript" src="https://unpkg.com/@digitalpersona/fingerprint@v1"></script>
 
 <script>
-   function updateScannerStatus(isConnected, message) {
-    const scannerStatusIcon = document.getElementById('scanner-status-icon');
-    const scannerStatusText = document.getElementById('scanner-status-text');
+/* ========= DigitalPersona Fingerprint Integration (Fixed) ========= */
 
-    if (isConnected) {
-        scannerStatusIcon.innerHTML = '<i class="bi bi-check-circle text-success"></i>';
-        scannerStatusText.textContent = message;
-        scannerStatusText.className = 'text-success';
+// Global variables
+let fingerprintApi = null;
+let isCapturing = false;
+let capturedSampleData = null;
+const studentId = "{{ student.pk }}";
+
+// Helper function to convert base64url to UTF-8 (from DP SDK)
+function b64UrlToUtf8(b64url) {
+    return Fingerprint.b64UrlToUtf8(b64url);
+}
+
+// Update scanner status UI
+function updateScannerStatus(connected, message, readersCount = 0) {
+    const icon = document.getElementById('scanner-status-icon');
+    const text = document.getElementById('scanner-status-text');
+    const readersDiv = document.getElementById('connected-readers');
+
+    if (connected) {
+        icon.innerHTML = '<i class="bi bi-check-circle text-success"></i>';
+        text.textContent = message;
+        text.className = 'text-success';
+
+        if (readersCount > 0) {
+            readersDiv.style.display = 'block';
+        }
     } else {
-        scannerStatusIcon.innerHTML = '<i class="bi bi-x-circle text-danger"></i>';
-        scannerStatusText.textContent = message;
-        scannerStatusText.className = 'text-danger';
+        icon.innerHTML = '<i class="bi bi-x-circle text-danger"></i>';
+        text.textContent = message;
+        text.className = 'text-danger';
+        readersDiv.style.display = 'none';
     }
 }
 
-// Initialize DigitalPersona SDK
-// Add this global variable
-let currentReader = null;
+// Show status messages
+function showStatus(type, message) {
+    const statusDiv = document.getElementById('scan-status');
+    const alertClass = `alert-${type}`;
+    const icons = {
+        success: 'check-circle',
+        danger: 'exclamation-triangle',
+        warning: 'exclamation-triangle',
+        info: 'info-circle'
+    };
+    const icon = icons[type] || 'info-circle';
 
-async function initializeDigitalPersonaSDK() {
+    statusDiv.innerHTML = `
+        <div class="alert ${alertClass} p-2 mb-0">
+            <i class="bi bi-${icon} me-2"></i>${message}
+        </div>
+    `;
+}
+
+// Update readers list in UI
+async function updateReadersList() {
     try {
-        if (typeof WebSdk === 'undefined') {
-            throw new Error('DigitalPersona WebSDK not loaded');
+        const readers = await fingerprintApi.enumerateDevices();
+        const readersList = document.getElementById('readers-list');
+        readersList.innerHTML = '';
+
+        if (readers && readers.length > 0) {
+            readers.forEach(reader => {
+                const li = document.createElement('li');
+                li.textContent = reader;
+                readersList.appendChild(li);
+            });
+            updateScannerStatus(true, `${readers.length} device(s) connected`, readers.length);
+            enableCaptureButton();
+        } else {
+            updateScannerStatus(false, 'No devices connected');
+            disableCaptureButton();
         }
+    } catch (error) {
+        console.error('Error enumerating devices:', error);
+        updateScannerStatus(false, 'Error detecting devices');
+        disableCaptureButton();
+    }
+}
 
-        const client = new WebSdk.WebChannelClient("fingerprint");
+// Enable/disable capture button based on state
+function enableCaptureButton() {
+    const startBtn = document.getElementById('start-capture-btn');
+    const fingerSelect = document.getElementById('finger-name-select');
 
+    if (startBtn && fingerSelect && fingerSelect.value && !isCapturing) {
+        startBtn.removeAttribute('disabled');
+    }
+}
 
-        client.onConnectionSucceed = function() {
-            updateScannerStatus(true, 'Scanner connected successfully');
-            document.getElementById('scan-finger-btn').disabled = false;
-            DPSDKInitialized = true;
-            currentReader = client;
+function disableCaptureButton() {
+    const startBtn = document.getElementById('start-capture-btn');
+    if (startBtn) {
+        startBtn.setAttribute('disabled', 'true');
+    }
+}
 
-            // Debug: See what methods are available
-            console.log('Available methods:', Object.getOwnPropertyNames(client));
-            console.log('Client object:', client);
-        };
+// Event Handlers for Fingerprint API
 
-        client.onConnectionFailed = function() {
-            updateScannerStatus(false, 'Scanner connection failed');
-        };
+function onCommunicationFailed(event) {
+    console.error('Communication failed:', event.error);
+    showStatus('danger', `Connection error: ${event.error?.message || 'Unknown error'}`);
+    updateScannerStatus(false, 'Agent communication failed');
+}
 
-        client.connect();
-        return client;
+function onDeviceConnected(event) {
+    console.log('Device connected:', event.deviceUid);
+    updateReadersList();
+    showStatus('success', `Device connected: ${event.deviceUid}`);
+}
+
+function onDeviceDisconnected(event) {
+    console.log('Device disconnected:', event.deviceUid);
+    updateReadersList();
+    showStatus('warning', `Device disconnected: ${event.deviceUid}`);
+}
+
+function onAcquisitionStarted(event) {
+    console.log('Acquisition started on:', event.deviceUid);
+    showStatus('info', '👆 Place your finger on the scanner and hold steady...');
+}
+
+function onAcquisitionStopped(event) {
+    console.log('Acquisition stopped on:', event.deviceUid);
+    if (!capturedSampleData) {
+        showStatus('info', 'Capture stopped.');
+    }
+}
+
+function onSamplesAcquired(event) {
+    console.log('Sample acquired on:', event.deviceUid);
+    console.log('Sample data:', event.samples);
+
+    try {
+        const samples = JSON.parse(event.samples);
+
+        if (samples && samples.length > 0) {
+            const sample = samples[0];
+
+            // Store the captured sample data (base64url encoded)
+            capturedSampleData = {
+                template: sample,
+                quality: 0.85,
+                deviceUid: event.deviceUid
+            };
+
+            // Convert to PNG image for preview - FIXED
+            const binaryString = b64UrlToUtf8(sample);
+            const imageData = `data:image/png;base64,${btoa(binaryString)}`;
+
+            // Show preview
+            const previewDiv = document.getElementById('captured-preview');
+            const previewImg = document.getElementById('captured-image');
+            previewImg.src = imageData;
+            previewDiv.style.display = 'block';
+
+            showStatus('success', '✅ Fingerprint captured! Saving to server...');
+
+            // Auto-stop capture
+            stopCapture();
+
+            // Save to server
+            saveFingerprintToServer();
+
+        } else {
+            throw new Error('No samples in response');
+        }
 
     } catch (error) {
-        console.error('SDK initialization failed:', error);
-        updateScannerStatus(false, `Scanner error: ${error.message}`);
-        return null;
+        console.error('Error processing sample:', error);
+        showStatus('danger', `Error processing fingerprint: ${error.message}`);
+        stopCapture();
     }
 }
 
-
-// Replace your existing initialization
-initializeDigitalPersonaSDK();
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    // DOM Elements
-    const scanButton = document.getElementById('scan-finger-btn');
-    const fingerSelect = document.getElementById('finger-name-select');
-    const statusDiv = document.getElementById('scan-status');
-    const progressDiv = document.getElementById('scan-progress');
-    const progressBar = document.getElementById('scan-progress-bar');
-    const scannerStatusIcon = document.getElementById('scanner-status-icon');
-    const scannerStatusText = document.getElementById('scanner-status-text');
-
-    const studentId = "{{ student.pk }}";
-
-    // DigitalPersona SDK variables
-    let DPSDKInitialized = true;
-
-    // ===============================================================================
-    // DIGITALPERSONA SDK INITIALIZATION
-    // ===============================================================================
-
-    /**
-     * Initialize DigitalPersona WebSDK
-     */
-
-
-    /**
-     * Update scanner status display
-     */
-
-
-    /**
-     * Capture fingerprint using DigitalPersona SDK
-     */
-   async function captureFingerprint() {
-    if (!DPSDKInitialized || !currentReader) {
-        throw new Error('Scanner not initialized');
-    }
-
-    return new Promise((resolve, reject) => {
-        showScanProgress();
-
-        // Set up response handler
-        currentReader.onDataReceivedTxt = function(response) {
-            try {
-                const data = JSON.parse(response);
-                if (data.samples && data.samples.length > 0) {
-                    hideScanProgress();
-                    resolve({
-                        template: data.samples[0].Data,
-                        quality: data.samples[0].Quality || 0.8
-                    });
-                }
-            } catch (e) {
-                // Ignore parsing errors, keep waiting
-            }
-        };
-
-        // Send the acquire command
-        currentReader.sendDataTxt(JSON.stringify({
-            "Action": "acquire",
-            "Quality": 50,
-            "Timeout": 10000
-        }));
-
-        // Timeout after 15 seconds
-        setTimeout(() => {
-            hideScanProgress();
-            reject(new Error('Scan timeout - please try again'));
-        }, 15000);
-    });
+function onQualityReported(event) {
+    console.log('Quality reported:', event.quality, 'on device:', event.deviceUid);
 }
 
-    /**
-     * Show scan progress animation
-     */
-    function showScanProgress() {
-        progressDiv.style.display = 'block';
-        let progress = 0;
+function onErrorOccurred(event) {
+    console.error('Error occurred:', event.error);
+    showStatus('danger', `Scanner error: ${event.error?.message || 'Unknown error'}`);
+    stopCapture();
+}
 
-        const interval = setInterval(() => {
-            progress += Math.random() * 30;
-            if (progress > 90) progress = 90;
-            progressBar.style.width = progress + '%';
-        }, 500);
+// Initialize Fingerprint API
+async function initializeFingerprintAPI() {
+    try {
+        console.log('Initializing DigitalPersona Fingerprint API...');
 
-        // Store interval ID for cleanup
-        progressDiv.dataset.intervalId = interval;
-    }
-
-    /**
-     * Hide scan progress
-     */
-    function hideScanProgress() {
-        const intervalId = progressDiv.dataset.intervalId;
-        if (intervalId) {
-            clearInterval(intervalId);
-            delete progressDiv.dataset.intervalId;
+        // Check if Fingerprint API is available
+        if (typeof Fingerprint === 'undefined' || !Fingerprint.WebApi) {
+            throw new Error('DigitalPersona Fingerprint SDK not loaded');
         }
 
-        progressBar.style.width = '100%';
-        setTimeout(() => {
-            progressDiv.style.display = 'none';
-            progressBar.style.width = '0%';
-        }, 500);
-    }
-
-    // ===============================================================================
-    // EVENT HANDLERS
-    // ===============================================================================
-
-    /**
-     * Handle scan button click
-     */
-    scanButton.addEventListener('click', async function () {
-        const fingerName = fingerSelect.value;
-
-        if (!fingerName) {
-            showStatus('warning', 'Please select a finger to register.');
-            return;
-        }
-
-        if (!DPSDKInitialized) {
-            showStatus('danger', 'Scanner not initialized. Please check connection.');
-            return;
-        }
-
-        // Check if finger already registered
-        const existingFingers = document.querySelectorAll('.list-group-item');
-        let fingerExists = false;
-
-        existingFingers.forEach(item => {
-            const fingerDisplay = fingerName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-            if (item.textContent.includes(fingerDisplay)) {
-                fingerExists = true;
-            }
+        // Create API instance
+        fingerprintApi = new Fingerprint.WebApi({
+            debug: true
         });
 
-        if (fingerExists) {
-            showStatus('warning', 'This finger is already registered. Please select a different finger.');
-            return;
+        // Register event handlers BEFORE any API calls
+        fingerprintApi.onCommunicationFailed = onCommunicationFailed;
+        fingerprintApi.onDeviceConnected = onDeviceConnected;
+        fingerprintApi.onDeviceDisconnected = onDeviceDisconnected;
+        fingerprintApi.onAcquisitionStarted = onAcquisitionStarted;
+        fingerprintApi.onAcquisitionStopped = onAcquisitionStopped;
+        fingerprintApi.onSamplesAcquired = onSamplesAcquired;
+        fingerprintApi.onQualityReported = onQualityReported;
+        fingerprintApi.onErrorOccurred = onErrorOccurred;
+
+        console.log('Fingerprint API initialized successfully');
+
+        // Give the API a moment to initialize before enumerating
+        setTimeout(async () => {
+            await updateReadersList();
+        }, 500);
+
+    } catch (error) {
+        console.error('Failed to initialize Fingerprint API:', error);
+        updateScannerStatus(false, `Initialization failed: ${error.message}`);
+        showStatus('danger',
+            '❌ Cannot initialize scanner. Please ensure:<br>' +
+            '1. DigitalPersona Client/Agent is installed<br>' +
+            '2. Agent service is running<br>' +
+            '3. Scanner is connected'
+        );
+    }
+}
+
+// Start fingerprint capture
+async function startCapture() {
+    if (isCapturing) return;
+
+    const fingerSelect = document.getElementById('finger-name-select');
+    if (!fingerSelect || !fingerSelect.value) {
+        showStatus('warning', '⚠️ Please select a finger to register.');
+        return;
+    }
+
+    try {
+        console.log('Starting acquisition...');
+        capturedSampleData = null;
+
+        // Hide previous preview
+        document.getElementById('captured-preview').style.display = 'none';
+
+        // Start acquisition with PNG format
+        await fingerprintApi.startAcquisition(Fingerprint.SampleFormat.PngImage);
+
+        isCapturing = true;
+
+        // Update UI
+        document.getElementById('start-capture-btn').style.display = 'none';
+        document.getElementById('stop-capture-btn').style.display = 'block';
+        document.getElementById('finger-name-select').setAttribute('disabled', 'true');
+
+        showStatus('info', '👆 Ready to scan. Place your finger on the scanner...');
+
+    } catch (error) {
+        console.error('Error starting capture:', error);
+        showStatus('danger', `Failed to start capture: ${error.message}`);
+        isCapturing = false;
+    }
+}
+
+// Stop fingerprint capture
+async function stopCapture() {
+    if (!isCapturing) return;
+
+    try {
+        console.log('Stopping acquisition...');
+        await fingerprintApi.stopAcquisition();
+
+    } catch (error) {
+        console.error('Error stopping capture:', error);
+    } finally {
+        isCapturing = false;
+
+        // Update UI
+        document.getElementById('start-capture-btn').style.display = 'block';
+        document.getElementById('stop-capture-btn').style.display = 'none';
+        document.getElementById('finger-name-select').removeAttribute('disabled');
+
+        enableCaptureButton();
+    }
+}
+
+// Convert base64url to standard base64
+function base64urlToBase64(base64url) {
+    let base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+    const padding = base64.length % 4;
+    if (padding) {
+        base64 += '='.repeat(4 - padding);
+    }
+    return base64;
+}
+
+// Save fingerprint to server
+async function saveFingerprintToServer() {
+    if (!capturedSampleData) {
+        showStatus('danger', '❌ No fingerprint data to save');
+        return;
+    }
+
+    const fingerSelect = document.getElementById('finger-name-select');
+    const fingerName = fingerSelect.value;
+
+    try {
+        // Get CSRF token - improved selector
+        const csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]')?.value ||
+                         document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+
+        if (!csrfToken) {
+            throw new Error('CSRF token not found');
         }
 
-        scanButton.disabled = true;
-        showStatus('info', 'Place your finger on the scanner and hold steady...');
+        const standardBase64 = base64urlToBase64(capturedSampleData.template);
 
-        try {
-            // Capture fingerprint
-            const result = await captureFingerprint();
+        showStatus('info', '🔍 Assessing fingerprint quality...');
 
-            if (!result || !result.template) {
-                throw new Error('Failed to capture fingerprint');
+        const response = await fetch('/admin/student/api/fingerprint/capture/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                student_id: studentId,
+                finger_name: fingerName,
+                fingerprint_data: standardBase64,
+                quality_score: capturedSampleData.quality
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            let successMessage = '✅ Fingerprint saved successfully!';
+
+            if (data.quality_feedback) {
+                successMessage += ` Quality: ${data.quality_score?.toFixed(2)} - ${data.quality_feedback}`;
             }
 
-            showStatus('info', 'Fingerprint captured. Saving to database...');
+            showStatus('success', successMessage);
 
-            // Send to server
-            const response = await fetch("{% url 'capture_fingerprint' %}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({
-                    student_id: studentId,
-                    finger_name: fingerName,
-                    fingerprint_data: result.template,
-                    quality_score: result.quality
-                })
-            });
-
-            const data = await response.json();
-
-            if (response.ok && data.success) {
-                showStatus('success', `Fingerprint saved successfully! Quality: ${(result.quality * 100).toFixed(0)}%`);
-
-                setTimeout(() => {
-                    location.reload();
-                }, 2000);
-
-            } else {
-                throw new Error(data.message || 'Failed to save fingerprint');
-            }
-
-        } catch (error) {
-            console.error('Fingerprint capture error:', error);
-            showStatus('danger', `Error: ${error.message}`);
-            scanButton.disabled = false;
-        }
-    });
-
-    /**
-     * Handle finger selection change
-     */
-    fingerSelect.addEventListener('change', function() {
-        if (this.value && DPSDKInitialized) {
-            scanButton.disabled = false;
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
         } else {
-            scanButton.disabled = true;
-        }
-    });
+            let errorMessage = data.message || 'Save failed';
 
-    /**
-     * Display status message
-     */
-    function showStatus(type, message) {
-        const alertClass = `alert-${type}`;
-        statusDiv.innerHTML = `
-            <div class="alert ${alertClass} p-2 mb-0">
-                <i class="bi bi-${getStatusIcon(type)} me-2"></i>${message}
-            </div>
-        `;
-    }
-
-    /**
-     * Get appropriate icon for status type
-     */
-    function getStatusIcon(type) {
-        const icons = {
-            success: 'check-circle',
-            danger: 'exclamation-triangle',
-            warning: 'exclamation-triangle',
-            info: 'info-circle'
-        };
-        return icons[type] || 'info-circle';
-    }
-
-    // ===============================================================================
-    // GLOBAL FUNCTIONS (called from HTML)
-    // ===============================================================================
-
-    /**
-     * Test scanner connection
-     */
-    window.testScannerConnection = async function() {
-        showStatus('info', 'Testing scanner connection...');
-        const success = await initializeDigitalPersonaSDK();
-
-        if (success) {
-            showStatus('success', 'Scanner test successful!');
-        } else {
-            showStatus('danger', 'Scanner test failed. Please check connection and drivers.');
-        }
-    };
-
-    /**
-     * Refresh fingerprint list
-     */
-    window.refreshFingerprints = function() {
-        location.reload();
-    };
-
-    /**
-     * Delete fingerprint prompt
-     */
-    window.deleteFingerprintPrompt = function(fingerprintId, fingerName) {
-        document.getElementById('delete-finger-name').textContent = fingerName;
-
-        const confirmBtn = document.getElementById('confirm-delete-btn');
-        confirmBtn.onclick = () => deleteFingerprint(fingerprintId);
-
-        new bootstrap.Modal(document.getElementById('deleteFingerprintModal')).show();
-    };
-
-    /**
-     * Delete fingerprint
-     */
-    async function deleteFingerprint(fingerprintId) {
-        try {
-            const response = await fetch("{% url 'delete_fingerprint' %}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({
-                    fingerprint_id: fingerprintId
-                })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('deleteFingerprintModal')).hide();
-                showStatus('success', 'Fingerprint deleted successfully');
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                throw new Error(data.message);
+            if (data.quality_score !== undefined) {
+                errorMessage += ` (Quality: ${data.quality_score.toFixed(2)})`;
             }
 
-        } catch (error) {
-            showStatus('danger', `Error deleting fingerprint: ${error.message}`);
+            if (data.existing_student) {
+                errorMessage += ` - Already registered for: ${data.existing_student}`;
+            }
+
+            if (data.feedback) {
+                errorMessage += ` - ${data.feedback}`;
+            }
+
+            throw new Error(errorMessage);
         }
+
+    } catch (error) {
+        console.error('Error saving fingerprint:', error);
+
+        let errorMessage = `❌ Failed to save: ${error.message}`;
+
+        if (error.message.includes('quality')) {
+            errorMessage += '<br>💡 Tip: Clean finger and scanner, apply steady pressure';
+        } else if (error.message.includes('duplicate')) {
+            errorMessage += '<br>💡 This fingerprint is already registered to another student';
+        } else if (error.message.includes('already exists')) {
+            errorMessage += '<br>💡 This finger is already registered for this student';
+        }
+
+        showStatus('danger', errorMessage);
+
+        document.getElementById('start-capture-btn').style.display = 'block';
+        document.getElementById('stop-capture-btn').style.display = 'none';
+        document.getElementById('finger-name-select').removeAttribute('disabled');
+    }
+}
+
+// Delete fingerprint
+async function deleteFingerprint(fingerprintId) {
+    try {
+        // Improved CSRF token retrieval
+        const csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]')?.value ||
+                         document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+
+        if (!csrfToken) {
+            throw new Error('CSRF token not found');
+        }
+
+        const response = await fetch('/admin/student/api/fingerprint/delete/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ fingerprint_id: fingerprintId })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('deleteFingerprintModal'));
+            if (modal) modal.hide();
+
+            showStatus('success', '✅ Fingerprint deleted successfully! Refreshing...');
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            throw new Error(data.message || 'Delete failed');
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        showStatus('danger', `❌ Error deleting fingerprint: ${error.message}`);
+    }
+}
+
+// Helper functions for window scope
+window.deleteFingerprintPrompt = function(fingerprintId, fingerName) {
+    document.getElementById('delete-finger-name').textContent = fingerName;
+    const confirmBtn = document.getElementById('confirm-delete-btn');
+    confirmBtn.onclick = () => deleteFingerprint(fingerprintId);
+    new bootstrap.Modal(document.getElementById('deleteFingerprintModal')).show();
+};
+
+window.testConnection = async function() {
+    showStatus('info', '🔍 Testing scanner connection...');
+    if (fingerprintApi) {
+        await updateReadersList();
+    } else {
+        showStatus('danger', 'API not initialized. Try refreshing the page.');
+    }
+};
+
+window.refreshPage = function() {
+    location.reload();
+};
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, initializing fingerprint system...');
+
+    // Initialize fingerprint API
+    initializeFingerprintAPI();
+
+    // Finger selection change handler
+    const fingerSelect = document.getElementById('finger-name-select');
+    if (fingerSelect) {
+        fingerSelect.addEventListener('change', function() {
+            enableCaptureButton();
+        });
     }
 
-    // ===============================================================================
-    // INITIALIZATION
-    // ===============================================================================
+    // Start capture button
+    const startBtn = document.getElementById('start-capture-btn');
+    if (startBtn) {
+        startBtn.addEventListener('click', startCapture);
+    }
 
-    // Initialize SDK on page load
-    initializeDigitalPersonaSDK();
+    // Stop capture button
+    const stopBtn = document.getElementById('stop-capture-btn');
+    if (stopBtn) {
+        stopBtn.addEventListener('click', stopCapture);
+    }
 
+    // Refresh readers button
+    const refreshBtn = document.getElementById('refresh-readers-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async function() {
+            refreshBtn.setAttribute('disabled', 'true');
+            await updateReadersList();
+            setTimeout(() => refreshBtn.removeAttribute('disabled'), 500);
+        });
+    }
 });
+
+// Debug helper
+window.debugFingerprint = function() {
+    console.log('=== Fingerprint Debug Info ===');
+    console.log('API initialized:', fingerprintApi !== null);
+    console.log('Is capturing:', isCapturing);
+    console.log('Captured data:', capturedSampleData);
+    console.log('Fingerprint SDK available:', typeof Fingerprint !== 'undefined');
+    console.log('WebApi available:', typeof Fingerprint?.WebApi !== 'undefined');
+    console.log('============================');
+
+    if (fingerprintApi) {
+        fingerprintApi.enumerateDevices()
+            .then(devices => console.log('Connected devices:', devices))
+            .catch(err => console.error('Error enumerating devices:', err));
+    }
+};
+
+console.log('💡 Fingerprint system ready!');
+console.log('💡 Debug command: window.debugFingerprint()');
 </script>
 
 {% endblock %}

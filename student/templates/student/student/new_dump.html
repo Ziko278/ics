@@ -1,0 +1,454 @@
+<html>
+  <head>
+    <title>Fingerprint API 1.0 Sample</title>
+
+    <style>
+
+:root {
+
+	/* Core Branding */
+	--color-cerulean: #00aeef;
+	--color-endeavor: #00539b;
+	--color-prussian-blue: #002e56;
+	--color-spindle: #b0cbea;
+	--color-white: white;
+}
+
+@supports (interpolate-size: allow-keywords) {
+  :root {
+      interpolate-size: allow-keywords;
+  }
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+	color: var(--color-prussian-blue);
+}
+header {
+  background-color: var(--color-endeavor);
+  padding: 0px 30px;
+  color: var(--color-white);
+}
+footer {
+  text-align: center;
+  margin-top: 2em;
+}
+body > footer {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+	background-color: var(--color-endeavor);
+	color: var(--color-white);
+}
+
+main form {
+  padding: 1em;
+}
+
+dialog {
+  max-width: 30em;
+  border: 2px solid lightgray;
+}
+
+section {
+  margin-bottom: 1em;
+}
+
+fieldset {
+  border: 2px solid lightgray;
+  margin-bottom: 1em;
+  margin: 0;
+}
+legend {
+  padding: 0 0.5em;
+}
+
+dt {
+  padding-left: 1em;
+}
+
+label {
+  display: block;
+}
+
+input {
+  font-size: medium;
+  line-height: 1.5em;
+}
+
+button {
+  display: inline-block;
+  min-width: 8em;
+  font-size: larger;
+  line-height: 1.5em;
+}
+
+button.small {
+  min-width: 0;
+}
+
+/* Item lists, with prompts */
+list::before {
+  content: attr(prompt-more);
+  display: block;
+  margin: 0.5em;
+  color: #377;
+  font-weight: 600;
+}
+list:empty::before {
+  content: attr(prompt);
+}
+
+/* Data details */
+details {
+  margin-bottom: 1em;
+  padding: 0em;
+  background-color:#eee;
+  border: 1px solid lightgray;
+}
+::details-content {
+  transition: height 0.5s ease;
+  height: 0;
+  overflow: clip;
+}
+[open]::details-content {
+  height: auto;
+}
+
+summary {
+  background-color: #ddd;
+  padding: 0.5em;
+  display: flex;
+}
+summary::before {
+  content: '▶';
+  margin-right: 0.5em;
+}
+[open] > summary::before {
+  content: '▼';
+}
+
+pre {
+  font-family: 'Lucida Console';
+  font-size: 9pt;
+  color: darkblue;
+  margin: 0;
+}
+
+#error  {
+  display: block;
+  font-size: large;
+  color: red;
+}
+#error:empty {
+  display: none;
+}
+
+/* Visual logic */
+
+#captureControl[active] #start        { display: none; }
+#captureControl[active] #cannotStart  { display: none; }
+
+#captureControl:not([active]) #stop           { display: none; }
+#captureControl:not([active]) #captureResults { display: none; }
+
+    </style>
+  </head>
+  <body>
+    <!-- Main view -->
+
+    <header>
+      <h1>Fingerprint API 1.0 Sample</h1>
+    </header>
+
+    <main>
+      <form id="captureControl" action="#">
+        <section>
+          <button id="start">Start</button>
+          <button id="stop">Stop</button>
+          <a id="cannotStart" href="#" onclick="showDialog('#howToStart')">Does not work?</a>
+        </section>
+
+        <div id="error"></div>
+
+        <section id="captureResults">
+
+          <fieldset>
+            <legend>Connected readers</legend>
+            <list id="readers"
+              item-template="#reader"
+              prompt="Connect a fingerprint reader"
+              prompt-more="Connect more readers or disconnect some"></list>
+          </fieldset>
+
+          <fieldset>
+            <legend>Captured fingerprint samples</legend>
+            <div id="captureFeedback"></div>
+            <list id="samples"
+              item-template="#sample"
+              prompt="Present a finger"
+              prompt-more="Present another finger">
+            </list>
+          </fieldset>
+
+        </section>
+      </form>
+    </main>
+
+    <footer>Copyright &copy; 2025 HID Global Corporation/ASSA ABLOY AB.</footer>
+
+    <!-- Dialogs -->
+
+    <dialog id="howToStart">
+      <form method="dialog">
+        <p>Ask your administrator to install a HID DigitalPersona Client for you,
+          or download and install the <a href="https://digitalpersona.hidglobal.com/lite-client/">HID Authentication Device Client</a>.
+        </p>
+        <footer>
+          <button value="ok">Ok</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <!-- List item templates -->
+
+    <template id="reader">
+      <pre name="name"></pre>
+    </template>
+
+    <template id="sample">
+      <details>
+        <summary>
+          <div style="flex: 5">
+            <span name="reader"></span>
+          </div>
+          <div name="time" style="flex: 1; text-align: right;"></div>
+        </summary>
+        <section>
+          <dt>Sample data:</dt><dd><pre name="sample"></pre></dd>
+          <dt>Image:</dt><dd><img name="image"></img></dd>
+        </section>
+      </details>
+    </template>
+
+    <!-- For build-less non-production development, you can just load the SDKs from the CDN. -->
+    <script type="text/javascript" src="https://unpkg.com/@digitalpersona/websdk@v1"></script>
+    <script type="text/javascript" src="https://unpkg.com/@digitalpersona/fingerprint@v1"></script>
+
+    <script type="text/javascript" >
+
+// In vanilla JS, the `@digitalpersona/card` and `@digitalpersona/websdk` are
+// imported using the `<script>` tag, and the `Card` and `WebSdk` objects are
+// available as global variables. Typings are available via the `<reference>`
+// triple-slash directive (https://www.typescriptlang.org/docs/handbook/triple-slash-directives.html)
+
+/// <reference types="@digitalpersona/websdk" />
+/// <reference types="@digitalpersona/fingerprint" />
+
+// Little HTML helper
+const $ = (selector, root) => typeof selector === "string" ?
+    (root ?? document).querySelector(selector) :
+    selector;
+
+// HTML elements
+const startButton = $("#start");
+const stopButton  = $("#stop");
+
+const api = new Fingerprint.WebApi({
+    debug: true,
+});
+api.onCommunicationFailed = onCommunicationFailed.bind(this);
+api.onAcquisitionStarted = onAquisitionStarted.bind(this);
+api.onAcquisitionStopped = onAquisitionStopped.bind(this);
+api.onSamplesAcquired = onSamplesAcquired.bind(this);
+api.onQualityReported = onQualityReported.bind(this);
+api.onErrorOccurred = onErrorOccurred.bind(this);
+api.onDeviceConnected = onDeviceConnected.bind(this);
+api.onDeviceDisconnected = onDeviceDisconnected.bind(this);
+
+// State variables
+var capturing = false;
+
+startButton.onclick = startCapture;
+stopButton.onclick = stopCapture;
+window.onload = startCapture;
+
+// Reader event handlers and status updates
+
+async function onDeviceConnected(event) {
+    console.log(`Reader ${event.deviceUid} is connected`);
+    await refreshReadersView();
+}
+
+async function onDeviceDisconnected(event) {
+    console.log(`Reader ${event.deviceUid} is disconnected`);
+    await refreshReadersView();
+}
+
+async function refreshReadersView() {
+    try {
+        const readersList = $("#readers");
+        const readers = await api.enumerateDevices();
+        clearItems(readersList);
+        for (const reader of readers) {
+            addItem(readersList, { name: reader });
+        }
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// Aquisition event handlers and status updates
+
+async function onSamplesAcquired(event) {
+    handleError();
+    console.log(`Sample is aquired on ${event.Reader}`);
+    try {
+        const reader = event.deviceUid;
+        const samples = JSON.parse(event.samples);
+        const images = samples.map(sample => `data:image/png;base64,${btoa(Fingerprint.b64UrlToUtf8(sample))}`);
+
+        addItem("#samples",
+            {
+                time        : (new Date()).toLocaleTimeString(),
+                reader,
+                sample: samples[0],
+                image: images[0],
+            },
+            item => requestAnimationFrame(() => item.setAttribute("open", ""))
+        );
+
+    }
+    catch (error) {
+        handleError(error);
+    }
+}
+
+async function onQualityReported(event) {
+    console.log(`Quality is reported on ${event.deviceUid}`);
+}
+
+async function onAquisitionStarted(event) {
+    console.log(`Aquisition is started on ${event.deviceUid}`);
+}
+
+async function onAquisitionStopped(event) {
+    console.log(`Aquisition is stopped on ${event.deviceUid}`);
+}
+
+// API event handlers and status updates
+
+async function onCommunicationFailed(event) {
+    handleError(event.error);
+}
+
+async function onErrorOccurred(event) {
+    handleError(event.error);
+}
+
+// Capture control methods and status updates
+
+async function startCapture() {
+    if (capturing) return;
+    try {
+        clearItems("#samples");
+        await api.startAcquisition(Fingerprint.SampleFormat.PngImage);
+        setCaptureActive(true);
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+async function stopCapture() {
+    if (!capturing) return;
+    try {
+        await api.stopAcquisition();
+        setCaptureActive(false);
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+function setCaptureActive(active) {
+    capturing = active;
+    $("#captureControl").toggleAttribute("active", active);
+}
+
+// Other status methods
+
+function handleError(error) {
+    $("#error").innerHTML = error?.message || error?.type || "";
+}
+
+// HTML view helpers
+
+async function showDialog(id, defaultValue = {}) {
+    return new Promise((resolve) => {
+        const dialog = $(id);
+        const form = $("*", dialog);
+        form.reset();
+
+        dialog.onclose = () => {
+            const data = Object.fromEntries(new FormData(form).entries());
+            resolve(dialog.returnValue === "ok" ? data : defaultValue);
+        }
+        dialog.showModal();
+    });
+}
+
+// Data conversion functions
+
+function hex(str) {
+    return Array.from(str)
+    .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// Data transfer functions
+
+const isControl = el => ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
+const isMedia = el => ["IMG", "AUDIO", "VIDEO"].includes(el.tagName);
+
+// Set data to HTML elements, using the `name` attribute as a JSON path
+function setData(element, data) {
+    for (let child of element.children) {
+        if (child.hasAttribute('name')) {
+            const jsonPath = child.getAttribute('name');
+            let value = jsonPath.split('.').reduce((o, k) => (o || {})[k], data);
+            if (typeof value === "object") value = JSON.stringify(value, null, 2);
+            if (isControl(child)) {
+                child.value = value;
+            } else if (isMedia(child)) {
+                child.src = value;
+            } else {
+                child.innerText = value;
+            }
+        }
+        setData(child, data);
+    }
+}
+
+// Item list functions
+
+// Add an item to the list, using the `item-template` attribute as a template reference
+// and the `name` attribute as a JSON path to set data
+function addItem(list, itemData, afterInsert) {
+    const container = $(list);
+    const itemTemplate = $(container.getAttribute("item-template"));
+    const node = itemTemplate.content.cloneNode(true);
+    setData(node, itemData);
+    container.insertBefore(node, container.firstChild);
+    afterInsert ? afterInsert(container.firstElementChild) : void(0);
+}
+
+function clearItems(list) {
+    const container = $(list);
+    container.textContent = "";
+}
+
+    </script>
+  </body>
+</html>

@@ -16,6 +16,7 @@ class StudentSettingModel(models.Model):
     student_prefix = models.CharField(max_length=10, blank=True, null=True, default='STU')
     auto_generate_parent_id = models.BooleanField(default=True)
     parent_prefix = models.CharField(max_length=10, blank=True, null=True, default='PAR')
+    max_fingerprints_per_student = models.IntegerField(default=4)
 
     def __str__(self):
         return "Student & Parent Settings"
@@ -270,4 +271,5 @@ class FingerprintModel(models.Model):
         self.last_used = timezone.now()
         self.usage_count += 1
         self.save(update_fields=['last_used', 'usage_count'])
+
 
