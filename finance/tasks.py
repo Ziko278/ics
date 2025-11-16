@@ -51,12 +51,13 @@ def generate_invoices_task(job_id):
 
             # Filter the fees that apply to this specific student's class
             # Filter the fees that apply to this specific student's class AND utilities
-            student_utilities = set(student.utilities.all())  # Get student's utilities as a set
+            # Filter the fees that apply to this specific student's class AND utilities
+            student_utility_ids = set(student.utilities.values_list('id', flat=True))  # Get utility IDs
 
             applicable_fees_for_student = [
                 f for f in applicable_fees
                 if student.student_class in f.student_classes.all()
-                   and (f.fee.required_utility is None or f.fee.required_utility in student_utilities)
+                   and (f.fee.required_utility_id is None or f.fee.required_utility_id in student_utility_ids)
             ]
 
             # Create ONE invoice per student per term/session
