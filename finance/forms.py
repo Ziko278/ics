@@ -6,17 +6,18 @@ from django import forms
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from django.db.models import Sum
-from django.forms import inlineformset_factory
+from django.db.models import Sum, Q
+from django.forms import inlineformset_factory, CheckboxSelectMultiple
 
 from admin_site.models import TermModel, ClassesModel, SessionModel, SchoolSettingModel, ClassSectionModel
 from finance.models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePaymentModel, FeeModel, \
     FeeGroupModel, FeeMasterModel, InvoiceGenerationJob, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryStructure, SalaryAdvance, \
-    SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan, StaffFundingModel
+    SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan, StaffFundingModel, \
+    DiscountModel, DiscountApplicationModel, StudentDiscountModel, InvoiceModel
 from human_resource.models import StaffModel
 from inventory.models import PurchaseOrderModel
-
+from student.models import StudentModel
 
 # Helpers
 MAX_AMOUNT = Decimal('999999999.99')
@@ -136,13 +137,16 @@ class FeeForm(forms.ModelForm):
 
     class Meta:
         model = FeeModel
-        fields = ['name', 'code', 'occurrence', 'payment_term', 'description']
+        fields = ['name', 'code', 'occurrence', 'payment_term', 'description', 'required_utility',
+            'parent_bound']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'code': forms.TextInput(attrs={'class': 'form-control'}),
             'occurrence': forms.Select(attrs={'class': 'form-select'}),
             'payment_term': forms.Select(attrs={'class': 'form-select'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'required_utility': forms.Select(attrs={'class': 'form-select'}),
+            'parent_bound': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -779,3 +783,123 @@ class StaffFundingForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # You can hide the student field if it's set by the URL
+
+
+class DiscountForm(forms.ModelForm):
+    """Form for DiscountModel blueprint using the modal interface."""
+
+    # Explicitly define M2M fields using CheckboxSelectMultiple widget
+    applicable_fees = forms.ModelMultipleChoiceField(
+        queryset=FeeModel.objects.all().order_by('name'),
+        widget=CheckboxSelectMultiple,
+        required=False,
+        label="Applicable Fee Types"
+    )
+    applicable_classes = forms.ModelMultipleChoiceField(
+        queryset=ClassesModel.objects.all().order_by('name'),
+        widget=CheckboxSelectMultiple,
+        required=False,
+        label="Applicable Classes"
+    )
+
+    class Meta:
+        model = DiscountModel
+        fields = [
+            'title', 'discount_type', 'amount', 'occurrence',
+            'applicable_fees', 'applicable_classes'
+        ]
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-control'}),
+            'discount_type': forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'occurrence': forms.Select(attrs={'class': 'form-select'}),
+            # Note: applicable_fees and applicable_classes are handled above.
+        }
+
+
+class DiscountApplicationForm(forms.ModelForm):
+    """Form for DiscountApplicationModel, locking the rate and type for a term."""
+
+    class Meta:
+        model = DiscountApplicationModel
+        fields = [
+            'discount', 'session', 'term',
+            'discount_type', 'discount_amount'
+        ]
+        widgets = {
+            # Add unique IDs for JavaScript targeting
+            'discount': forms.Select(attrs={'class': 'form-select', 'id': 'id_app_discount'}),
+            'session': forms.Select(attrs={'class': 'form-select'}),
+            'term': forms.Select(attrs={'class': 'form-select'}),
+            'discount_type': forms.Select(attrs={'class': 'form-select', 'id': 'id_app_discount_type'}),
+            'discount_amount': forms.NumberInput(
+                attrs={'class': 'form-control', 'step': '0.01', 'id': 'id_app_discount_amount'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # 1. Set default session and term from SchoolSettingModel
+        try:
+            # Assumes SchoolSettingModel is a singleton (has only one record)
+            settings = SchoolSettingModel.objects.get()
+            if settings.session:
+                self.fields['session'].initial = settings.session.pk
+            if settings.term:
+                self.fields['term'].initial = settings.term.pk
+        except SchoolSettingModel.DoesNotExist:
+            pass  # No settings found, so no defaults
+        except SchoolSettingModel.MultipleObjectsReturned:
+            pass  # Should not happen
+
+        # 2. Set 'discount_type' to disabled (it will be autofilled by JS)
+        # The model's save() method handles setting the type, so disabling
+        # it here is purely for the UI.
+        self.fields['discount_type'].readonly = True
+        self.fields['discount_amount'].readonly = True
+
+        # Order the FK fields
+        self.fields['discount'].queryset = DiscountModel.objects.all().order_by('title')
+        self.fields['session'].queryset = SessionModel.objects.all().order_by('-id')
+        self.fields['term'].queryset = TermModel.objects.all().order_by('order')
+
+        # Set optional status for session/term
+        self.fields['session'].required = False
+        self.fields['term'].required = False
+
+        # If editing an existing object, lock the discount dropdown
+        if self.instance.pk:
+            self.fields['discount'].disabled = True
+
+
+class StudentDiscountAssignForm(forms.Form):
+    discount_application = forms.ModelChoiceField(
+        queryset=DiscountApplicationModel.objects.none(),
+        label="Select Discount",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    def __init__(self, *args, **kwargs):
+        student = kwargs.pop('student', None)
+        super().__init__(*args, **kwargs)
+
+        # Show available discount applications
+        school_setting = SchoolSettingModel.objects.first()
+
+        queryset = DiscountApplicationModel.objects.filter(
+            Q(session=school_setting.session, term=school_setting.term) |
+            Q(session__isnull=True, term__isnull=True)
+        ).select_related('discount')
+
+        # Filter to show only discounts applicable to student's class (if student provided)
+        if student and student.student_class:
+            # Show discounts that either have no class restriction OR include student's class
+            queryset = queryset.filter(
+                Q(discount__applicable_classes__isnull=True) |
+                Q(discount__applicable_classes=student.student_class)
+            ).distinct()
+
+        self.fields['discount_application'].queryset = queryset
+
+        self.fields['discount_application'].label_from_instance = lambda obj: \
+            f"{obj.discount.title} - {obj.discount_amount}{'%' if obj.discount_type == 'percentage' else ' (Fixed)'}"

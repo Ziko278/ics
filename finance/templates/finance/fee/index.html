@@ -26,6 +26,8 @@
                     <th>Name</th>
                     <th>Code</th>
                     <th>Occurrence</th>
+                    <th>Utility</th>
+                    <th>Parent Bound</th>
                     <th>Quarter</th>
                     <th class="text-center">Action</th>
                 </tr>
@@ -37,7 +39,16 @@
                     <td>{{ fee.name|title }}</td>
                     <td>{{ fee.code|upper }}</td>
                     <td>{{ fee.get_occurrence_display }}</td>
+                    <td>{{ fee.required_utility.name|default:"---" }}</td>
+                    <td class="text-center">
+                        {% if fee.parent_bound %}
+                            <i class="bi bi-person-fill text-primary" title="Parent Bound"></i>
+                        {% else %}
+                            <i class="bi bi-person text-secondary" title="Student Bound"></i>
+                        {% endif %}
+                    </td>
                     <td>{% if fee.occurrence == 'termly' %} All {% else %} {{ fee.payment_term }} {% endif %}</td>
+
                     <td class="text-center">
                         <button title="Edit Fee" type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editFeeModal{{ fee.pk }}"><i class="bi bi-pencil-square"></i></button>
                         <a title="Delete Fee" href="{% url 'finance_fee_delete' fee.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
@@ -89,7 +100,7 @@
                     <li class="list-group-item d-flex align-items-center">
                          <i class="bi bi-calendar-check fs-4 text-primary me-3"></i>
                          <div>
-                            <strong>Payment Term:</strong>
+                            <strong>Payment Quarter:</strong>
                             <p class="mb-0 text-muted small">For <strong>Annually</strong> or <strong>One Time</strong> fees, specifies which term the fee should be billed in.</p>
                          </div>
                     </li>
@@ -115,9 +126,18 @@
                         <div class="col-md-6"><label class="form-label">Occurrence</label>{{ form.occurrence }}</div>
 
                         <div class="col-md-6 d-none" id="add_payment_term_div">
-                            <label class="form-label">Payment Term</label>
+                            <label class="form-label">Payment Quarter</label>
                             {{ form.payment_term }}
                             <div class="form-text">Required for Annually or One Time fees.</div>
+                        </div>
+
+                        <div class="col-md-6"><label class="form-label">Required Utility (Optional)</label>{{ form.required_utility }}</div>
+
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check pt-4">
+                                {{ form.parent_bound }}
+                                <label class="form-check-label" for="id_parent_bound">Charge once per Parent/Family</label>
+                            </div>
                         </div>
 
                         <div class="col-12"><label class="form-label">Description</label>{{ form.description }}</div>
@@ -152,7 +172,7 @@
                         </div>
 
                         <div class="col-md-6 payment-term-div">
-                             <label class="form-label">Payment Term</label>
+                             <label class="form-label">Payment Quarter</label>
                              <select name="payment_term" class="form-select payment-term-select">
                                  <option value="">---------</option>
                                 {% for term in form.fields.payment_term.queryset %}
@@ -160,6 +180,23 @@
                                 {% endfor %}
                             </select>
                             <div class="form-text">Required for Annually or One Time fees.</div>
+                        </div>
+
+                         <div class="col-md-6">
+                            <label class="form-label">Required Utility (Optional)</label>
+                            <select name="required_utility" class="form-select">
+                                <option value="">---------</option>
+                                {% for utility in form.fields.required_utility.queryset %}
+                                <option value="{{ utility.pk }}" {% if fee.required_utility.pk == utility.pk %}selected{% endif %}>{{ utility.name|title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check pt-4">
+                                <input type="checkbox" name="parent_bound" class="form-check-input" id="id_parent_bound_edit_{{ fee.pk }}" {% if fee.parent_bound %}checked{% endif %}>
+                                <label class="form-check-label" for="id_parent_bound_edit_{{ fee.pk }}">Charge once per Parent/Family</label>
+                            </div>
                         </div>
 
                         <div class="col-12"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="3">{{ fee.description|default:"" }}</textarea></div>

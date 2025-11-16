@@ -4,6 +4,7 @@ import uuid
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.apps import apps
@@ -159,6 +160,16 @@ class FeeModel(models.Model):
     occurrence = models.CharField(max_length=50, choices=FeeOccurrence.choices)
     payment_term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True,
                                      help_text="For 'One Time' fees, specify which term it must be paid in.")
+    required_utility = models.ForeignKey(
+        'student.UtilityModel',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="If set, this fee is only applied to students subscribed to this utility (e.g., Bus Fee for Transport Utility)."
+    )
+
+    parent_bound = models.BooleanField(
+        default=False,
+        help_text="Check if this fee should be charged once per Parent/Family, rather than per student."
+    )
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_fees')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -214,7 +225,6 @@ class FeeMasterModel(models.Model):
         return f"{self.fee.name} ({self.group.name})"
 
 
-# --- NEW SUPPORTING MODEL ---
 class TermlyFeeAmountModel(models.Model):
     """
     Sets the specific price for a fee structure for a given term.
@@ -231,10 +241,6 @@ class TermlyFeeAmountModel(models.Model):
     def __str__(self):
         return f"{self.fee_structure} - {self.term.name}: {self.amount}"
 
-
-# ===================================================================
-# Invoicing and Payment Models (The "Bills" and "Payments")
-# ===================================================================
 
 class InvoiceModel(models.Model):
     """The parent document for a student's bill in a specific term."""
@@ -269,7 +275,24 @@ class InvoiceModel(models.Model):
 
     @property
     def total_amount(self):
+        """Total invoice amount before discounts"""
         return self.items.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    @property
+    def total_discount(self):
+        """Total discount applied across all invoice items"""
+        from django.db.models import Sum
+        total = Decimal('0.00')
+        for item in self.items.all():
+            item_discounts = item.discounts_applied.aggregate(total=Sum('amount_discounted'))['total'] or Decimal(
+                '0.00')
+            total += item_discounts
+        return total
+
+    @property
+    def amount_after_discount(self):
+        """Invoice amount after applying discounts"""
+        return self.total_amount - self.total_discount
 
     @property
     def amount_paid(self):
@@ -277,7 +300,8 @@ class InvoiceModel(models.Model):
 
     @property
     def balance(self):
-        return self.total_amount - self.amount_paid
+        """Balance after discounts and payments"""
+        return self.amount_after_discount - self.amount_paid
 
 
 class InvoiceItemModel(models.Model):
@@ -287,10 +311,26 @@ class InvoiceItemModel(models.Model):
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    paid_by_sibling = models.ForeignKey(StudentModel, on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name='family_fees_covered',
+                                        help_text="If this is a parent-bound fee paid by a sibling")
+
+    @property
+    def total_discount(self):
+        """Total discount on this item"""
+        return self.discounts_applied.aggregate(
+            total=Sum('amount_discounted')
+        )['total'] or Decimal('0.00')
+
+    @property
+    def amount_after_discount(self):
+        """Amount after applying discount"""
+        return self.amount - self.total_discount
 
     @property
     def balance(self):
-        return self.amount - self.amount_paid
+        """Update to use discounted amount"""
+        return self.amount_after_discount - self.amount_paid
 
     def __str__(self):
         return self.description
@@ -918,3 +958,173 @@ class AdvanceSettlementModel(models.Model):
 
     def __str__(self):
         return f"{self.settlement_type.title()} - {self.advance.staff} - ₦{self.amount}"
+
+
+class DiscountModel(models.Model):
+    """The blueprint for a discount (Identity and Scope)."""
+
+    class DiscountType(models.TextChoices):
+        PERCENTAGE = 'percentage', 'Percentage (%)'
+        FIXED = 'fixed', 'Fixed Amount ($)'
+
+    class DiscountOccurrence(models.TextChoices):
+        TERMLY = 'quaterly', 'Quaterly'
+        ANNUALLY = 'annually', 'Annually'
+        ONE_TIME = 'one_time', 'One Time (Single Term)'
+
+    title = models.CharField(max_length=250, unique=True, help_text="e.g., Staff Discount, Early Bird Discount")
+
+    # The current, intended type. This is used to default the DiscountApplicationModel.
+    discount_type = models.CharField(max_length=20, choices=DiscountType.choices,
+                                     help_text="The intended type for this discount blueprint.")
+
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                 help_text="Default value (amount/percentage) for initial application setup.")
+
+    occurrence = models.CharField(max_length=50, choices=DiscountOccurrence.choices)
+
+    applicable_fees = models.ManyToManyField('FeeModel', help_text="Fees this discount can be applied against.",
+                                             blank=True)
+    applicable_classes = models.ManyToManyField(ClassesModel, help_text="Classes this discount can apply to.",
+                                                blank=True, related_name='applicable_classes')
+
+    # Deletion Protection: If any application record exists, this blueprint cannot be deleted.
+    is_protected = models.BooleanField(default=False, editable=False)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['title']
+        verbose_name = "Discount Blueprint"
+
+    def __str__(self):
+        return self.title.upper()
+
+
+class DiscountApplicationModel(models.Model):
+    """
+    Locks the rate and type for a specific Session and Term.
+    Session and Term are optional, defaulting to the SchoolSettingModel's active term.
+    """
+
+    DiscountType = DiscountModel.DiscountType
+
+    discount = models.ForeignKey('DiscountModel', on_delete=models.PROTECT, related_name='applications')
+
+    # UPDATED: Session and Term are now optional (null=True, blank=True)
+    session = models.ForeignKey(SessionModel, on_delete=models.PROTECT, null=True, blank=True)
+    term = models.ForeignKey(TermModel, on_delete=models.PROTECT, null=True, blank=True)
+
+    discount_type = models.CharField(max_length=20, choices=DiscountType.choices,
+                                     help_text="The type of discount (Percentage or Fixed) locked for this term.")
+
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2,
+                                          help_text="The exact amount or percentage locked for this term.")
+
+    is_protected = models.BooleanField(default=False, editable=False)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # NOTE: The unique_together constraint must be dropped or modified because
+        # allowing nulls means multiple records can have (discount, null, null).
+        # We will enforce the uniqueness of (discount, session, term) with a clean method.
+        # We will keep unique_together for non-null values for database integrity.
+        unique_together = ['discount', 'session', 'term']
+        ordering = ['-session__id', 'term__order']
+        verbose_name = "Discount Application"
+
+    def __str__(self):
+        session_name = self.session.name if self.session else 'Global'
+        term_name = self.term.name if self.term else 'Current'
+        return f"{self.discount.title} ({session_name} - {term_name})"
+
+    # Custom logic to handle defaulting and unique constraint for nulls
+    def clean(self):
+        # Enforce that if one is set, both must be set (cannot have session=X, term=None)
+        if (self.session and not self.term) or (not self.session and self.term):
+            raise ValidationError("Session and Term must either both be set, or both be left blank.")
+
+        # Enforce uniqueness for the 'Global' application (when both are null)
+        if self.session is None and self.term is None:
+            if DiscountApplicationModel.objects.filter(
+                    discount=self.discount, session__isnull=True, term__isnull=True
+            ).exclude(pk=self.pk).exists():
+                raise ValidationError("A Global (Current Session/Term) application already exists for this discount.")
+
+    def save(self, *args, **kwargs):
+        # 1. New Record Logic: Inherit Type and Protect Blueprint
+        if not self.pk:
+            # Inherit the current type from the blueprint on creation
+            self.discount_type = self.discount.discount_type
+
+            # Protect the blueprint
+            if not self.discount.is_protected:
+                self.discount.is_protected = True
+                self.discount.save(update_fields=['is_protected'])
+
+        # 2. Defaulting Logic: Pull active session/term from SchoolSettingModel if not set
+        if self.session is None and self.term is None:
+            try:
+                # Assuming SchoolSettingModel is a singleton (has only one record)
+                settings = SchoolSettingModel.objects.first()
+                if settings.session and settings.term:
+                    self.session = settings.session
+                    self.term = settings.term
+            except SchoolSettingModel.DoesNotExist:
+                # If no settings exist, it saves with nulls, handled by the unique constraint check
+                pass
+            except SchoolSettingModel.MultipleObjectsReturned:
+                # Should not happen if it's a singleton, but good practice to catch
+                pass
+
+        # 3. Existing Record Logic: Lock Type for historical safety
+        # ... (The logic to prevent changing self.discount_type remains the same) ...
+        if self.pk:
+            original = DiscountApplicationModel.objects.get(pk=self.pk)
+            if original.discount_type != self.discount_type:
+                self.discount_type = original.discount_type  # Revert the change
+
+        super().save(*args, **kwargs)
+
+
+class StudentDiscountModel(models.Model):
+    """The transactional record of a discount being applied to a student's invoice."""
+
+    student = models.ForeignKey(StudentModel, on_delete=models.PROTECT, related_name='discounts_received')
+
+    # Links to the locked rate and type (DiscountApplicationModel)
+    discount_application = models.ForeignKey(DiscountApplicationModel, on_delete=models.PROTECT,
+                                             related_name='student_discounts')
+
+    # Links to the final billing document
+    invoice_item = models.ForeignKey('InvoiceItemModel', on_delete=models.PROTECT, null=True,
+                                     related_name='discounts_applied')
+    # The final calculated monetary amount discounted on this specific invoice.
+    amount_discounted = models.DecimalField(max_digits=10, decimal_places=2)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # A student can only receive a specific discount application once per invoice
+        unique_together = ['student', 'discount_application', 'invoice_item']
+        verbose_name = "Student Discount Record"
+
+    def __str__(self):
+        return f"{self.student.first_name} received ₦{self.amount_discounted} discount on {self.invoice_item.description}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Ensure the application model is protected once a student record exists
+        if not self.discount_application.is_protected:
+            self.discount_application.is_protected = True
+            self.discount_application.save(update_fields=['is_protected'])
+
+    def delete(self, *args, **kwargs):
+        super().delete(*args, **kwargs)
+        # If this was the last student record for the application, unprotect it
+        if not self.discount_application.student_discounts.exists():
+            self.discount_application.is_protected = False
+            self.discount_application.save(update_fields=['is_protected'])

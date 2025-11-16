@@ -21,6 +21,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 
+from admin_site.views import FlashFormErrorsMixin
 from .tasks import process_parent_student_upload, _send_parent_welcome_email
 from django.core.files.storage import FileSystemStorage
 from django.db import transaction
@@ -33,7 +34,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 from django.views.generic import (
@@ -43,8 +44,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from admin_site.models import ClassesModel, ClassSectionModel, ClassSectionInfoModel
 from .models import StudentModel, ParentModel, StudentSettingModel, FingerprintModel, ImportBatchModel, \
-    ParentProfileModel, StudentWalletModel
-from .forms import StudentForm, ParentForm, StudentSettingForm, ParentStudentUploadForm
+    ParentProfileModel, StudentWalletModel, UtilityModel
+from .forms import StudentForm, ParentForm, StudentSettingForm, ParentStudentUploadForm, UtilityForm
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,93 @@ logger = logging.getLogger(__name__)
 # -------------------------
 # Student Setting Views (Singleton)
 # -------------------------
+
+
+class UtilityListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """
+    The main view for displaying the list of utilities. It also provides
+    the form instance needed for the 'Add New' modal.
+    """
+    model = UtilityModel
+    # Assuming new permissions parallel to the original
+    permission_required = 'student.view_utilitymodel'
+    template_name = 'student/utility/index.html' # New template path
+    context_object_name = 'utilities'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Provide an empty form for the 'Add New Utility' modal.
+        if 'form' not in context:
+            context['form'] = UtilityForm()
+        return context
+
+
+class UtilityCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
+    """
+    Handles the creation of a new utility. This view only processes POST
+    requests from the modal form on the utility list page.
+    """
+    model = UtilityModel
+    permission_required = 'student.add_utilitymodel'
+    form_class = UtilityForm
+    template_name = 'student/utility/index.html'  # Required for error redirect context
+
+    def get_success_url(self):
+        return reverse('student_utility_list') # New URL name
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Utility '{form.cleaned_data['name']}' created successfully.")
+        # Omitted form.instance.created_by = self.request.user (field not in model)
+        return super().form_valid(form)
+
+    def dispatch(self, request, *args, **kwargs):
+        # This view should not be accessed via GET. It is a POST endpoint only.
+        if request.method == 'GET':
+            return redirect(self.success_url)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class UtilityUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
+    """
+    Handles updating an existing utility. This view only processes POST
+    requests from the modal form on the utility list page.
+    """
+    model = UtilityModel
+    permission_required = 'student.add_utilitymodel'
+    form_class = UtilityForm
+    template_name = 'student/utility/index.html'  # Required for error redirect context
+
+    def get_success_url(self):
+        return reverse('student_utility_list') # New URL name
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Utility '{form.cleaned_data['name']}' updated successfully.")
+        return super().form_valid(form)
+
+    def dispatch(self, request, *args, **kwargs):
+        # This view should not be accessed via GET. It is a POST endpoint only.
+        if request.method == 'GET':
+            return redirect(self.success_url)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class UtilityDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    """
+    Handles the actual deletion of a utility object. The confirmation
+    is handled by a modal on the list page.
+    """
+    model = UtilityModel
+    permission_required = 'student.delete_utilitymodel'
+    template_name = 'student/utility/delete.html'  # New template path
+    success_url = reverse_lazy('student_utility_list') # New URL name
+    context_object_name = 'utility'
+
+    def form_valid(self, form):
+        # Add a success message before deleting the object.
+        messages.success(self.request, f"Utility '{self.object.name}' was deleted successfully.")
+        return super().form_valid(form)
+
+
 class StudentSettingDetailView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = 'student.view_studentsettingmodel'
     template_name = 'student/setting/detail.html'
@@ -604,6 +692,7 @@ class StudentDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView)
         can_add_more = context['fingerprint_list'].count() < max_fingerprints
 
         context['can_add_more'] = can_add_more
+        context['utility_list'] = UtilityModel.objects.all()
         context['max_fingerprints'] = max_fingerprints
 
         return context

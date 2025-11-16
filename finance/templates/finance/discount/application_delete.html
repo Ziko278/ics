@@ -1,0 +1,32 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Discount Application</h4>
+            
+            <p>You are about to permanently delete the following discount rate lock:</p>
+            <h5 class="text-center my-3"><em>"{{ application.discount.title|title }} ({{ application.session.name }} - {{ application.term.name }})"</em></h5>
+
+            {% if application.is_protected %}
+                 <div class="alert alert-danger">
+                    <strong>Warning:</strong> This application is currently linked to one or more student invoice records. Deleting it is not allowed as it would corrupt your financial records.
+                </div>
+            {% else %}
+                <div class="alert alert-warning">
+                    <strong>Warning:</strong> This action is permanent and cannot be undone.
+                </div>
+            {% endif %}
+            
+            <p>Are you sure you want to proceed?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger" {% if application.is_protected %}disabled{% endif %}>Yes, Delete</button>
+                <a class="btn btn-secondary" href="{% url 'finance_discount_application_list' %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

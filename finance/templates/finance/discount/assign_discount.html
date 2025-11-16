@@ -1,0 +1,42 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Assign Discount to Student</h5>
+        
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="alert alert-info">
+                    <strong>Student:</strong> {{ student.first_name }} {{ student.last_name }} ({{ student.registration_number }})<br>
+                    <strong>Class:</strong> {{ student.student_class.name }} {{ student.class_section.name }}
+                </div>
+            </div>
+        </div>
+        
+        <form method="post">
+            {% csrf_token %}
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating mb-3">
+                        {{ form.discount_application }}
+                        <label>{{ form.discount_application.label }}</label>
+                        {% if form.discount_application.errors %}
+                            <div class="text-danger">{{ form.discount_application.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-primary">Apply Discount</button>
+                    <a href="{% url 'finance_student_dashboard' student.pk %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

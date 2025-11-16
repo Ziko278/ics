@@ -62,10 +62,11 @@
             <table class="table table-hover">
                 <thead>
                 <tr>
-                    <th>Invoice #</th>
                     <th>Student</th>
                     <th>Class</th>
                     <th>Total Amount</th>
+                    <th>Discount</th>
+                    <th>After Discount</th>
                     <th>Amount Paid</th>
                     <th>Balance Due</th>
                     <th>Status</th>
@@ -75,10 +76,11 @@
                 <tbody>
                 {% for invoice in invoices %}
                 <tr>
-                    <th scope="row"><a href="{% url 'finance_invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></th>
                     <td>{{ invoice.student|title }}</td>
                     <td>{{ invoice.student.student_class.name|title }} {{ invoice.student.class_section.name|title }}</td>
                     <td>₦{{ invoice.total_amount|floatformat:2|intcomma }}</td>
+                    <td class="text-success">₦{{ invoice.total_discount|floatformat:2|intcomma }}</td>
+                    <td>₦{{ invoice.amount_after_discount|floatformat:2|intcomma }}</td>
                     <td>₦{{ invoice.amount_paid|floatformat:2|intcomma }}</td>
                     <td>
                         {% if invoice.balance > 0 %}

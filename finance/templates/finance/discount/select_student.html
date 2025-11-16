@@ -5,7 +5,7 @@
 
 <div class="card">
     <div class="card-body">
-        <h5 class="card-title">Search Student to Manage Fees</h5>
+        <h5 class="card-title">Search Student to Apply Discount</h5>
         <div class="row g-3">
             <div class="col-md-3">
                 <div class="form-floating">
@@ -61,7 +61,7 @@
                           <p id="student-reg-no" class="mb-1 text-muted"></p>
                           <p id="student-class" class="mb-1 text-muted"></p>
                           <p id="student-gender" class="mb-2 text-muted"></p>
-                          <a id="proceed-button" class="btn btn-primary" href="#">Manage Fees & Payments</a>
+                          <a id="proceed-button" class="btn btn-primary" href="#">Apply Discount</a>
                         </div>
                     </div>
                 </div>
@@ -178,7 +178,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // IMPORTANT: Update this URL once the student financial dashboard view is created
-        proceedButton.href = `/admin/finance/student/${studentId}/dashboard/`; // Placeholder URL
+        proceedButton.href = `/admin/finance/discount/student/${studentId}/assign/`; // Placeholder URL
         detailPanel.style.display = 'block';
     }
 

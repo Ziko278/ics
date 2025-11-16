@@ -7,8 +7,9 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
-from django.db.models import Q, Sum, Avg, F, DecimalField, Value, Count
+from django.db.models import Q, Sum, Avg, F, DecimalField, Value, Count, Prefetch
 from django.db.models.functions import TruncMonth, Coalesce, Concat
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponse
@@ -32,12 +33,14 @@ from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePa
     FeeMasterModel, InvoiceGenerationJob, InvoiceModel, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryRecord, SalaryAdvance, \
     SalaryStructure, StudentFundingModel, InvoiceItemModel, AdvanceSettlementModel, \
-    SchoolBankDetail, StaffLoan, StaffLoanRepayment, StaffFundingModel
+    SchoolBankDetail, StaffLoan, StaffLoanRepayment, StaffFundingModel, DiscountModel, DiscountApplicationModel, \
+    StudentDiscountModel
 from .forms import FinanceSettingForm, SupplierPaymentForm, PurchaseAdvancePaymentForm, FeeForm, FeeGroupForm, \
     InvoiceGenerationForm, FeePaymentForm, ExpenseCategoryForm, ExpenseForm, IncomeCategoryForm, \
     IncomeForm, TermlyFeeAmountFormSet, FeeMasterCreateForm, BulkPaymentForm, StaffBankDetailForm, PaysheetRowForm, \
     SalaryAdvanceForm, SalaryStructureForm, StudentFundingForm, SchoolBankDetailForm, \
-    StaffLoanForm, StaffLoanRepaymentForm, StaffFundingForm
+    StaffLoanForm, StaffLoanRepaymentForm, StaffFundingForm, DiscountForm, DiscountApplicationForm, \
+    StudentDiscountAssignForm
 from finance.tasks import generate_invoices_task
 from pytz import timezone as pytz_timezone
 
@@ -846,6 +849,11 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
         context['current_invoice'] = current_invoice
         context['invoice_history'] = student.invoices.order_by('-session__start_year', '-term__order')
         context['all_payments'] = FeePaymentModel.objects.filter(invoice__student=student).order_by('-date')
+        # Add discount information
+        if current_invoice:
+            context['invoice_discounts'] = StudentDiscountModel.objects.filter(
+                invoice_item__invoice=current_invoice
+            ).select_related('discount_application__discount')
 
         # Pass the form for payment details, bound to the current invoice
         if current_invoice:
@@ -903,6 +911,26 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
                     for item, amount in item_payment_data.items():
                         item.amount_paid += amount
                         item.save(update_fields=['amount_paid'])
+
+                        # Handle parent-bound fees
+                        if item.fee_master.fee.parent_bound:
+                            siblings = student.parent.wards.exclude(pk=student.pk)
+                            for sibling in siblings:
+                                try:
+                                    sibling_invoice = InvoiceModel.objects.get(
+                                        student=sibling,
+                                        session=invoice.session,
+                                        term=invoice.term
+                                    )
+                                    sibling_item = InvoiceItemModel.objects.get(
+                                        invoice=sibling_invoice,
+                                        fee_master=item.fee_master
+                                    )
+                                    sibling_item.paid_by_sibling = student
+                                    sibling_item.amount_paid = sibling_item.amount
+                                    sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
+                                except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
+                                    continue
 
                         # Now, create the single FeePaymentModel using the *cleaned form data*
                     FeePaymentModel.objects.create(
@@ -1060,6 +1088,27 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
                         confirmed_by=self.request.user
                     )
 
+                    # Handle parent-bound fees for this invoice
+                    for item in invoice.items.all():
+                        if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount:
+                            siblings = student.parent.wards.exclude(pk=student.pk)
+                            for sibling in siblings:
+                                try:
+                                    sibling_invoice = InvoiceModel.objects.get(
+                                        student=sibling,
+                                        session=invoice.session,
+                                        term=invoice.term
+                                    )
+                                    sibling_item = InvoiceItemModel.objects.get(
+                                        invoice=sibling_invoice,
+                                        fee_master=item.fee_master
+                                    )
+                                    sibling_item.paid_by_sibling = student
+                                    sibling_item.amount_paid = sibling_item.amount
+                                    sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
+                                except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
+                                    continue
+
                     # Refresh invoice from DB before checking balance again
                     invoice.refresh_from_db()
                     if invoice.balance <= Decimal('0.01'):
@@ -1073,6 +1122,70 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
         messages.success(self.request,
                          f"Bulk payment of ₦{total_amount_paid} allocated successfully across outstanding invoices.")
         return redirect('finance_student_dashboard', pk=student.pk)
+
+
+@login_required
+@permission_required('finance.change_feepaymentmodel', raise_exception=True)
+def confirm_fee_payment_view(request, payment_id):
+    """
+    Confirms a pending fee payment uploaded by parent.
+    """
+    payment = get_object_or_404(FeePaymentModel, pk=payment_id)
+
+    if payment.status != FeePaymentModel.PaymentStatus.PENDING:
+        messages.warning(request, "This payment has already been processed.")
+        return redirect('pending_fee_payment_list')  # Update with your actual URL name
+
+    with transaction.atomic():
+        # Confirm the payment
+        payment.status = FeePaymentModel.PaymentStatus.CONFIRMED
+        payment.confirmed_by = request.user
+        payment.save(update_fields=['status', 'confirmed_by'])
+
+        # Apply payment to invoice items
+        invoice = payment.invoice
+        amount_to_allocate = payment.amount
+
+        for item in invoice.items.filter(amount_paid__lt=F('amount')).order_by('id'):
+            if amount_to_allocate <= 0:
+                break
+
+            payable = min(item.balance, amount_to_allocate)
+            item.amount_paid += payable
+            item.save(update_fields=['amount_paid'])
+            amount_to_allocate -= payable
+
+            # Handle parent-bound fees
+            if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount:
+                student = invoice.student
+                siblings = student.parent.wards.exclude(pk=student.pk)
+                for sibling in siblings:
+                    try:
+                        sibling_invoice = InvoiceModel.objects.get(
+                            student=sibling,
+                            session=invoice.session,
+                            term=invoice.term
+                        )
+                        sibling_item = InvoiceItemModel.objects.get(
+                            invoice=sibling_invoice,
+                            fee_master=item.fee_master
+                        )
+                        sibling_item.paid_by_sibling = student
+                        sibling_item.amount_paid = sibling_item.amount
+                        sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
+                    except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
+                        continue
+
+        # Update invoice status
+        invoice.refresh_from_db()
+        if invoice.balance <= Decimal('0.01'):
+            invoice.status = InvoiceModel.Status.PAID
+        else:
+            invoice.status = InvoiceModel.Status.PARTIALLY_PAID
+        invoice.save(update_fields=['status'])
+
+    messages.success(request, f"Payment of ₦{payment.amount:,.2f} confirmed successfully.")
+    return redirect('pending_fee_payment_list')
 
 
 class FeePaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, View):
@@ -2008,14 +2121,14 @@ def payroll_dashboard_view(request):
 
 
 class DepositPaymentSelectStudentView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
-    template_name = 'finance/funding/select_student.html'
+    template_name = 'finance/discount/select_student.html'
     permission_required = 'finance.add_studentfundingmodel'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['class_list'] = ClassesModel.objects.all().order_by('name')
         student_list = StudentModel.objects.all()
-        context['student_list'] = serializers.serialize("json", student_list)
+        context['student_list_json'] = serializers.serialize("json", student_list)
         return context
 
 
@@ -2726,9 +2839,17 @@ def fee_dashboard(request):
     invoices = InvoiceModel.objects.filter(invoice_filter)
 
     # === KEY METRICS ===
-    total_expected = invoices.aggregate(
+    # Calculate total expected after discounts
+    total_expected_before_discount = invoices.aggregate(
         total=Sum('items__amount')
     )['total'] or Decimal('0.00')
+
+    # Calculate total discounts
+    total_discounts = StudentDiscountModel.objects.filter(
+        invoice_item__invoice__in=invoices
+    ).aggregate(total=Sum('amount_discounted'))['total'] or Decimal('0.00')
+
+    total_expected = total_expected_before_discount - total_discounts
 
     total_paid = FeePaymentModel.objects.filter(
         invoice__in=invoices,
@@ -2877,6 +2998,8 @@ def fee_dashboard(request):
 
         # Key metrics
         'total_expected': total_expected,
+        'total_discounts': total_discounts,  # Add this line
+        'total_expected_before_discount': total_expected_before_discount,  # Add this line
         'total_paid': total_paid,
         'total_pending': total_pending,
         'total_funding': total_funding,
@@ -3271,3 +3394,401 @@ def my_salary_profile_view(request):
     }
     return render(request, 'finance/staff_profile/salary_profile.html', context)
 
+
+# ===================================================================
+# Discount Model Views (Blueprint Interface)
+# ===================================================================
+
+import json  # Make sure to import json
+
+
+class DiscountListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = DiscountModel
+    permission_required = 'finance.view_discountmodel'
+    template_name = 'finance/discount/index.html'
+    context_object_name = 'discounts'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if 'form' not in context:
+            context['form'] = DiscountForm()
+
+        # Add the application form
+        if 'application_form' not in context:
+            context['application_form'] = DiscountApplicationForm()
+
+        # --- ADD THIS ---
+        # 3. Create a data map for JS autofill
+        discount_data = {
+            d.pk: {'type': d.discount_type, 'amount': d.amount or 0.00}
+            for d in DiscountModel.objects.all()
+        }
+        # Pass the data as a JSON string
+        context['discount_data_json'] = json.dumps(
+            discount_data,
+            cls=DjangoJSONEncoder
+        )
+        # ----------------
+
+        return context
+
+class DiscountCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
+    model = DiscountModel
+    permission_required = 'finance.add_discountmodel'
+    form_class = DiscountForm
+
+    def get_success_url(self):
+        return reverse('finance_discount_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, "Discount Blueprint created successfully.")
+        form.instance.created_by = self.request.user
+        return super().form_valid(form)
+
+    def dispatch(self, request, *args, **kwargs):
+        # Redirect GET requests to the list view for modal interface pattern
+        if request.method == 'GET':
+            return redirect(self.get_success_url())
+        return super().dispatch(request, *args, **kwargs)
+
+
+class DiscountUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
+    model = DiscountModel
+    permission_required = 'finance.change_discountmodel'
+    form_class = DiscountForm
+
+    def get_success_url(self):
+        return reverse('finance_discount_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, "Discount Blueprint updated successfully.")
+        form.instance.updated_by = self.request.user
+        return super().form_valid(form)
+
+    def dispatch(self, request, *args, **kwargs):
+        # Redirect GET requests to the list view for modal interface pattern
+        if request.method == 'GET':
+            return redirect(self.get_success_url())
+        return super().dispatch(request, *args, **kwargs)
+
+
+class DiscountDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = DiscountModel
+    permission_required = 'finance.delete_discountmodel'
+    template_name = 'finance/discount/delete.html'
+    success_url = reverse_lazy('finance_discount_list')
+    context_object_name = 'discount'
+
+    def form_valid(self, form):
+        # We need custom logic here to prevent deletion if the is_protected flag is True
+        if self.object.is_protected:
+            messages.error(self.request, f"Cannot delete Discount '{self.object.title}'. It is linked to active discount applications.")
+            return redirect(self.success_url)
+
+        messages.success(self.request, f"Discount Blueprint '{self.object.title}' deleted successfully.")
+        return super().form_valid(form)
+
+
+# ===================================================================
+# Discount Application Views (Context/Rate Locking Interface)
+# ===================================================================
+
+class DiscountApplicationCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
+    model = DiscountApplicationModel
+    permission_required = 'finance.add_discountapplicationmodel'
+    form_class = DiscountApplicationForm
+
+    def get_success_url(self):
+        # Assuming we redirect back to the list of Discount Blueprints
+        return reverse('finance_discount_application_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, "Discount rate locked for the specified term.")
+        form.instance.created_by = self.request.user
+        return super().form_valid(form)
+
+    def dispatch(self, request, *args, **kwargs):
+        # Redirect GET requests to the list view for modal interface pattern
+        if request.method == 'GET':
+            return redirect(self.get_success_url())
+        return super().dispatch(request, *args, **kwargs)
+
+
+class DiscountApplicationUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
+    model = DiscountApplicationModel
+    permission_required = 'finance.change_discountapplicationmodel'
+    form_class = DiscountApplicationForm
+    pk_url_kwarg = 'application_pk' # Use a distinct keyword argument to prevent clashes
+
+    def get_success_url(self):
+        return reverse('finance_discount_application_list')
+
+    def form_valid(self, form):
+        # Note: The model's save() method prevents changing discount_type
+        messages.success(self.request, "Discount rate and term updated successfully.")
+        form.instance.updated_by = self.request.user
+        return super().form_valid(form)
+
+    def dispatch(self, request, *args, **kwargs):
+        # Redirect GET requests to the list view for modal interface pattern
+        if request.method == 'GET':
+            return redirect(self.get_success_url())
+        return super().dispatch(request, *args, **kwargs)
+
+
+class DiscountApplicationDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = DiscountApplicationModel
+    permission_required = 'finance.delete_discountapplicationmodel'
+    template_name = 'finance/discount/application_delete.html'
+    success_url = reverse_lazy('finance_discount_application_list')
+    context_object_name = 'application'
+    pk_url_kwarg = 'application_pk' # Use a distinct keyword argument
+
+    def form_valid(self, form):
+        # We need custom logic here to prevent deletion if the is_protected flag is True
+        if self.object.is_protected:
+            messages.error(self.request, f"Cannot delete Discount Application for '{self.object.discount.title}' as it is linked to active student records.")
+            return redirect(self.success_url)
+
+        messages.success(self.request, f"Discount Application for '{self.object.discount.title}' deleted successfully.")
+        return super().form_valid(form)
+
+
+# ===================================================================
+# Discount Application List View (Optional Dedicated Page)
+# ===================================================================
+
+
+class DiscountApplicationListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = DiscountApplicationModel
+    permission_required = 'finance.view_discountapplicationmodel'
+    template_name = 'finance/discount/application_list.html'
+    context_object_name = 'applications'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # The form will have session/term defaults from its __init__
+        if 'form' not in context:
+            context['form'] = DiscountApplicationForm()
+
+        # --- ADD THIS LOGIC ---
+        # Create a data map for JS autofill
+        discount_data = {
+            d.pk: {'type': d.discount_type, 'amount': d.amount or 0.00}
+            for d in DiscountModel.objects.all()
+        }
+        # Pass the data as a JSON string, using Django's encoder for Decimals
+        context['discount_data_json'] = json.dumps(
+            discount_data,
+            cls=DjangoJSONEncoder
+        )
+        # ---------------------
+
+        return context
+
+
+class DiscountSelectStudentView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
+    template_name = 'finance/discount/select_student.html'
+    permission_required = 'finance.add_feemodel'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['class_list'] = ClassesModel.objects.all().order_by('name')
+
+        student_list = StudentModel.objects.all()
+        context['student_list_json'] = serializers.serialize("json", student_list)
+
+        # Build class_list_json with sections (adapt related name if necessary)
+        classes_data = []
+        for cls in context['class_list']:
+            # try common related names for the sections relationship, adapt if different
+            if hasattr(cls, 'section'):
+                secs_qs = cls.section.all()
+            else:
+                secs_qs = []
+
+            sections = [{'id': s.id, 'name': getattr(s, 'name', str(s))} for s in secs_qs]
+            classes_data.append({'id': cls.id, 'name': cls.name, 'sections': sections})
+
+        context['class_list_json'] = json.dumps(classes_data)
+        return context
+
+
+class StudentDiscountAssignView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
+    """Assign a discount application to a student for specific invoice items."""
+
+    permission_required = 'finance.add_studentdiscountmodel'
+    template_name = 'finance/discount/assign_discount.html'
+    form_class = StudentDiscountAssignForm
+
+    def get_student(self):
+        return get_object_or_404(StudentModel, pk=self.kwargs['student_pk'])
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['student'] = self.get_student()
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        student = self.get_student()
+        context['student'] = student
+
+        # Get available discount applications for current/specified term
+        school_setting = SchoolSettingModel.objects.first()
+        context['available_discounts'] = DiscountApplicationModel.objects.filter(
+            Q(session=school_setting.session, term=school_setting.term) |
+            Q(session__isnull=True, term__isnull=True)  # Global discounts
+        ).select_related('discount')
+
+        return context
+
+    def form_valid(self, form):
+        student = self.get_student()
+        discount_application = form.cleaned_data['discount_application']
+        discount = discount_application.discount
+
+        # 1. Check if student's class is eligible
+        if discount.applicable_classes.exists() and student.student_class not in discount.applicable_classes.all():
+            messages.error(self.request,
+                           f"Student's class ({student.student_class.name}) is not eligible for this discount.")
+            return self.form_invalid(form)
+
+        # 2. Check if discount has applicable fees defined
+        if not discount.applicable_fees.exists():
+            messages.error(self.request, "This discount has no fees defined. Please configure the discount first.")
+            return self.form_invalid(form)
+
+        # 3. Get student's invoice for the discount's session/term
+        try:
+            invoice = InvoiceModel.objects.get(
+                student=student,
+                session=discount_application.session,
+                term=discount_application.term
+            )
+        except InvoiceModel.DoesNotExist:
+            messages.error(self.request,
+                           f"No invoice found for {discount_application.session}/{discount_application.term.name}.")
+            return self.form_invalid(form)
+
+        # 4. Find applicable invoice items
+        applicable_fees = discount.applicable_fees.all()
+        applicable_items = invoice.items.filter(
+            fee_master__fee__in=applicable_fees
+        )
+
+        if not applicable_items.exists():
+            messages.error(self.request,
+                           "No matching fees found on student's invoice for this discount.")
+            return self.form_invalid(form)
+
+        # 5. Apply discount to each applicable item
+        with transaction.atomic():
+            total_discounted = Decimal('0.00')
+            items_processed = 0
+
+            for item in applicable_items:
+                # Check if discount already applied to this item
+                if StudentDiscountModel.objects.filter(
+                        student=student,
+                        discount_application=discount_application,
+                        invoice_item=item
+                ).exists():
+                    continue  # Skip if already applied
+
+                # Calculate discount amount
+                if discount_application.discount_type == DiscountModel.DiscountType.PERCENTAGE:
+                    discount_amount = (item.amount * discount_application.discount_amount) / Decimal('100')
+                else:  # FIXED
+                    # For fixed amount, divide equally among applicable items
+                    discount_amount = discount_application.discount_amount / applicable_items.count()
+
+                # Round to 2 decimal places
+                discount_amount = discount_amount.quantize(Decimal('0.01'))
+
+                # Create discount record
+                StudentDiscountModel.objects.create(
+                    student=student,
+                    discount_application=discount_application,
+                    invoice_item=item,
+                    amount_discounted=discount_amount
+                )
+
+                total_discounted += discount_amount
+                items_processed += 1
+
+            if items_processed == 0:
+                messages.warning(self.request, "This discount has already been applied to all eligible fees.")
+            else:
+                messages.success(self.request,
+                                 f"Discount applied successfully! ₦{total_discounted:,.2f} discounted across {items_processed} fee(s).")
+
+        return redirect('finance_student_dashboard', pk=student.pk)
+
+
+class StudentDiscountIndexView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """List all student discounts with filtering by session, term, and student name."""
+
+    permission_required = 'finance.view_studentdiscountmodel'
+    template_name = 'finance/discount/discount_index.html'
+    context_object_name = 'discounts'
+    paginate_by = 50
+
+    def get_queryset(self):
+        queryset = StudentDiscountModel.objects.select_related(
+            'student',
+            'discount_application__discount',
+            'discount_application__session',
+            'discount_application__term',
+            'invoice_item__invoice'
+        ).order_by('-created_at')
+
+        # Filter by session
+        session_id = self.request.GET.get('session')
+        if session_id:
+            queryset = queryset.filter(discount_application__session_id=session_id)
+
+        # Filter by term
+        term_id = self.request.GET.get('term')
+        if term_id:
+            queryset = queryset.filter(discount_application__term_id=term_id)
+
+        # Filter by student name
+        student_name = self.request.GET.get('student_name')
+        if student_name:
+            queryset = queryset.filter(
+                Q(student__first_name__icontains=student_name) |
+                Q(student__last_name__icontains=student_name) |
+                Q(student__registration_number__icontains=student_name)
+            )
+
+        # Filter by discount
+        discount_id = self.request.GET.get('discount')
+        if discount_id:
+            queryset = queryset.filter(discount_application__discount_id=discount_id)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Provide filter options
+        context['sessions'] = SessionModel.objects.all().order_by('-start_year')
+        context['terms'] = TermModel.objects.all().order_by('order')
+        context['discount_list'] = DiscountModel.objects.all().order_by('title')
+
+        # Preserve filter values
+        context['selected_session'] = self.request.GET.get('session', '')
+        context['selected_term'] = self.request.GET.get('term', '')
+        context['selected_discount'] = self.request.GET.get('discount', '')
+        context['student_name'] = self.request.GET.get('student_name', '')
+
+        # Calculate summary statistics
+        queryset = self.get_queryset()
+        context['total_discounts'] = queryset.count()
+        context['total_amount_discounted'] = queryset.aggregate(
+            total=Sum('amount_discounted')
+        )['total'] or Decimal('0.00')
+
+        return context

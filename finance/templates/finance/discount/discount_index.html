@@ -1,0 +1,184 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+{% block 'main' %}
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="card-title mb-0">Student Discounts</h5>
+            <a href="{% url 'finance_discount_select_student' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Assign New Discount
+            </a>
+        </div>
+        
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">Total Discounts Applied</h6>
+                        <h3>{{ total_discounts }}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">Total Amount Discounted</h6>
+                        <h3>₦{{ total_amount_discounted|floatformat:2|intcomma }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Filter Form -->
+        <form method="get" class="mb-4">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <div class="form-floating">
+                        <select name="session" class="form-select" id="id_session">
+                            <option value="">All Sessions</option>
+                            {% for session in sessions %}
+                            <option value="{{ session.id }}" {% if selected_session == session.id|stringformat:"s" %}selected{% endif %}>
+                                {{ session }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <label for="id_session">Session</label>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="form-floating">
+                        <select name="term" class="form-select" id="id_term">
+                            <option value="">All Quarters</option>
+                            {% for term in terms %}
+                            <option value="{{ term.id }}" {% if selected_term == term.id|stringformat:"s" %}selected{% endif %}>
+                                {{ term.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <label for="id_term">Quarter</label>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="form-floating">
+                        <select name="discount" class="form-select" id="id_discount">
+                            <option value="">All Discounts</option>
+                            {% for discount in discount_list %}
+                            <option value="{{ discount.id }}" {% if selected_discount == discount.id|stringformat:"s" %}selected{% endif %}>
+                                {{ discount.title }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <label for="id_discount">Discount Type</label>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="form-floating">
+                        <input type="text" name="student_name" class="form-control" id="id_student_name" 
+                               placeholder="Student Name" value="{{ student_name }}">
+                        <label for="id_student_name">Student Name/Reg No</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mt-3">
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-funnel"></i> Apply Filters
+                    </button>
+                    <a href="{% url 'finance_discount_index' %}" class="btn btn-secondary">
+                        <i class="bi bi-x-circle"></i> Clear Filters
+                    </a>
+                </div>
+            </div>
+        </form>
+        
+        <!-- Discount Table -->
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Reg No</th>
+                        <th>Discount</th>
+                        <th>Session/Quarter</th>
+                        <th>Fee Item</th>
+                        <th>Amount Discounted</th>
+                        <th>Applied On</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for discount in discounts %}
+                    <tr>
+                        <td>{{ discount.student.first_name }} {{ discount.student.last_name }}</td>
+                        <td>{{ discount.student.registration_number }}</td>
+                        <td>
+                            {{ discount.discount_application.discount.title }}<br>
+                            <small class="text-muted">
+                                {% if discount.discount_application.discount_type == 'percentage' %}
+                                    {{ discount.discount_application.discount_amount }}%
+                                {% else %}
+                                    ₦{{ discount.discount_application.discount_amount|floatformat:2|intcomma }}
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td>
+                            {{ discount.discount_application.session }}<br>
+                            <small class="text-muted">{{ discount.discount_application.term.name }}</small>
+                        </td>
+                        <td>{{ discount.invoice_item.description }}</td>
+                        <td><strong>₦{{ discount.amount_discounted|floatformat:2|intcomma }}</strong></td>
+                        <td>{{ discount.created_at|date:"d M Y" }}</td>
+                        <td>
+                            <a href="{% url 'finance_student_dashboard' discount.student.pk %}" 
+                               class="btn btn-sm btn-outline-primary" title="View Student">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted">No discounts found matching your criteria.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if is_paginated %}
+        <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1{% if selected_session %}&session={{ selected_session }}{% endif %}{% if selected_term %}&term={{ selected_term }}{% endif %}{% if selected_discount %}&discount={{ selected_discount }}{% endif %}{% if student_name %}&student_name={{ student_name }}{% endif %}">First</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_session %}&session={{ selected_session }}{% endif %}{% if selected_term %}&term={{ selected_term }}{% endif %}{% if selected_discount %}&discount={{ selected_discount }}{% endif %}{% if student_name %}&student_name={{ student_name }}{% endif %}">Previous</a>
+                </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_session %}&session={{ selected_session }}{% endif %}{% if selected_term %}&term={{ selected_term }}{% endif %}{% if selected_discount %}&discount={{ selected_discount }}{% endif %}{% if student_name %}&student_name={{ student_name }}{% endif %}">Next</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_session %}&session={{ selected_session }}{% endif %}{% if selected_term %}&term={{ selected_term }}{% endif %}{% if selected_discount %}&discount={{ selected_discount }}{% endif %}{% if student_name %}&student_name={{ student_name }}{% endif %}">Last</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

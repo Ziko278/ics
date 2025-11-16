@@ -14,7 +14,7 @@
 </div>
 
 <div class="row">
-    <div class="col-lg-5">
+    <div class="col-lg-12">
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">Invoice Summary <a href="{% url 'finance_student_dashboard' invoice.student.pk %}" class="btn btn-sm btn-primary">Pay Now</a> </h5>
@@ -26,10 +26,16 @@
                         <strong>Class:</strong> <span>{{ invoice.student.student_class.name }}</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
-                        <strong>Session/Term:</strong> <span>{{ invoice.session }} / {{ invoice.term.name|title }}</span>
+                        <strong>Session/Quarter:</strong> <span>{{ invoice.session }} / {{ invoice.term.name|title }}</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
                         <strong>Invoice Total:</strong> <span>₦{{ invoice.total_amount|floatformat:2|intcomma }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between text-success">
+                        <strong>Total Discount:</strong> <span>₦{{ invoice.total_discount|floatformat:2|intcomma }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <strong>After Discount:</strong> <span>₦{{ invoice.amount_after_discount|floatformat:2|intcomma }}</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between text-success">
                         <strong>Amount Paid:</strong> <span>₦{{ invoice.amount_paid|floatformat:2|intcomma }}</span>
@@ -51,7 +57,7 @@
         </div>
     </div>
 
-    <div class="col-lg-7">
+    <div class="col-lg-12">
         <div class="card">
             <div class="card-body">
                  <ul class="nav nav-tabs nav-tabs-bordered">
@@ -68,6 +74,8 @@
                                     <tr>
                                         <th>Description</th>
                                         <th class="text-end">Total Billed (₦)</th>
+                                        <th class="text-end">Discount (₦)</th>
+                                        <th class="text-end">After Discount (₦)</th>
                                         <th class="text-end">Amount Paid (₦)</th>
                                         <th class="text-end">Balance Due (₦)</th>
                                     </tr>
@@ -77,6 +85,8 @@
                                     <tr>
                                         <td>{{ item.description|title }}</td>
                                         <td class="text-end">{{ item.amount|floatformat:2|intcomma }}</td>
+                                        <td class="text-end text-success">{{ item.total_discount|floatformat:2|intcomma }}</td>
+                                        <td class="text-end">{{ item.amount_after_discount|floatformat:2|intcomma }}</td>
                                         <td class="text-end text-success">{{ item.amount_paid|floatformat:2|intcomma }}</td>
                                         <td class="text-end text-danger fw-bold">{{ item.balance|floatformat:2|intcomma }}</td>
                                     </tr>
@@ -86,6 +96,8 @@
                                     <tr class="table-light fw-bold">
                                         <td class="text-end">Totals:</td>
                                         <td class="text-end">₦{{ invoice.total_amount|floatformat:2|intcomma }}</td>
+                                        <td class="text-end text-success">₦{{ invoice.total_discount|floatformat:2|intcomma }}</td>
+                                        <td class="text-end">₦{{ invoice.amount_after_discount|floatformat:2|intcomma }}</td>
                                         <td class="text-end text-success">₦{{ invoice.amount_paid|floatformat:2|intcomma }}</td>
                                         <td class="text-end text-danger">₦{{ invoice.balance|floatformat:2|intcomma }}</td>
                                     </tr>

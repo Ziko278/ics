@@ -52,30 +52,76 @@
 
             <table class="table table-bordered">
                 <tbody>
-                    <tr><th style="width: 30%;">Amount Paid</th><td><strong>NGN {{ payment.amount|floatformat:2|intcomma }}</strong></td></tr>
+                    <tr><th style="width: 30%;">Amount Paid</th><td><strong>₦{{ payment.amount|floatformat:2|intcomma }}</strong></td></tr>
                     <tr><th>Payment Method</th><td>{{ payment.get_payment_mode_display }}</td></tr>
+                    <tr><th>Bank Account</th><td>{{ payment.bank_account.bank_name }} - {{ payment.bank_account.account_number }}</td></tr>
                     <tr><th>For Invoice</th><td>{{ payment.invoice.invoice_number }} ({{ payment.invoice.session }} / {{ payment.invoice.term.name|title }})</td></tr>
                     <tr><th>Notes</th><td>{{ payment.notes|default:"-" }}</td></tr>
                 </tbody>
             </table>
 
+            <div class="card bg-light mt-4">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">Invoice Summary After This Payment</h6>
+                    <table class="table table-borderless table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <th style="width: 60%;">Invoice Total (Before Discount):</th>
+                                <td class="text-end">₦{{ payment.invoice.total_amount|floatformat:2|intcomma }}</td>
+                            </tr>
+                            <tr class="text-success">
+                                <th>Total Discount Applied:</th>
+                                <td class="text-end">-₦{{ payment.invoice.total_discount|floatformat:2|intcomma }}</td>
+                            </tr>
+                            <tr>
+                                <th>Amount After Discount:</th>
+                                <td class="text-end">₦{{ payment.invoice.amount_after_discount|floatformat:2|intcomma }}</td>
+                            </tr>
+                            <tr class="text-info">
+                                <th>Total Amount Paid (Including This Payment):</th>
+                                <td class="text-end">₦{{ payment.invoice.amount_paid|floatformat:2|intcomma }}</td>
+                            </tr>
+                            <tr class="{% if payment.invoice.balance > 0 %}text-danger{% else %}text-success{% endif %} fw-bold border-top">
+                                <th>Balance Remaining:</th>
+                                <td class="text-end fs-5">₦{{ payment.invoice.balance|floatformat:2|intcomma }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if payment.invoice.balance <= 0 %}
+            <div class="alert alert-success mt-3">
+                <i class="bi bi-check-circle-fill"></i> <strong>Invoice Fully Paid!</strong> All fees for this term have been settled. Thank you!
+            </div>
+            {% else %}
+            <div class="alert alert-warning mt-3">
+                <i class="bi bi-exclamation-triangle-fill"></i> <strong>Outstanding Balance:</strong> ₦{{ payment.invoice.balance|floatformat:2|intcomma }} remaining on this invoice.
+            </div>
+            {% endif %}
+
             <div class="row mt-5">
                 <div class="col-6 text-center">
                     <hr class="mx-auto" style="width: 80%;">
-                    <p><strong>Issued By:</strong> {{ payment.confirmed_by }}</p>
+                    <p><strong>Issued By:</strong> {{ payment.confirmed_by|default:"Finance Office" }}</p>
                 </div>
                 <div class="col-6 text-center">
                      <hr class="mx-auto" style="width: 80%;">
                     <p><strong>Signature & Stamp</strong></p>
                 </div>
             </div>
+
+            <div class="alert alert-info mt-4 small">
+                <strong>Note:</strong> This receipt confirms payment received. Please keep this for your records.
+                For full invoice details, request an invoice receipt from the finance office.
+            </div>
         </div>
 
         <div class="text-center mt-4 no-print">
             <button class="btn btn-primary" onclick="window.print();"><i class="bi bi-printer"></i> Print Receipt</button>
-            <a onclick="window.close()" class="btn btn-secondary">Go Back</a>
+            <a href="{% url 'finance_invoice_receipt' payment.invoice.pk %}" class="btn btn-info" target="_blank"><i class="bi bi-file-earmark-text"></i> View Full Invoice</a>
+            <a onclick="window.close()" class="btn btn-secondary">Close</a>
         </div>
     </div>
 </body>
 </html>
-

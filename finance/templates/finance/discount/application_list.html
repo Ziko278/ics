@@ -1,0 +1,189 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+{% load humanize %}
+
+<div class="col-12">
+    <div class="card overflow-auto">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title">Discount Applications (Rate Locks)</h5>
+                <div>
+                    <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#appHelperModal"><b><i class="bi bi-question-circle"></i> Helper</b></button>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addAppModal">
+                        <i class="bi bi-plus-circle"></i> Add Discount Application
+                    </button>
+                </div>
+            </div>
+            <p class="card-description">
+                Manage the specific rates (e.g., "10%") locked for discounts in specific Quarter.
+            </p>
+
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Blueprint</th>
+                    <th>Session</th>
+                    <th>Quarter</th>
+                    <th>Type</th>
+                    <th>Locked Rate/Amount</th>
+                    <th class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for app in applications %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ app.discount.title|title }}</td>
+                    <td>{{ app.session }}</td>
+                    <td>{{ app.term.name }}</td>
+                    <td>{{ app.get_discount_type_display }}</td>
+                    <td>{{ app.discount_amount }}</td>
+
+                    <td class="text-center">
+<!--                        <button title="Edit Rate Lock" type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editAppModal{{ app.pk }}"><i class="bi bi-pencil-square"></i></button>-->
+<!--                        -->
+                        <a title="Delete Rate Lock" href="{% url 'finance_discount_application_delete' app.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% if not applications %}
+                 <div class="alert alert-secondary text-center" role="alert">
+                    No discount applications (rate locks) have been created yet.
+                 </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="appHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><b><i class="bi bi-info-circle me-2"></i>Rate Lock Helper</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p><strong>Discount Applications (Rate Locks)</strong> are the most important part of the discount system.</p>
+                <p>They take a "Blueprint" (e.g., "Staff Discount") and "lock" a rate (e.g., 15%) to a specific "Quarter" (e.g., "First Quarter 2025").</p>
+                <div class="alert alert-info">
+                    This ensures that even if you change the discount blueprint's default rate next year, all past invoices remain historically accurate with the rate that was locked for that Quarter.
+                </div>
+            </div>
+             <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+        </div>
+    </div>
+</div>
+
+<form method="POST" action="{% url 'finance_discount_application_create' %}" id="addAppForm">
+    {% csrf_token %}
+    <div class="modal fade" id="addAppModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><b>Add New Discount Rate Lock</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <p class="small text-muted">This locks a discount's rate (e.g., 10%) for a specific session/Quarter. If you leave Session/Quarter blank, the *current active* ones will be used.</p>
+                    <div class="row g-3">
+                        <div class="col-12"><label class="form-label">Discount Blueprint</label>{{ form.discount }}</div>
+                        <div class="col-md-6"><label class="form-label">Session (Optional)</label>{{ form.session }}</div>
+                        <div class="col-md-6"><label class="form-label">Quarter (Optional)</label>{{ form.term }}</div>
+                        <div class="col-md-6"><label class="form-label">Discount Type</label>{{ form.discount_type }}</div>
+                        <div class="col-md-6"><label class="form-label">Locked Rate / Amount</label>{{ form.discount_amount }}</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Rate Lock</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+{% for app in applications %}
+<form method="POST" action="{% url 'finance_discount_application_update' app.pk %}">
+    {% csrf_token %}
+    <div class="modal fade" id="editAppModal{{ app.pk }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><b>Edit Discount Rate Lock</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                     <div class="row g-3">
+                        <div class="col-12"><label class="form-label">Discount Blueprint (Locked)</label>
+                            <input type="text" value="{{ app.discount.title|title }}" class="form-control" disabled>
+                        </div>
+                        <div class="col-md-6"><label class="form-label">Session</label>
+                             <select name="session" class="form-select">
+                                 <option value="">---------</option>
+                                {% for session in form.fields.session.queryset %}
+                                <option value="{{ session.pk }}" {% if app.session.pk == session.pk %}selected{% endif %}>{{ session|title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                         <div class="col-md-6"><label class="form-label">Quarter</label>
+                             <select name="term" class="form-select">
+                                 <option value="">---------</option>
+                                {% for term in form.fields.term.queryset %}
+                                <option value="{{ term.pk }}" {% if app.term.pk == term.pk %}selected{% endif %}>{{ term.name|title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6"><label class="form-label">Discount Type (Locked)</label>
+                            <input type="text" value="{{ app.get_discount_type_display }}" class="form-control" disabled>
+                        </div>
+                        <div class="col-md-6"><label class="form-label">Locked Rate / Amount</label>
+                            <input type="number" step="0.01" name="discount_amount" value="{{ app.discount_amount }}" class="form-control" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endfor %}
+
+<script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+<script>
+$(document).ready(function(){
+    // 1. Parse the discount data from the view
+    const discountData = {{ discount_data_json|safe }};
+
+    // 2. Get references to THIS page's "Add Application" modal form fields
+    const $appForm = $('#addAppModal'); // Targets this page's modal
+    const $discountSelect = $appForm.find('#id_app_discount');
+    const $discountTypeSelect = $appForm.find('#id_app_discount_type');
+    const $discountAmountInput = $appForm.find('#id_app_discount_amount');
+
+    // 3. Create the function to autofill fields
+    function updateApplicationForm() {
+        const selectedDiscountId = $discountSelect.val();
+
+        if (selectedDiscountId && discountData[selectedDiscountId]) {
+            const data = discountData[selectedDiscountId];
+
+            // Autofill 'discount_type'
+            // We must re-enable it to set the value, then disable it again.
+            $discountTypeSelect.val(data.type);
+
+            // Autofill 'discount_amount' (this one remains editable)
+            $discountAmountInput.val(data.amount);
+
+        } else {
+            // Clear fields if "---------" is selected
+            $discountTypeSelect.val('');
+            $discountAmountInput.val('');
+        }
+    }
+
+    // 4. Attach the event listener
+    $discountSelect.on('change', updateApplicationForm);
+
+    // 5. Run on page load to set the initial state (for the default selection)
+    updateApplicationForm();
+});
+</script>
+{% endblock %}

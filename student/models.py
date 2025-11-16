@@ -8,6 +8,28 @@ from human_resource.models import StaffModel
 logger = logging.getLogger(__name__)
 
 
+class UtilityModel(models.Model):
+    """
+    Represents a school utility/service that students can subscribe to.
+    Examples: Boarding, Transport, After-School Care, etc.
+    """
+    name = models.CharField(max_length=100, unique=True,
+                            help_text="Name of the utility (e.g., Boarding, Transport)")
+    code = models.CharField(max_length=50, unique=True,
+                            help_text="Unique code for this utility (e.g., BRD, TRN)")
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = "Utility"
+        verbose_name_plural = "Utilities"
+
+    def __str__(self):
+        return self.name.upper()
+
+
 class StudentSettingModel(models.Model):
     """
     A singleton model to control settings for the Student app.
@@ -128,6 +150,12 @@ class StudentModel(models.Model):
     registration_number = models.CharField(max_length=50, blank=True, unique=True)
     gender = models.CharField(max_length=10, choices=Gender.choices)
     image = models.FileField(blank=True, null=True, upload_to='images/student_images')
+    utilities = models.ManyToManyField(
+        UtilityModel,
+        related_name='students',
+        blank=True,
+        help_text="Services the student is subscribed to (e.g., Transport, Boarding)"
+    )
 
     # NEW: Track which import batch this student came from
     import_batch_id = models.CharField(max_length=100, blank=True, null=True, db_index=True,

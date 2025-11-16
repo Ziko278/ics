@@ -262,6 +262,14 @@
                     </li>
                     {% endif %}
 
+                    {% if 'student.view_utilitymodel' in perms %}
+                    <li>
+                        <a href="{% url 'student_utility_list' %}">
+                            <i class="bi bi-circle"></i><span>Student Utilities</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
                     {% if 'student.view_studentsettingmodel' in perms %}
                     <li>
                         <a href="{% url 'setting_detail' %}">
@@ -398,6 +406,13 @@
                     </a>
                 </li>
                 {% endif %}
+                {% if 'finance.add_feepaymentmodel' in perms %}
+                <li>
+                    <a href="{% url 'finance_discount_select_student' %}">
+                        <i class="bi bi-circle"></i><span>Apply Discount</span>
+                    </a>
+                </li>
+                {% endif %}
 
                 {% if 'finance.view_feepaymentmodel' in perms %}
                 <li>
@@ -409,7 +424,12 @@
                     <a href="{% url 'finance_invoice_list' %}">
                         <i class="bi bi-circle"></i><span>Fee Invoices</span>
                     </a>
+                </li><li>
+                    <a href="{% url 'finance_discount_index' %}">
+                        <i class="bi bi-circle"></i><span>Applied Discounts</span>
+                    </a>
                 </li>
+
                 <li>
                     <a href="{% url 'fee_dashboard' %}">
                         <i class="bi bi-circle"></i><span>Fee Dashboard</span>
@@ -431,6 +451,16 @@
                 <li>
                     <a href="{% url 'finance_fee_list' %}">
                         <i class="bi bi-circle"></i><span>Fees</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_discount_application_list' %}">
+                        <i class="bi bi-circle"></i><span>Discount Application</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'finance_discount_list' %}">
+                        <i class="bi bi-circle"></i><span>Fees Discounts</span>
                     </a>
                 </li>
                 {% endif %}

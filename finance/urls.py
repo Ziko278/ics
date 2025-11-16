@@ -24,7 +24,10 @@ from finance.views import (
     StaffLoanDebtDetailView, record_staff_loan_repayment, my_salary_profile_view, DepositPaymentSelectStaffView,
     staff_deposit_payment_list_view, staff_deposit_detail_view, staff_deposit_create_view,
     staff_pending_deposit_payment_list_view, staff_confirm_payment_view, staff_decline_payment_view,
-    StaffUploadDepositView, StaffDepositHistoryView,
+    StaffUploadDepositView, StaffDepositHistoryView, confirm_fee_payment_view, DiscountListView, DiscountCreateView,
+    DiscountUpdateView, DiscountApplicationCreateView, DiscountDeleteView, DiscountApplicationUpdateView,
+    DiscountApplicationDeleteView, DiscountApplicationListView, DiscountSelectStudentView, StudentDiscountAssignView,
+    StudentDiscountIndexView,
 )
 
 urlpatterns = [
@@ -63,6 +66,20 @@ urlpatterns = [
     path('fee-groups/<int:pk>/update/', FeeGroupUpdateView.as_view(), name='finance_fee_group_update'),
     path('fee-groups/<int:pk>/delete/', FeeGroupDeleteView.as_view(), name='finance_fee_group_delete'),
 
+    path('discounts/', DiscountListView.as_view(), name='finance_discount_list'),
+    path('discounts/create/', DiscountCreateView.as_view(), name='finance_discount_create'),
+    path('discounts/<int:pk>/update/', DiscountUpdateView.as_view(), name='finance_discount_update'),
+    path('discounts/<int:pk>/delete/', DiscountDeleteView.as_view(), name='finance_discount_delete'),
+
+    path('discount-rates/create/', DiscountApplicationCreateView.as_view(), name='finance_discount_application_create'),
+    path('discount-rates/<int:application_pk>/update/', DiscountApplicationUpdateView.as_view(), name='finance_discount_application_update'),
+    path('discount-rates/<int:application_pk>/delete/', DiscountApplicationDeleteView.as_view(), name='finance_discount_application_delete'),
+    path('discount-rates/', DiscountApplicationListView.as_view(), name='finance_discount_application_list'),
+
+    path('discounts/select-student/', DiscountSelectStudentView.as_view(), name='finance_discount_select_student'),
+    path('discount/student/<int:student_pk>/assign/', StudentDiscountAssignView.as_view(), name='finance_discount_assign'),
+    path('discounts/index/', StudentDiscountIndexView.as_view(), name='finance_discount_index'),
+
     path('fee-structures/', FeeMasterListView.as_view(), name='finance_fee_master_list'),
     path('fee-structures/create/', FeeMasterCreateView.as_view(), name='finance_fee_master_create'),
     # This single URL handles both viewing the details and updating the termly prices
@@ -91,8 +108,7 @@ urlpatterns = [
     # Action URLs for individual payments
     path('finance/student-payments/<int:pk>/revert/', FeePaymentRevertView.as_view(), name='finance_fee_payment_revert'),
     path('finance/student-payments/<int:pk>/receipt/', FeePaymentReceiptView.as_view(), name='finance_fee_payment_receipt'),
-    path('finance/student-payments/<int:pk>/receipt/', FeePaymentReceiptView.as_view(), name='finance_fee_payment_receipt'),
-
+    path('fee-payments/<int:payment_id>/confirm/', confirm_fee_payment_view, name='confirm_fee_payment'),
 
     path("expense-categories/", ExpenseCategoryListView.as_view(), name="expense_category_index"),
     path("expense-categories/create/", ExpenseCategoryCreateView.as_view(), name="expense_category_create"),
@@ -146,6 +162,7 @@ urlpatterns = [
     path('finance/salary-advances/<int:pk>/', SalaryAdvanceDetailView.as_view(), name='finance_salary_advance_detail'),
     path('finance/salary-advances/<int:pk>/action/', SalaryAdvanceActionView.as_view(),
          name='finance_salary_advance_action'),
+
 
     # --- Staff Loan URLs ---
     path('finance/staff-loans/', StaffLoanListView.as_view(), name='finance_staff_loan_list'),

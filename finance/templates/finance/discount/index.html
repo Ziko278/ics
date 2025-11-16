@@ -1,0 +1,259 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+{% load humanize %}
+
+<div class="col-12">
+    <div class="card overflow-auto">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title">Discount Blueprints</h5>
+                <div>
+                    <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#discountHelperModal"><b><i class="bi bi-question-circle"></i> Helper</b></button>
+                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addDiscountAppModal">
+                        <i class="bi bi-lock"></i> Add Discount Application
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addDiscountModal">
+                        <i class="bi bi-plus-circle"></i> Add Discount
+                    </button>
+                </div>
+            </div>
+            <p class="card-description">
+                Define the discount *identity* (e.g., "Staff Discount") and its rules, such as what fees it applies to.
+            </p>
+
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Occurrence</th>
+                    <th>Default Amount</th>
+                    <th>Fees</th>
+                    <th>Classes</th>
+                    <th class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for discount in discounts %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ discount.title|title }}</td>
+                    <td>{{ discount.get_discount_type_display }}</td>
+                    <td>{{ discount.get_occurrence_display }}</td>
+                    <td>{{ discount.amount|default:"---" }}</td>
+                    <td>
+                        <ul>
+                        {% for fee in discount.applicable_fees.all %}
+                            <li>{{ fee|title }}</li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+                    <td>
+                        <ul>
+                        {% for class in discount.applicable_classes.all %}
+                            <li>{{ class|title }}</li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+
+                    <td class="text-center">
+                        <button title="Edit Blueprint" type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editDiscountModal{{ discount.pk }}"><i class="bi bi-pencil-square"></i></button>
+                        <a title="Delete Blueprint" href="{% url 'finance_discount_delete' discount.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% if not discounts %}
+                 <div class="alert alert-secondary text-center" role="alert">
+                    No discount blueprints have been added yet.
+                 </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="discountHelperModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><b><i class="bi bi-info-circle me-2"></i>Discount Blueprint Helper</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p><strong>Discount Blueprints</strong> define the *rules* and *identity* of a discount.</p>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item"><strong>Title:</strong> The name (e.g., "Sibling Discount").</li>
+                    <li class="list-group-item"><strong>Type:</strong> Whether it's a Percentage (%) or Fixed Amount (#).</li>
+                    <li class="list-group-item"><strong>Applicable Fees/Classes:</strong> Which fees or classes this discount can apply to.</li>
+                </ul>
+                <hr>
+                <p><strong>Rate Locks (Applications):</strong> To *use* a blueprint, you must create a "Rate Lock" (Application). This locks the rate (e.g., "10%") for a specific Quarter (e.g., "First Quarter 2025").</p>
+            </div>
+             <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+        </div>
+    </div>
+</div>
+
+<form method="POST" action="{% url 'finance_discount_create' %}">
+    {% csrf_token %}
+    <div class="modal fade" id="addDiscountModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><b>Add New Discount Blueprint</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-12"><label class="form-label">Title</label>{{ form.title }}</div>
+                        <div class="col-md-4"><label class="form-label">Discount Type</label>{{ form.discount_type }}</div>
+                        <div class="col-md-4"><label class="form-label">Occurrence</label>{{ form.occurrence }}</div>
+                        <div class="col-md-4"><label class="form-label">Default Amount</label>{{ form.amount }}</div>
+                        
+                        <div class="col-md-6" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+                            <label class="form-label">Applicable Fees (Optional)</label>
+                            {{ form.applicable_fees }}
+                        </div>
+                        <div class="col-md-6" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+                            <label class="form-label">Applicable Classes (Optional)</label>
+                            {{ form.applicable_classes }}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Blueprint</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<form method="POST" action="{% url 'finance_discount_application_create' %}" id="addAppForm">
+    {% csrf_token %}
+    <div class="modal fade" id="addDiscountAppModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><b>Add New Discount Rate Lock</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <p class="small text-muted">This locks a discount's rate (e.g., 10%) for a specific session/Quarter. If you leave Session/Quarter blank, the *current active* ones will be used.</p>
+                    <div class="row g-3">
+                        <div class="col-12"><label class="form-label">Discount Blueprint</label>{{ application_form.discount }}</div>
+                        <div class="col-md-6"><label class="form-label">Session (Optional)</label>{{ application_form.session }}</div>
+                        <div class="col-md-6"><label class="form-label">Quarter (Optional)</label>{{ application_form.term }}</div>
+                        <div class="col-md-6"><label class="form-label">Discount Type</label>{{ application_form.discount_type }}</div>
+                        <div class="col-md-6"><label class="form-label">Locked Rate / Amount</label>{{ application_form.discount_amount }}</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Rate Lock</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+{% for discount in discounts %}
+<form method="POST" action="{% url 'finance_discount_update' discount.pk %}">
+    {% csrf_token %}
+    <div class="modal fade" id="editDiscountModal{{ discount.pk }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><b>Edit Discount Blueprint</b></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                     <div class="row g-3">
+                        <div class="col-md-12"><label class="form-label">Title</label>
+                            <input type="text" name="title" value="{{ discount.title }}" class="form-control" required>
+                        </div>
+                        <div class="col-md-4"><label class="form-label">Discount Type</label>
+                            <select name="discount_type" class="form-select">
+                                {% for value, label in form.fields.discount_type.choices %}
+                                <option value="{{ value }}" {% if discount.discount_type == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4"><label class="form-label">Occurrence</label>
+                            <select name="occurrence" class="form-select">
+                                {% for value, label in form.fields.occurrence.choices %}
+                                <option value="{{ value }}" {% if discount.occurrence == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4"><label class="form-label">Default Amount</label>
+                            <input type="number" step="0.01" name="amount" value="{{ discount.amount|default:'' }}" class="form-control">
+                        </div>
+
+                        <div class="col-md-6" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+                            <label class="form-label">Applicable Fees (Optional)</label>
+                            {% for fee in form.fields.applicable_fees.queryset %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applicable_fees" value="{{ fee.pk }}" id="edit_fee_{{ discount.pk }}_{{ fee.pk }}"
+                                    {% for selected_fee in discount.applicable_fees.all %}{% if selected_fee.pk == fee.pk %}checked{% endif %}{% endfor %}>
+                                <label class="form-check-label" for="edit_fee_{{ discount.pk }}_{{ fee.pk }}">{{ fee.name|title }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-6" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+                            <label class="form-label">Applicable Classes (Optional)</label>
+                             {% for class in form.fields.applicable_classes.queryset %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applicable_classes" value="{{ class.pk }}" id="edit_class_{{ discount.pk }}_{{ class.pk }}"
+                                    {% for selected_class in discount.applicable_classes.all %}{% if selected_class.pk == class.pk %}checked{% endif %}{% endfor %}>
+                                <label class="form-check-label" for="edit_class_{{ discount.pk }}_{{ class.pk }}">{{ class.name|title }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endfor %}
+
+<script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+<script>
+$(document).ready(function(){
+
+    // 1. Parse the discount data from the view
+    const discountData = {{ discount_data_json|safe }};
+
+    // 2. Get references to the "Add Application" modal form fields
+    // (We use the modal ID to ensure we only target the 'add' form)
+    const $appForm = $('#addDiscountAppModal');
+    const $discountSelect = $appForm.find('#id_app_discount');
+    const $discountTypeSelect = $appForm.find('#id_app_discount_type');
+    const $discountAmountInput = $appForm.find('#id_app_discount_amount');
+
+    // 3. Create the function to autofill fields
+    function updateApplicationForm() {
+        const selectedDiscountId = $discountSelect.val();
+
+        if (selectedDiscountId && discountData[selectedDiscountId]) {
+            const data = discountData[selectedDiscountId];
+
+            // Autofill and 'discount_type'
+            // We must re-enable it to set the value, then disable it again.
+            $discountTypeSelect.val(data.type);
+
+            // Autofill 'discount_amount' (this one remains editable)
+            $discountAmountInput.val(data.amount);
+
+        } else {
+            // Clear fields if "---------" is selected
+            $discountTypeSelect.val('');
+            $discountAmountInput.val('');
+        }
+    }
+
+    // 4. Attach the event listener
+    $discountSelect.on('change', updateApplicationForm);
+
+    // 5. Run on page load just in case
+    updateApplicationForm();
+
+});
+</script>
+{% endblock %}

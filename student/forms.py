@@ -1,8 +1,66 @@
 import re
 from django import forms
 from django.core.exceptions import ValidationError
+from django.forms import CheckboxSelectMultiple
+
 from admin_site.models import ClassesModel, ClassSectionModel, ClassSectionInfoModel
-from .models import StudentModel, ParentModel, StudentSettingModel
+from .models import StudentModel, ParentModel, StudentSettingModel, UtilityModel
+
+
+class UtilityForm(forms.ModelForm):
+    """
+    Form for creating and updating school utilities.
+    """
+
+    class Meta:
+        model = UtilityModel
+        fields = ['name', 'code', 'description']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Boarding, Transport'}),
+            'code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., BRD, TRN'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3,
+                                                 'placeholder': 'Optional: A brief description of the utility'}),
+        }
+
+    def clean_name(self):
+        """
+        Custom validation to ensure the utility name is unique (case-insensitive).
+        """
+        name = self.cleaned_data.get('name')
+        if not name:
+            raise ValidationError("Utility name cannot be empty.")
+
+        # Check for other utilities with the same name, ignoring case.
+        qs = UtilityModel.objects.filter(name__iexact=name)
+
+        # If we are in "update" mode, exclude the current instance from the check.
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+
+        if qs.exists():
+            raise ValidationError("A utility with this name already exists.")
+
+        return name
+
+    def clean_code(self):
+        """
+        Custom validation to ensure the utility code is unique (case-insensitive).
+        """
+        code = self.cleaned_data.get('code')
+        if not code:
+            raise ValidationError("Utility code cannot be empty.")
+
+        # Check for other utilities with the same code, ignoring case.
+        qs = UtilityModel.objects.filter(code__iexact=code)
+
+        # If we are in "update" mode, exclude the current instance from the check.
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+
+        if qs.exists():
+            raise ValidationError("A utility with this code already exists.")
+
+        return code
 
 
 class StudentSettingForm(forms.ModelForm):
@@ -108,11 +166,18 @@ class ParentForm(forms.ModelForm):
 
 
 class StudentForm(forms.ModelForm):
+    utilities = forms.ModelMultipleChoiceField(
+        queryset=StudentModel.utilities.field.related_model.objects.all(),
+        widget=CheckboxSelectMultiple,
+        required=False,  # Allow students to have no utilities
+        label="Subscribed Utilities"
+    )
+
     class Meta:
         model = StudentModel
         fields = [
             'first_name', 'last_name', 'gender', 'image',
-            'parent', 'student_class', 'class_section', 'status'
+            'parent', 'student_class', 'class_section', 'utilities', 'status'
         ]
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),

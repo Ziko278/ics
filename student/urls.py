@@ -6,13 +6,20 @@ from student.views import StudentSettingDetailView, StudentSettingUpdateView, St
     export_class_list_view, capture_fingerprint, identify_student_by_fingerprint, SelectParentView, ParentSearchView, \
     ClassStudentSelectView, GetClassSectionsView, delete_fingerprint, test_scanner_connection, \
     parent_student_upload_view, import_batch_detail_view, download_parent_credentials, download_all_parent_credentials, \
-    ajax_create_parent_view, paste_create_parents_view, paste_create_students_view, ajax_create_student_view
+    ajax_create_parent_view, paste_create_parents_view, paste_create_students_view, ajax_create_student_view, \
+    UtilityListView, UtilityUpdateView, UtilityCreateView, UtilityDeleteView
 
 urlpatterns = [
+
     # Student Settings URLs (Singleton)
     path('setting/', StudentSettingDetailView.as_view(), name='setting_detail'),
     path('setting/create/', StudentSettingCreateView.as_view(), name='setting_create'),
     path('setting/edit/', StudentSettingUpdateView.as_view(), name='setting_edit'),
+
+    path('utilities/', UtilityListView.as_view(), name='student_utility_list'),
+    path('utilities/create/', UtilityCreateView.as_view(), name='student_utility_create'),
+    path('utilities/<int:pk>/update/', UtilityUpdateView.as_view(), name='student_utility_update'),
+    path('utilities/<int:pk>/delete/', UtilityDeleteView.as_view(), name='student_utility_delete'),
 
     # Parent URLs
     path('parents/', ParentListView.as_view(), name='parent_index'),

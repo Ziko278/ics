@@ -80,6 +80,23 @@
         </div>
 
         <div class="col-lg-6 col-md-6">
+            <div class="card info-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Discounts</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-percent text-success"></i>
+                        </div>
+                        <div class="ps-3">
+                            <h6>₦{{ total_discounts|floatformat:2|intcomma }}</h6>
+                            <span class="text-muted small pt-2 ps-1">Discounts applied</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 col-md-6">
             <div class="card info-card sales-card">
                 <div class="card-body">
                     <h5 class="card-title">Total Collected</h5>

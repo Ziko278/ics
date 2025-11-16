@@ -1,0 +1,24 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Utility</h4>
+            
+            <p>You are about to permanently delete the following school utility:</p>
+            <h5 class="text-center my-3"><em>"{{ utility.name|title }}"</em></h5>
+
+            <p>This action cannot be undone.</p>
+            
+            <p>Are you sure you want to proceed?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                <a class="btn btn-secondary" href="{% url 'student_utility_list' %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
