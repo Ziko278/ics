@@ -274,6 +274,21 @@ class InvoiceModel(models.Model):
         return self.invoice_number
 
     @property
+    def amount_paid(self):
+        """Total amount paid including direct payments and family-bound fees paid by siblings"""
+        # Check if this invoice has actual payment records
+        payment_total = self.payments.filter(status='confirmed').aggregate(total=Sum('amount'))['total'] or Decimal(
+            '0.00')
+
+        if payment_total > 0:
+            # This invoice has actual payments - use payment records to avoid double counting
+            return payment_total
+        else:
+            # No payments, but check if items are marked as paid (e.g., family-bound fees paid by siblings)
+            item_paid_total = self.items.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+            return item_paid_total
+
+    @property
     def total_amount(self):
         """Total invoice amount before discounts"""
         return self.items.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
@@ -281,7 +296,6 @@ class InvoiceModel(models.Model):
     @property
     def total_discount(self):
         """Total discount applied across all invoice items"""
-        from django.db.models import Sum
         total = Decimal('0.00')
         for item in self.items.all():
             item_discounts = item.discounts_applied.aggregate(total=Sum('amount_discounted'))['total'] or Decimal(
@@ -293,10 +307,6 @@ class InvoiceModel(models.Model):
     def amount_after_discount(self):
         """Invoice amount after applying discounts"""
         return self.total_amount - self.total_discount
-
-    @property
-    def amount_paid(self):
-        return self.payments.filter(status='confirmed').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
     @property
     def balance(self):
