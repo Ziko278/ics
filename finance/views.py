@@ -2128,7 +2128,7 @@ class DepositPaymentSelectStudentView(LoginRequiredMixin, PermissionRequiredMixi
         context = super().get_context_data(**kwargs)
         context['class_list'] = ClassesModel.objects.all().order_by('name')
         student_list = StudentModel.objects.all()
-        context['student_list_json'] = serializers.serialize("json", student_list)
+        context['student_list'] = serializers.serialize("json", student_list)
         return context
 
 
