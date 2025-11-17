@@ -2121,7 +2121,7 @@ def payroll_dashboard_view(request):
 
 
 class DepositPaymentSelectStudentView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
-    template_name = 'finance/discount/select_student.html'
+    template_name = 'finance/funding/select_student.html'
     permission_required = 'finance.add_studentfundingmodel'
 
     def get_context_data(self, **kwargs):
