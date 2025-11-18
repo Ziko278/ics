@@ -2424,7 +2424,7 @@ def staff_deposit_detail_view(request, pk):
 def staff_pending_deposit_payment_list_view(request):
     session_id = request.GET.get('session', None)
     session = SessionModel.objects.get(id=session_id)
-    term_id = request.GET.get('session', None)
+    term_id = request.GET.get('term', None)
     term = TermModel.objects.get(id=term_id)
     session_list = SessionModel.objects.all()
     term_list = TermModel.objects.all().order_by('order')
