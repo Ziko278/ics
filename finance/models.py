@@ -353,6 +353,12 @@ class FeePaymentModel(models.Model):
         CASH = 'cash', 'Cash'
         BANK_TRANSFER = 'bank_transfer', 'Bank Transfer'
         BANK_TELLER = 'bank_teller', 'Bank Teller'
+        DOLLAR_PAY = 'dollar_pay', 'Dollar Pay'
+        OTHERS = 'others', 'OTHERS'
+
+    class Currency(models.TextChoices):
+        NAIRA = 'naira', 'Naira (NGN)'
+        DOLLAR = 'dollar', 'Dollar (USD)'
 
     class PaymentStatus(models.TextChoices):
         PENDING = 'pending', 'Pending'
@@ -363,8 +369,10 @@ class FeePaymentModel(models.Model):
     bank_account = models.ForeignKey('SchoolBankDetail', on_delete=models.PROTECT)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_mode = models.CharField(max_length=20, choices=PaymentMode.choices)
+    currency = models.CharField(max_length=20, choices=Currency.choices, default='naira')
     date = models.DateField(default=timezone.now)
     reference = models.CharField(max_length=100, blank=True, default='')
+    description = models.TextField(blank=True, null=True, default='')
     status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
     notes = models.TextField(blank=True, null=True)
     confirmed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)

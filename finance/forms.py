@@ -257,18 +257,19 @@ class FeePaymentForm(forms.ModelForm):
 
         # --- THIS IS THE FIX ---
         # We REMOVED 'amount' from this list.
-        fields = ['payment_mode', 'date', 'reference', 'notes', 'bank_account']
+        fields = ['payment_mode', 'currency', 'date', 'reference', 'description', 'notes', 'bank_account']
         # --- END OF FIX ---
 
         widgets = {
             # We REMOVED the 'amount' widget
             'bank_account': forms.Select(attrs={'class': 'form-select form-select-sm'}),
             'payment_mode': forms.Select(attrs={'class': 'form-select form-select-sm'}),
+            'currency': forms.Select(attrs={'class': 'form-select form-select-sm'}),
             'date': forms.DateInput(attrs={'class': 'form-control form-control-sm', 'type': 'date'}),
             'reference': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
+            'description': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
             'notes': forms.Textarea(attrs={'class': 'form-control form-control-sm', 'rows': 2}),
         }
-
 
 
 class BulkPaymentForm(forms.Form):
@@ -281,10 +282,19 @@ class BulkPaymentForm(forms.Form):
         choices=FeePaymentModel.PaymentMode.choices,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
+    currency = forms.ChoiceField(
+        choices=FeePaymentModel.Currency.choices,
+        widget=forms.Select(attrs={'class': 'form-select', 'value':'naira'})
+    )
     date = forms.DateField(
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
     )
     reference = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'})
+    )
+
+    description = forms.CharField(
         required=False,
         widget=forms.TextInput(attrs={'class': 'form-control'})
     )

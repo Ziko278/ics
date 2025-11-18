@@ -151,8 +151,10 @@
                     <div class="row g-3">
                         <div class="col-md-6"><label class="form-label">Payment Mode</label>{{ payment_form.payment_mode }}</div>
                         <div class="col-md-6"><label class="form-label">Payment Date</label>{{ payment_form.date }}</div>
-                        <div class="col-12"><label class="form-label">Bank Account</label>{{ payment_form.bank_account }}</div>
-                        <div class="col-12"><label class="form-label">Reference</label>{{ payment_form.reference }}</div>
+                        <div class="col-6"><label class="form-label">Bank Account</label>{{ payment_form.bank_account }}</div>
+                        <div class="col-6"><label class="form-label">Currency</label>{{ payment_form.currency }}</div>
+                        <div class="col-6"><label class="form-label">Reference</label>{{ payment_form.reference }}</div>
+                        <div class="col-6"><label class="form-label">Description</label>{{ payment_form.description }}</div>
                         <div class="col-12"><button type="submit" class="btn btn-primary w-100">Apply Payment(s)</button></div>
                     </div>
                 </form>
@@ -228,8 +230,8 @@
                                     {% for payment in all_payments %}
                                     <tr>
                                         <td>{{ payment.date|date:"d M, Y" }}</td>
-                                        <td class="text-end">₦{{ payment.amount|floatformat:2|intcomma }}</td>
-                                        <td><a href="{% url 'finance_invoice_detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a></td>
+                                        <td {% if payment.description %} title="{{ payment.description }}" {% endif %} class="text-end">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                                        <td ><a href="{% url 'finance_invoice_detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a></td>
                                         <td>
                                             {% if payment.status == 'confirmed' %}<span class="badge bg-success">{{ payment.get_status_display }}</span>
                                             {% else %}<span class="badge bg-warning text-dark">{{ payment.get_status_display }}</span>{% endif %}

@@ -939,6 +939,8 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
 
                         # Use cleaned_data, not request.POST
                         payment_mode=payment_form.cleaned_data['payment_mode'],
+                        description=payment_form.cleaned_data['description'],
+                        currency=payment_form.cleaned_data['currency'],
                         date=payment_form.cleaned_data['date'],  # This is now a clean date object
                         bank_account=payment_form.cleaned_data['bank_account'],
                         # This is now a SchoolBankDetail instance
@@ -1083,6 +1085,8 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
                         amount=payment_for_this_invoice,
                         payment_mode=form.cleaned_data['payment_mode'],
                         date=form.cleaned_data['date'],
+                        description=form.cleaned_data['description'],
+                        currency=form.cleaned_data['currency'],
                         reference=form.cleaned_data.get('reference') or f"bulk-pmt-{invoice.invoice_number}",
                         status=FeePaymentModel.PaymentStatus.CONFIRMED,
                         confirmed_by=self.request.user

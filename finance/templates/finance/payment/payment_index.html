@@ -58,9 +58,10 @@
                         <th>Student</th>
                         <th>Reg. Number</th>
                         <th class="text-end">Amount Paid</th>
+                        <th class="text-end">Currency</th>
                         <th>Invoice #</th>
                         <th>Payment Date</th>
-                        <th>Session / Quater</th>
+                        <th>Session / Quarter</th>
                         <th>Status</th>
                         <th class="text-center">Action</th>
                     </tr>
@@ -70,7 +71,8 @@
                     <tr>
                         <td><a href="{% url 'finance_student_dashboard' payment.invoice.student.pk %}">{{ payment.invoice.student|title }}</a></td>
                         <td>{{ payment.invoice.student.registration_number }}</td>
-                        <td class="text-end fw-bold">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                        <td class="text-end fw-bold">{{ payment.amount|floatformat:2|intcomma }}</td>
+                        <td class="text-end fw-bold">{{ payment.currency}}</td>
                         <td><a href="{% url 'finance_invoice_detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a></td>
                         <td>{{ payment.date|date:"d M, Y" }}</td>
                         <td>{{ payment.invoice.session }} / {{ payment.invoice.term.name|title }}</td>
