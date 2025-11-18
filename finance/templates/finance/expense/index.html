@@ -68,6 +68,7 @@
                             <th>Amount</th>
                             <th>Date</th>
                             <th>Payment Method</th>
+                            <th>Name</th>
                             <th>Session</th>
                             <th>Term</th>
                             <th>Action</th>
@@ -82,6 +83,7 @@
                             <td>₦{{ expense.amount|intcomma }}</td>
                             <td>{{ expense.expense_date|date:"d M Y" }}</td>
                             <td>{{ expense.payment_method|default:"—"|title }}</td>
+                            <td>{{ expense.name|default:"—"|title }}</td>
                             <td>{% if expense.session %}{{ expense.session }}{% else %}—{% endif %}</td>
                             <td>{% if expense.term %}{{ expense.term }}{% else %}—{% endif %}</td>
 
