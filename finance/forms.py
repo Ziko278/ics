@@ -339,7 +339,7 @@ class ExpenseForm(forms.ModelForm):
             "category": forms.Select(attrs={"class": "form-control"}),
             "amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0.01"}),
             "expense_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "payment_method": forms.TextInput(attrs={"class": "form-control", "placeholder": "cash, card, transfer"}),
+            "payment_method": forms.Select(attrs={"class": "form-control"}),
             "reference": forms.TextInput(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "session": forms.Select(attrs={"class": "form-control"}),
