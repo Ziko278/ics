@@ -480,6 +480,7 @@ class ExpenseModel(models.Model):
     payment_method = models.CharField(
         max_length=50, choices=PAYMENT_METHOD_CHOICES, default=CASH
     )
+    name = models.CharField(max_length=100, blank=True, null=True)
     reference = models.CharField(max_length=100, blank=True, null=True)
     receipt = models.FileField(
         upload_to="finance/expenses/",

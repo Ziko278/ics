@@ -332,7 +332,7 @@ class ExpenseForm(forms.ModelForm):
         model = ExpenseModel
         fields = [
             "category", "amount", "expense_date",
-            "payment_method", "reference", "receipt", "notes",
+            "payment_method", "reference", "name", "receipt", "notes",
             "session", "term",
         ]
         widgets = {
@@ -341,6 +341,7 @@ class ExpenseForm(forms.ModelForm):
             "expense_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "payment_method": forms.Select(attrs={"class": "form-control"}),
             "reference": forms.TextInput(attrs={"class": "form-control"}),
+            "name": forms.TextInput(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "session": forms.Select(attrs={"class": "form-control"}),
             "term": forms.Select(attrs={"class": "form-control"}),
