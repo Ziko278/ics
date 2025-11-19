@@ -367,6 +367,37 @@
             </a>
             <ul class="nav-content collapse" data-bs-parent="#sidebar-nav" id="acad2">
 
+                <li>
+                    <a href="{% url 'student_collection_search' %}">
+                        <i class="bi bi-circle"></i><span>Student Collections</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'class_collection_search' %}">
+                        <i class="bi bi-circle"></i><span>Class Collection</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'view_student_collections' %}">
+                        <i class="bi bi-circle"></i><span>View Student Collections</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'view_staff_collections' %}">
+                        <i class="bi bi-circle"></i><span>View Staff Collections</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a href="{% url 'view_class_collections' %}">
+                        <i class="bi bi-circle"></i><span>View Class Collections</span>
+                    </a>
+                </li>
+
+
                 <!-- Assignment Management -->
                 <li>
                     <a href="{% url 'assignment_list' %}">
@@ -379,14 +410,6 @@
                         <i class="bi bi-circle"></i><span>Create New Assignment</span>
                     </a>
                 </li>
-
-                <!-- Student Collections -->
-                <li>
-                    <a href="{% url 'student_collection_search' %}">
-                        <i class="bi bi-circle"></i><span>Student Collections</span>
-                    </a>
-                </li>
-
 
             </ul>
         </li>

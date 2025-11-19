@@ -1,0 +1,64 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="row justify-content-center">
+  <div class="col-md-10">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-people-fill"></i> Select Class for Inventory Collection</h5>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <input type="text" id="classSearch" class="form-control" placeholder="Type to filter classes...">
+        </div>
+
+        <div id="classList" class="list-group">
+          {% for class in classes %}
+          <div class="list-group-item mb-2">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <i class="bi bi-people-fill me-2"></i>
+                <strong>{{ class.name|upper }}</strong>
+              </div>
+              <div>
+                <a href="{% url 'class_collection_dashboard' class.pk %}" class="btn btn-sm btn-outline-primary">All</a>
+              </div>
+            </div>
+
+            <div class="mt-2 small text-muted">
+              Sections:
+              {% for sec in class.section.all %}
+                <a href="{% url 'class_collection_dashboard' class.pk %}?section_pk={{ sec.pk }}"
+                   class="badge bg-light text-primary border text-decoration-none ms-1">
+                  {{ sec.name|upper }}
+                </a>
+              {% empty %}
+                <span class="text-muted ms-1">No sections</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="alert alert-info">No classes found.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('classSearch');
+  const items = Array.from(document.querySelectorAll('#classList .list-group-item'));
+
+  searchInput.addEventListener('keyup', function(e) {
+    const text = e.target.value.toLowerCase().trim();
+    items.forEach(item => {
+      const name = item.textContent.toLowerCase();
+      item.style.display = name.includes(text) ? '' : 'none';
+    });
+  });
+});
+</script>
+{% endblock %}

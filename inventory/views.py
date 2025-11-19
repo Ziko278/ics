@@ -22,13 +22,14 @@ from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView, FormView
 from django.shortcuts import redirect, render, get_object_or_404
 
-from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ActivityLogModel, ClassesModel
+from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ActivityLogModel, ClassesModel, \
+    ClassSectionModel
 from human_resource.models import StaffProfileModel, StaffModel, StaffWalletModel
 from student.models import StudentModel, StudentWalletModel
 from .models import CategoryModel, SupplierModel, ItemModel, PurchaseOrderModel, StockInModel, StockInItemModel, \
     PurchaseOrderItemModel, StockOutModel, StockTransferModel, PurchaseAdvanceModel, PurchaseAdvanceItemModel, \
     SaleItemModel, SaleModel, InventoryAssignmentModel, InventoryCollectionModel, CollectionGenerationJob, \
-    DirectSaleModel
+    DirectSaleModel, ClassInventoryCollectionModel
 from .forms import CategoryForm, SupplierForm, ItemUpdateForm, ItemCreateForm, ManualStockInForm, StockInFromPOFormSet, \
     StockInSelectionForm, StockOutForm, PurchaseOrderCreateForm, PurchaseOrderItemForm, StockTransferCreateForm, \
     PurchaseAdvanceItemForm, PurchaseAdvanceCreateForm
@@ -217,23 +218,32 @@ class ItemListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
     def get_queryset(self):
         """
-        Override to implement search functionality.
+        Override to implement search + category filtering.
         """
-        queryset = super().get_queryset()
-        query = self.request.GET.get('q')
+        queryset = super().get_queryset().select_related('category')
+        query = self.request.GET.get('q', '').strip()
+        category = self.request.GET.get('category', '').strip()
+
         if query:
-            # Search by item name or barcode
+            # Search by item name (icontains) OR barcode (exact-ish)
             queryset = queryset.filter(
                 Q(name__icontains=query) | Q(barcode__iexact=query)
             )
+
+        if category:
+            # category is expected to be the CategoryModel.pk
+            queryset = queryset.filter(category_id=category)
+
         return queryset
 
     def get_context_data(self, **kwargs):
         """
-        Add the search query back to the context to display in the template.
+        Add the search query, category list and selected category back to the context.
         """
         context = super().get_context_data(**kwargs)
         context['search_query'] = self.request.GET.get('q', '')
+        context['selected_category'] = self.request.GET.get('category', '')
+        context['categories'] = CategoryModel.objects.all().order_by('name')
         return context
 
 
@@ -692,6 +702,7 @@ class StockOutCreateView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     created_by_user=request.user,
                     specific_batch_id=form.cleaned_data.get('specific_batch_id'),
                     staff_recipient=form.cleaned_data.get('staff_recipient'),
+                    department=form.cleaned_data.get('department'),
                     notes=form.cleaned_data.get('notes')
                 )
                 messages.success(request, "Stock out recorded successfully.")
@@ -2359,3 +2370,305 @@ def create_direct_collection_view(request, student_pk):
         return redirect('student_collection_dashboard', student_pk=student_pk)
 
     return redirect('student_collection_dashboard', student_pk=student_pk)
+
+
+@login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
+def class_collection_search_view(request):
+    """Simple selection page for Classes (unchanged)"""
+    classes = ClassesModel.objects.all().order_by('name')
+    return render(request, 'inventory/inventory/class_collection_search.html', {'classes': classes})
+
+
+@login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
+def class_collection_dashboard_view(request, class_pk):
+    """
+    View history of items collected by a specific class.
+    Supports optional section filtering via ?section_pk=...
+    """
+    selected_class = get_object_or_404(ClassesModel, pk=class_pk)
+    section_pk = request.GET.get('section_pk', '').strip()
+
+    selected_section = None
+    if section_pk:
+        selected_section = selected_class.section.filter(pk=section_pk).first()
+
+    # Filter by class and optional section
+    if selected_section:
+        collections = ClassInventoryCollectionModel.objects.filter(
+            class_room=selected_class,
+            class_section=selected_section
+        ).select_related('item', 'student_representative', 'collected_by_staff', 'class_section').order_by('-date_collected')
+    else:
+        collections = ClassInventoryCollectionModel.objects.filter(
+            class_room=selected_class
+        ).select_related('item', 'student_representative', 'collected_by_staff', 'class_section').order_by('-date_collected')
+
+    # Items available in Store
+    available_items = ItemModel.objects.filter(
+        location__in=['store', 'both'],
+        store_quantity__gt=0,
+        is_active=True
+    ).order_by('name')
+
+    # Students: either for whole class or for the selected section
+    if selected_section:
+        class_students = StudentModel.objects.filter(
+            student_class=selected_class,
+            class_section=selected_section,
+            status='active'
+        ).order_by('first_name')
+    else:
+        class_students = StudentModel.objects.filter(
+            student_class=selected_class,
+            status='active'
+        ).order_by('first_name')
+
+    # all sections for this class (ClassesModel.section is a M2M to ClassSectionModel)
+    sections = selected_class.section.all().order_by('name')
+
+    context = {
+        'selected_class': selected_class,
+        'selected_section': selected_section,
+        'sections': sections,
+        'collections': collections,
+        'available_items': available_items,
+        'class_students': class_students
+    }
+    return render(request, 'inventory/inventory/class_collection_dashboard.html', context)
+
+
+@login_required
+@permission_required("inventory.add_inventorycollectionmodel", raise_exception=True)
+def process_class_collection_view(request, class_pk):
+    """Process the collection of an item for the class (will save class_section if provided)"""
+    selected_class = get_object_or_404(ClassesModel, pk=class_pk)
+
+    if request.method == 'POST':
+        item_pk = request.POST.get('item')
+        student_pk = request.POST.get('student_representative')  # Optional
+        quantity = Decimal(request.POST.get('quantity', 0) or 0)
+        section_pk = request.POST.get('section') or request.POST.get('class_section') or ''
+
+        item = get_object_or_404(ItemModel, pk=item_pk)
+        student_rep = StudentModel.objects.filter(pk=student_pk).first() if student_pk else None
+
+        section_obj = None
+        if section_pk:
+            # ensure section belongs to the selected class
+            section_obj = selected_class.section.filter(pk=section_pk).first()
+            if not section_obj:
+                messages.error(request, "Selected section is invalid for this class.")
+                return redirect(reverse('class_collection_dashboard', args=[class_pk]))
+
+        # 1. Validate Stock
+        if item.store_quantity < quantity:
+            messages.error(request, f"Insufficient stock. Available: {item.store_quantity}")
+            return redirect(reverse('class_collection_dashboard', args=[class_pk]) + (f'?section_pk={section_obj.pk}' if section_obj else ''))
+
+        # 2. Create Record (store class_section if provided)
+        ClassInventoryCollectionModel.objects.create(
+            class_room=selected_class,
+            class_section=section_obj,
+            student_representative=student_rep,
+            item=item,
+            quantity=quantity,
+            collected_by_staff=request.user.staffmodel if hasattr(request.user, 'staffmodel') else None
+        )
+
+        # 3. Deduct Stock
+        item.store_quantity -= quantity
+        item.save(update_fields=['store_quantity'])
+
+        messages.success(request,
+                         f"Successfully issued {quantity} {item.get_unit_display()} of {item.name} to {selected_class.name}{(' - ' + str(section_obj)) if section_obj else ''}")
+
+        # Redirect back to dashboard, keeping section if used
+        redirect_url = reverse('class_collection_dashboard', args=[class_pk])
+        if section_obj:
+            redirect_url = f"{redirect_url}?section_pk={section_obj.pk}"
+        return redirect(redirect_url)
+
+    # fallback
+    return redirect(reverse('class_collection_dashboard', args=[class_pk]))
+
+
+# ================= STUDENT COLLECTION INDEX =================
+
+@login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
+def view_student_collections(request):
+    """List view for all Student Direct Sales with filters"""
+
+    # Get search parameters
+    search_query = request.GET.get('search', '').strip()
+    payment_status_filter = request.GET.get('payment_status', '').strip()  # Changed name to reflect field
+    class_filter = request.GET.get('class_id', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+
+    # Base queryset with optimization: Querying DirectSaleModel
+    collections_qs = DirectSaleModel.objects.select_related(
+        'student',
+        'student__student_class',
+        'item',  # ItemModel is directly linked via 'item' FK
+        'sold_by'  # Staff who sold the item
+    ).all()
+
+    # Apply Filters
+    if search_query:
+        collections_qs = collections_qs.filter(
+            Q(student__first_name__icontains=search_query) |
+            Q(student__last_name__icontains=search_query) |
+            Q(student__registration_number__icontains=search_query) |
+            Q(item__name__icontains=search_query)  # Item is directly linked
+        )
+
+    # UPDATED FILTER: Use payment_completed status
+    if payment_status_filter:
+        if payment_status_filter == 'completed':
+            collections_qs = collections_qs.filter(payment_completed=True)
+        elif payment_status_filter == 'pending':
+            collections_qs = collections_qs.filter(payment_completed=False)
+
+    if class_filter:
+        collections_qs = collections_qs.filter(student__student_class_id=class_filter)
+
+    if date_from:
+        # Filter by sale_date
+        collections_qs = collections_qs.filter(sale_date__gte=date_from)
+    if date_to:
+        collections_qs = collections_qs.filter(sale_date__lte=date_to)
+
+    # Pagination
+    # Ordering by sale_date is more appropriate for a ledger/sales view
+    paginator = Paginator(collections_qs.order_by('-sale_date', '-created_at'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Note: Using DirectSaleModel.objects.first() to get status choices if needed
+
+    context = {
+        'page_obj': page_obj,
+        'search_query': search_query,
+        'payment_status_filter': payment_status_filter,  # Updated key
+        'class_filter': class_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+
+        # Define status choices for the template filter
+        'payment_status_choices': [
+            ('completed', 'Payment Completed (Paid)'),
+            ('pending', 'Payment Pending (Unpaid)'),
+        ],
+        'class_list': ClassesModel.objects.all().order_by('name'),
+    }
+
+    return render(request, 'inventory/inventory/student_collection_index.html', context)
+
+
+# ================= CLASS COLLECTION INDEX =================
+
+@login_required
+@permission_required("inventory.view_inventorycollectionmodel", raise_exception=True)
+def view_class_collections(request):
+    """List view for Class Ad-hoc Collections (supports optional class and section filters)"""
+    search_query = request.GET.get('search', '').strip()
+    class_filter = request.GET.get('class_id', '').strip()
+    section_filter = request.GET.get('section_id', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+
+    collections_qs = ClassInventoryCollectionModel.objects.select_related(
+        'class_room', 'class_section', 'student_representative', 'item', 'collected_by_staff'
+    ).all()
+
+    if search_query:
+        collections_qs = collections_qs.filter(
+            Q(class_room__name__icontains=search_query) |
+            Q(item__name__icontains=search_query) |
+            Q(student_representative__first_name__icontains=search_query) |
+            Q(student_representative__last_name__icontains=search_query)
+        )
+
+    if class_filter:
+        collections_qs = collections_qs.filter(class_room_id=class_filter)
+
+    if section_filter:
+        collections_qs = collections_qs.filter(class_section_id=section_filter)
+
+    if date_from:
+        collections_qs = collections_qs.filter(date_collected__gte=date_from)
+    if date_to:
+        collections_qs = collections_qs.filter(date_collected__lte=date_to)
+
+    paginator = Paginator(collections_qs.order_by('-date_collected', '-created_at'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'page_obj': page_obj,
+        'search_query': search_query,
+        'class_filter': class_filter,
+        'section_filter': section_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+        'class_list': ClassesModel.objects.all().order_by('name'),
+        'section_list': ClassSectionModel.objects.all().order_by('name'),
+    }
+    return render(request, 'inventory/inventory/class_collection_index.html', context)
+
+
+@login_required
+@permission_required("inventory.view_stockoutmodel", raise_exception=True)
+def view_staff_collections(request):
+    """List view for Staff Stock-Outs (Collections)"""
+
+    # Get search parameters
+    search_query = request.GET.get('search', '').strip()
+    dept_filter = request.GET.get('department', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+
+    # Base queryset: Filter ONLY Staff Collections
+    collections_qs = StockOutModel.objects.filter(
+        reason=StockOutModel.Reason.STAFF_COLLECTION
+    ).select_related(
+        'item',
+        'staff_recipient',
+        'created_by'
+    )
+
+    # Apply Filters
+    if search_query:
+        collections_qs = collections_qs.filter(
+            Q(staff_recipient__first_name__icontains=search_query) |
+            Q(staff_recipient__last_name__icontains=search_query) |
+            Q(item__name__icontains=search_query)
+        )
+
+    if dept_filter:
+        collections_qs = collections_qs.filter(department=dept_filter)
+
+    if date_from:
+        collections_qs = collections_qs.filter(date_removed__gte=date_from)
+    if date_to:
+        collections_qs = collections_qs.filter(date_removed__lte=date_to)
+
+    # Pagination
+    paginator = Paginator(collections_qs.order_by('-date_removed', '-created_at'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'page_obj': page_obj,
+        'search_query': search_query,
+        'dept_filter': dept_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+        'department_choices': StockOutModel.Department.choices,
+    }
+
+    return render(request, 'inventory/inventory/staff_collection_index.html', context)
+

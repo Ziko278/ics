@@ -15,7 +15,9 @@ from .views import (
     assignment_list_view, generate_collections_view, collection_job_status_view, collection_job_status_ajax,
     student_collection_search_view, ajax_get_students_by_class, ajax_get_students_by_reg_no,
     student_collection_dashboard_view, process_collection_view, create_direct_collection_view, create_assignment_view,
-    delete_assignment_view, edit_assignment_view, api_person_search, staff_sales_report,
+    delete_assignment_view, edit_assignment_view, api_person_search, staff_sales_report, class_collection_search_view,
+    class_collection_dashboard_view, view_student_collections, view_class_collections, process_class_collection_view,
+    view_staff_collections,
 )
 
 
@@ -124,4 +126,10 @@ urlpatterns = [
     path('student/<int:student_pk>/direct-purchase/', create_direct_collection_view,
          name='create_direct_collection'),
 
+    path('classes/search/', class_collection_search_view, name='class_collection_search'),
+    path('class/<int:class_pk>/dashboard/', class_collection_dashboard_view, name='class_collection_dashboard'),
+    path('class/<int:class_pk>/collect/', process_class_collection_view, name='process_class_collection'),
+    path('collections/students/all/', view_student_collections, name='view_student_collections'),
+    path('collections/classes/all/', view_class_collections, name='view_class_collections'),
+    path('collections/staff/all/', view_staff_collections, name='view_staff_collections'),
 ]

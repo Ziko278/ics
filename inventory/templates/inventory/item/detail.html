@@ -241,10 +241,20 @@
                                 <option value="shop">Shop</option>
                             </select>
                         </div>
-                        <div class="col-12" id="staff-recipient-field" style="display: none;">
-                            <label class="form-label">Staff Recipient</label>
-                            {{ stock_out_form.staff_recipient }}
+
+                        <div id="staff-details-container" style="display: none;">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Staff Recipient <span class="text-danger">*</span></label>
+                                    {{ stock_out_form.staff_recipient }}
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Department <span class="text-danger">*</span></label>
+                                    {{ stock_out_form.department }}
+                                </div>
+                            </div>
                         </div>
+
                         <div class="col-12">
                             <label class="form-label">Quantity to Remove</label>
                             <input type="number" name="quantity_removed" class="form-control" required min="0.01" step="0.01">
@@ -264,15 +274,20 @@
         </div>
     </div>
 </div>
-
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const stockOutModal = document.getElementById('stockOutModal');
+
+    // Selectors
     const reasonSelect = stockOutModal.querySelector('#id_reason');
-    const staffRecipientField = stockOutModal.querySelector('#staff-recipient-field');
     const locationSelect = stockOutModal.querySelector('#id_location');
     const quantityInput = stockOutModal.querySelector('input[name="quantity_removed"]');
     const quantityHelper = stockOutModal.querySelector('#quantity-helper-text');
+
+    // The container that holds BOTH Staff and Department
+    const staffContainer = stockOutModal.querySelector('#staff-details-container');
+    const staffSelect = stockOutModal.querySelector('#id_staff_recipient');
+    const deptSelect = stockOutModal.querySelector('#id_department');
 
     stockOutModal.addEventListener('show.bs.modal', function (event) {
         const button = event.relatedTarget;
@@ -281,24 +296,37 @@ document.addEventListener('DOMContentLoaded', function () {
         const maxSpecific = button.getAttribute('data-max-specific');
         const location = button.getAttribute('data-location');
         const batchId = button.getAttribute('data-batch-id');
+
         const hiddenBatchIdInput = stockOutModal.querySelector('#id_specific_batch_id');
         hiddenBatchIdInput.value = batchId || '';
 
+        // Reset fields when modal opens
+        if (reasonSelect.value !== 'staff_collection') {
+            staffContainer.style.display = 'none';
+        }
+
         // Logic to pre-select location and set max quantity
-        if (location) { // Clicked from a specific batch
+        if (location) {
             locationSelect.value = location;
-            locationSelect.disabled = true; // Don't let user change it
+            locationSelect.disabled = true;
             quantityInput.max = maxSpecific;
             quantityHelper.textContent = `Max available from this batch: ${maxSpecific}`;
 
-            // Create a hidden input to submit the value
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = 'location';
-            hiddenInput.value = location; // ← Use the 'location' variable you already have
-            stockOutModal.querySelector('form').appendChild(hiddenInput);
-        } else { // Clicked from main "Stock Out" button
+            // Handle hidden location input
+            let hiddenInput = stockOutModal.querySelector('input[name="location"][type="hidden"]');
+            if (!hiddenInput) {
+                hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'location';
+                stockOutModal.querySelector('form').appendChild(hiddenInput);
+            }
+            hiddenInput.value = location;
+        } else {
             locationSelect.disabled = false;
+            // Remove hidden input if it exists from previous opens
+            const existingHidden = stockOutModal.querySelector('input[name="location"][type="hidden"]');
+            if (existingHidden) existingHidden.remove();
+
             updateMaxQuantity();
         }
     });
@@ -308,6 +336,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateMaxQuantity() {
         const maxShop = document.querySelector('[data-max-shop]').getAttribute('data-max-shop');
         const maxStore = document.querySelector('[data-max-store]').getAttribute('data-max-store');
+
         if (locationSelect.value === 'shop') {
             quantityInput.max = maxShop;
             quantityHelper.textContent = `Max available in Shop: ${maxShop}`;
@@ -317,13 +346,24 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // --- THIS IS THE FIXED PART ---
     reasonSelect.addEventListener('change', function() {
         if (this.value === 'staff_collection') {
-            staffRecipientField.style.display = 'block';
-            staffRecipientField.querySelector('select').required = true;
+            // Show the container
+            staffContainer.style.display = 'block';
+
+            // Make inputs required
+            staffSelect.required = true;
+            deptSelect.required = true;
         } else {
-            staffRecipientField.style.display = 'none';
-            staffRecipientField.querySelector('select').required = false;
+            // Hide the container
+            staffContainer.style.display = 'none';
+
+            // Unrequire and clear inputs
+            staffSelect.required = false;
+            deptSelect.required = false;
+            staffSelect.value = "";
+            deptSelect.value = "";
         }
     });
 });

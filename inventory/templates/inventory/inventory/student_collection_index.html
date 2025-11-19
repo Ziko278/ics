@@ -1,0 +1,150 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %} 💰
+
+{% block 'main' %}
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="card-title mb-0">Student Direct Collections</h4>
+            <a href="{% url 'student_collection_search' %}" class="btn btn-primary" title="Search student to process a new sale">
+                <i class="bi bi-cart-plus"></i> New Direct Sale
+            </a>
+        </div>
+
+        <form method="GET" class="mb-4">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <input type="text" name="search" class="form-control"
+                           placeholder="Search Student, Reg No, or Item..."
+                           value="{{ search_query }}">
+                </div>
+                <div class="col-md-2">
+                    <select name="class_id" class="form-select">
+                        <option value="">All Classes</option>
+                        {% for cls in class_list %}
+                        <option value="{{ cls.id }}" {% if class_filter == cls.id|stringformat:"s" %}selected{% endif %}>
+                            {{ cls.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="payment_status" class="form-select">
+                        <option value="">All Payment Status</option>
+                        {% for value, label in payment_status_choices %}
+                        <option value="{{ value }}" {% if payment_status_filter == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <input type="date" name="date_from" class="form-control"
+                           placeholder="From Date" value="{{ date_from }}">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+            </div>
+
+            {% if search_query or payment_status_filter or class_filter or date_from %}
+            <div class="mt-2">
+                <a href="{% url 'view_student_collections' %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-x"></i> Clear Filters
+                </a>
+            </div>
+            {% endif %}
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Student</th>
+                        <th>Class</th>
+                        <th>Item Sold</th>
+                        <th>Qty</th>
+                        <th>Total Amount</th>
+                        <th>Balance</th>
+                        <th>Sale Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in page_obj %}
+                    <tr>
+                        <td>
+                            <span class="text-decoration-none fw-bold">
+                                {{ record.student.first_name }} {{ record.student.last_name }}
+                            </span><br>
+                            <small class="text-muted">{{ record.student.registration_number }}</small>
+                        </td>
+                        <td>
+                            {% if record.student.student_class %}
+                                {{ record.student.student_class.name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ record.item.name }}
+                        </td>
+                        <td>
+                            {{ record.quantity|floatformat:0 }}
+                        </td>
+                        <td>
+                            ₦{{ record.total_amount|floatformat:2|intcomma }}
+                        </td>
+                        <td>
+                            {% if record.balance > 0 %}
+                                <span class="text-danger fw-bold">₦{{ record.balance|floatformat:2|intcomma }}</span>
+                            {% else %}
+                                ₦0.00
+                            {% endif %}
+                        </td>
+                        <td>{{ record.sale_date|date:"M d, Y" }}</td>
+                        <td>
+                            {% if record.payment_completed %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Paid</span>
+                            {% else %}
+                                <span class="badge bg-danger"><i class="bi bi-hourglass-split"></i> Unpaid</span>
+                            {% endif %}
+                        </td>
+
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center py-4 text-muted">
+                            No direct sales found matching criteria.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.has_other_pages %}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&search={{ search_query }}&payment_status={{ payment_status_filter }}&class_id={{ class_filter }}&date_from={{ date_from }}">Previous</a>
+                </li>
+                {% endif %}
+
+                <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&search={{ search_query }}&payment_status={{ payment_status_filter }}&class_id={{ class_filter }}&date_from={{ date_from }}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

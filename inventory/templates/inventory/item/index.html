@@ -1,7 +1,8 @@
 {% extends 'admin_site/layout.html' %}
-{% block 'main' %}
 {% load humanize %}
+{% load static %}
 
+{% block 'main' %}
 <div class="col-12">
     <div class="card recent-sales overflow-auto">
         <div class="card-body">
@@ -14,49 +15,75 @@
                 </div>
             </div>
 
-            <!-- Search Form -->
+            <!-- Search + Category Filter Row -->
             <div class="row mb-3">
-                <div class="col-md-6">
+                <div class="col-md-8">
                     <form method="GET" action="{% url 'inventory_item_list' %}">
-                        <div class="input-group">
-                            <input type="text" class="form-control" name="q" value="{{ search_query }}" placeholder="Search by name or barcode..." id="item-search-input">
-                            <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i></button>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <input type="text"
+                                       class="form-control"
+                                       name="q"
+                                       value="{{ search_query }}"
+                                       placeholder="Search by name or barcode..."
+                                       id="item-search-input">
+                            </div>
+                            <div class="col-md-4">
+                                <select name="category" class="form-select" id="categoryFilter">
+                                    <option value="">All Categories</option>
+                                    {% for cat in categories %}
+                                        <option value="{{ cat.id }}"
+                                                {% if selected_category == cat.id|stringformat:"s" %}selected{% endif %}>
+                                            {{ cat.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="d-grid">
+                                    <button class="btn btn-outline-secondary" type="submit">
+                                        <i class="bi bi-search"></i> Search
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </form>
                 </div>
-                 <div class="col-md-6 text-md-end pt-2">
-                    <small class="text-muted">Tip: Click into the search box and use a barcode scanner for quick lookups.</small>
+
+                <div class="col-md-4 text-md-end pt-2">
+                    <small class="text-muted">
+                        Tip: Click inside the page (not in an input) and scan a barcode for instant lookup.
+                    </small>
                 </div>
             </div>
 
-
-            <table class="table table-hover">
+            <table class="table table-hover align-middle">
                 <thead>
                 <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">Item Name</th>
-                    <th scope="col">Category</th>
-                    <th scope="col">Barcode</th>
-                    <th scope="col">Selling Price</th>
-                    <th scope="col">Total Qty</th>
-                    <th scope="col">Status</th>
-                    <th scope="col" class="text-center">Action</th>
+                    <th>#</th>
+                    <th>Item Name</th>
+                    <th>Category</th>
+                    <th>Barcode</th>
+                    <th>Selling Price</th>
+                    <th>Total Qty</th>
+                    <th>Status</th>
+                    <th class="text-center">Action</th>
                 </tr>
                 </thead>
                 <tbody>
                 {% for item in items %}
                 <tr>
-                    <th scope="row">{{ page_obj.start_index|add:forloop.counter0 }}</th>
+                    <td>{{ page_obj.start_index|add:forloop.counter0 }}</td>
                     <td><a href="{{ item.get_absolute_url }}">{{ item.name|title }}</a></td>
                     <td>{{ item.category.name|default:"-" }}</td>
                     <td>{{ item.barcode|default:"N/A" }}</td>
                     <td>₦{{ item.current_selling_price|floatformat:2|intcomma }}</td>
-                    <td>{{ item.total_quantity|floatformat:2 }} {{ item.get_unit_display }}s</td>
+                    <td>{{ item.total_quantity|floatformat:2 }} {{ item.get_unit_display }}{% if item.total_quantity|floatformat:2 != "1.00" %}s{% endif %}</td>
                     <td>
                         {% if item.is_low_stock %}
                             <span class="badge bg-warning">Low Stock</span>
                         {% else %}
-                             <span class="badge bg-success">In Stock</span>
+                            <span class="badge bg-success">In Stock</span>
                         {% endif %}
                     </td>
                     <td class="text-center">
@@ -68,15 +95,13 @@
                 {% empty %}
                 <tr>
                     <td colspan="8">
-                        {% if search_query %}
-                            {# This message shows ONLY when a search was performed and returned nothing. #}
+                        {% if search_query or selected_category %}
                             <div class="alert alert-warning text-center" role="alert">
-                               Your search for "<strong>{{ search_query }}</strong>" did not match any items. Try another search term.
+                                No items match your search or selected category.
                             </div>
                         {% else %}
-                            {# This message shows ONLY on initial load if the database is empty. #}
                             <div class="alert alert-secondary text-center" role="alert">
-                               No inventory items have been added yet. Click the "Add New Item" button to get started.
+                                No inventory items yet. Click "Add New Item" to get started.
                             </div>
                         {% endif %}
                     </td>
@@ -85,22 +110,47 @@
                 </tbody>
             </table>
 
-            <!-- Pagination Controls -->
+            <!-- Pagination -->
             {% if is_paginated %}
             <nav aria-label="Page navigation">
-              <ul class="pagination justify-content-center">
-                {% if page_obj.has_previous %}
-                  <li class="page-item"><a class="page-link" href="?page=1&q={{ search_query }}">&laquo; First</a></li>
-                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}">Previous</a></li>
-                {% endif %}
+                <ul class="pagination justify-content-center">
 
-                <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}">
+                           &laquo; First
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}">
+                           Previous
+                        </a>
+                    </li>
+                    {% endif %}
 
-                {% if page_obj.has_next %}
-                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}">Next</a></li>
-                  <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&q={{ search_query }}">Last &raquo;</a></li>
-                {% endif %}
-              </ul>
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}">
+                           Next
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}">
+                           Last &raquo;
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
             </nav>
             {% endif %}
 
@@ -108,7 +158,7 @@
     </div>
 </div>
 
-<!-- A simple toast element for barcode scan notifications -->
+<!-- Barcode scan toast -->
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
   <div id="barcode-toast" class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
     <div class="d-flex">
@@ -120,7 +170,6 @@
   </div>
 </div>
 
-
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     let barcodeScanInput = '';
@@ -128,67 +177,56 @@ document.addEventListener('DOMContentLoaded', function () {
     const SCAN_TIMEOUT = 100; // ms between keystrokes to consider a scan complete
     const MIN_BARCODE_LENGTH = 4; // Ignore short inputs to avoid accidental triggers
 
-    // Get the toast element for notifications
+    // Get the toast element for notifications (requires bootstrap JS)
     const toastEl = document.getElementById('barcode-toast');
     const toast = new bootstrap.Toast(toastEl);
     const toastMessageEl = document.getElementById('barcode-toast-message');
 
     document.addEventListener('keydown', function (e) {
-        // Ignore inputs if the user is typing in the search box or other inputs
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        // Ignore inputs if the user is typing in an INPUT or TEXTAREA
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) {
             return;
         }
 
-        // Clear the timer on any new keystroke
         if (scanTimer) {
             clearTimeout(scanTimer);
         }
 
-        // If it's a special key like Enter, process the input immediately
         if (e.key === 'Enter') {
             if (barcodeScanInput.length >= MIN_BARCODE_LENGTH) {
                 findItemByBarcode(barcodeScanInput);
             }
-            barcodeScanInput = ''; // Reset buffer
+            barcodeScanInput = '';
             return;
         }
 
-        // Add the character to our buffer (ignore control keys)
         if (e.key.length === 1) {
             barcodeScanInput += e.key;
         }
 
-        // Set a timer to process the barcode after a short delay
         scanTimer = setTimeout(function () {
             if (barcodeScanInput.length >= MIN_BARCODE_LENGTH) {
                 findItemByBarcode(barcodeScanInput);
             }
-            barcodeScanInput = ''; // Reset buffer
+            barcodeScanInput = '';
         }, SCAN_TIMEOUT);
     });
 
     function findItemByBarcode(barcode) {
-        console.log('Scanning for barcode:', barcode);
-        const ajaxUrl = `{% url 'inventory_item_ajax_scan' %}?barcode=${barcode}`;
-
+        const ajaxUrl = `{% url 'inventory_item_ajax_scan' %}?barcode=${encodeURIComponent(barcode)}`;
         fetch(ajaxUrl)
             .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Item not found. Status: ${response.status}`);
-                }
+                if (!response.ok) throw new Error('Not found');
                 return response.json();
             })
             .then(data => {
                 if (data.status === 'success' && data.url) {
-                    // Success! Redirect to the item's detail page.
                     window.location.href = data.url;
                 } else {
-                    // Handle case where API returns success but no URL (should not happen)
-                    showToast('Error: Invalid response from server.');
+                    showToast('Item not found.');
                 }
             })
-            .catch(error => {
-                console.error('Barcode scan error:', error);
+            .catch(() => {
                 showToast(`Item with barcode "${barcode}" not found.`);
             });
     }

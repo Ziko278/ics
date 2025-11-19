@@ -9,7 +9,7 @@ from decimal import Decimal
 
 
 def perform_stock_out(item, location, quantity_to_remove, reason, created_by_user, specific_batch_id=None,
-                      staff_recipient=None, notes=''):
+                      staff_recipient=None, department=None, notes=''):
     """
     Performs a stock-out. If a specific_batch_id is provided, it performs a
     targeted removal. Otherwise, it uses a FIFO strategy.
@@ -66,7 +66,7 @@ def perform_stock_out(item, location, quantity_to_remove, reason, created_by_use
         StockOutModel.objects.create(
             item=item, quantity_removed=quantity_to_remove, reason=reason,
             location=location, staff_recipient=staff_recipient, notes=notes,
-            created_by=created_by_user
+            created_by=created_by_user, department=department
         )
 
 

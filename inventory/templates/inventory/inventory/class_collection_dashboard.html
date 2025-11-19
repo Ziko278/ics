@@ -1,0 +1,205 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="row">
+  <div class="col-md-12">
+    <!-- Header -->
+    <div class="card mb-3">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <h4 class="mb-0"><i class="bi bi-people-fill"></i> {{ selected_class.name|upper }}{% if selected_section %} — {{ selected_section.name }}{% endif %}</h4>
+          <p class="text-muted mb-0">Manage classroom supplies (Chalk, Dusters, etc.)</p>
+        </div>
+        <div class="text-end">
+          <a href="{% url 'class_collection_search' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Search
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section chooser + Issue button -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <label class="form-label small mb-1">View Section</label>
+            <div>
+              <a href="{% url 'class_collection_dashboard' selected_class.pk %}" class="btn btn-sm {% if not selected_section %}btn-primary{% else %}btn-outline-secondary{% endif %}">All</a>
+              {% for sec in sections %}
+                <a href="{% url 'class_collection_dashboard' selected_class.pk %}?section_pk={{ sec.pk }}"
+                   class="btn btn-sm ms-1 {% if selected_section and selected_section.pk == sec.pk %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                  {{ sec.name }}
+                </a>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#issueItemModal">
+              <i class="bi bi-plus-circle"></i> Issue Item to Class
+            </button>
+          </div>
+        </div>
+
+        <!-- Collection history table -->
+        {% if collections %}
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Collected By (Student)</th>
+                <th>Issued By (Staff)</th>
+                <th>Session/Quarter</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for collection in collections %}
+              <tr>
+                <td>{{ collection.date_collected|date:"d M Y" }}</td>
+                <td>
+                  <strong>{{ collection.item.name }}</strong><br>
+                  <small class="text-muted">{{ collection.item.get_unit_display }}</small>
+                </td>
+                <td><span class="badge bg-primary">{{ collection.quantity }}</span></td>
+                <td>
+                  {% if collection.student_representative %}
+                    {{ collection.student_representative.first_name }} {{ collection.student_representative.last_name }}
+                  {% else %}
+                    <span class="text-muted">-</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if collection.collected_by_staff %}
+                    {{ collection.collected_by_staff }}
+                  {% else %}
+                    <span class="text-muted">-</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <small>
+                    {% if collection.term %}{{ collection.term.name }}<br>{% endif %}
+                    {% if collection.session %}{{ collection.session }}{% endif %}
+                  </small>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center">
+          <i class="bi bi-info-circle"></i> No items collected by this class/section yet.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Issue Item Modal -->
+<div class="modal fade" id="issueItemModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="POST" action="{% url 'process_class_collection' selected_class.pk %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">Issue Item to {{ selected_class.name }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Section (optional)</label>
+            <select name="section" class="form-select">
+              <option value="">-- All Sections / Class level --</option>
+              {% for sec in sections %}
+                <option value="{{ sec.pk }}" {% if selected_section and selected_section.pk == sec.pk %}selected{% endif %}>
+                  {{ sec.name }}
+                </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Choose a section if this issue is for a particular section.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Select Item <span class="text-danger">*</span></label>
+            <select name="item" class="form-select" id="itemSelect" required>
+              <option value="">-- Select Item --</option>
+              {% for item in available_items %}
+              <option value="{{ item.pk }}" data-stock="{{ item.store_quantity }}" data-unit="{{ item.get_unit_display }}">
+                {{ item.name }} ({{ item.store_quantity }} {{ item.get_unit_display }} available)
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Quantity <span class="text-danger">*</span></label>
+            <input type="number" name="quantity" id="quantityInput" class="form-control" step="0.01" min="0.01" required>
+            <small id="stockInfo" class="text-muted"></small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Student Representative (Optional)</label>
+            <select name="student_representative" class="form-select">
+              <option value="">-- None / Teacher Collected --</option>
+              {% for student in class_students %}
+              <option value="{{ student.pk }}">
+                {{ student.first_name }} {{ student.last_name }} ({{ student.registration_number }})
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Select the student sent to collect the item.</div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">Issue Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const itemSelect = document.getElementById('itemSelect');
+  const quantityInput = document.getElementById('quantityInput');
+  const stockInfo = document.getElementById('stockInfo');
+  const submitBtn = document.getElementById('submitBtn');
+
+  function checkStock() {
+    const selectedOption = itemSelect.options[itemSelect.selectedIndex];
+    if (!selectedOption || !selectedOption.value) {
+      stockInfo.textContent = '';
+      submitBtn.disabled = false;
+      return;
+    }
+
+    const stock = parseFloat(selectedOption.dataset.stock || 0);
+    const unit = selectedOption.dataset.unit || '';
+    const quantity = parseFloat(quantityInput.value) || 0;
+
+    stockInfo.textContent = `Available: ${stock} ${unit}`;
+
+    if (quantity > stock) {
+      stockInfo.className = 'text-danger fw-bold';
+      stockInfo.textContent += ' - Insufficient Stock!';
+      submitBtn.disabled = true;
+    } else {
+      stockInfo.className = 'text-muted';
+      submitBtn.disabled = false;
+    }
+  }
+
+  itemSelect && itemSelect.addEventListener('change', checkStock);
+  quantityInput && quantityInput.addEventListener('input', checkStock);
+});
+</script>
+{% endblock %}

@@ -263,11 +263,12 @@ class StockOutForm(forms.ModelForm):
 
     class Meta:
         model = StockOutModel
-        fields = ['reason', 'location', 'staff_recipient', 'quantity_removed', 'notes']
+        fields = ['reason', 'location', 'department', 'staff_recipient', 'quantity_removed', 'notes']
         widgets = {
             'reason': forms.Select(attrs={'class': 'form-select'}),
             'location': forms.Select(attrs={'class': 'form-select'}),
             'staff_recipient': forms.Select(attrs={'class': 'form-select'}),
+            'department': forms.Select(attrs={'class': 'form-select'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
         }
 

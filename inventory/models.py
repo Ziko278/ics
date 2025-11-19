@@ -8,7 +8,7 @@ from django.core.validators import MinValueValidator
 from django.contrib.auth.models import User
 import uuid
 
-from admin_site.models import SessionModel, SchoolSettingModel, TermModel
+from admin_site.models import SessionModel, SchoolSettingModel, TermModel, ClassSectionModel
 from human_resource.models import StaffModel
 from student.models import StudentModel
 
@@ -403,6 +403,14 @@ class StockOutModel(models.Model):
         STORE = 'store', 'Store'
         SHOP = 'shop', 'Shop'
 
+    class Department(models.TextChoices):
+        CLEANING = 'cleaning', 'Cleaning and Sanitation'
+        DRIVERS = 'drivers', 'Drivers'
+        CLINIC = 'clinic', 'Clinic'
+        ADMIN = 'admin', 'Admin'
+        CAFETERIA = 'cafeteria', 'Cafeteria'
+        MAINTENANCE = 'maintenance', 'Maintenance'
+
     item = models.ForeignKey(ItemModel, on_delete=models.PROTECT, related_name='stock_outs')
     quantity_removed = models.DecimalField(max_digits=10, decimal_places=2,
                                            validators=[MinValueValidator(Decimal('0.01'))])
@@ -412,6 +420,7 @@ class StockOutModel(models.Model):
     location = models.CharField(max_length=10, choices=LocationChoices.choices)
     staff_recipient = models.ForeignKey(StaffModel, on_delete=models.SET_NULL, null=True, blank=True)
     date_removed = models.DateField(default=timezone.now)
+    department = models.CharField(max_length=20, choices=Department.choices, blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
@@ -742,6 +751,7 @@ class SaleModel(models.Model):
     def total_amount(self):
         return self.subtotal - self.discount
 
+
 class SaleItemModel(models.Model):
     """A single line item within a sale transaction."""
     sale = models.ForeignKey(SaleModel, on_delete=models.CASCADE, related_name='items')
@@ -1050,3 +1060,51 @@ class DirectSaleModel(models.Model):
     def balance(self):
         """Outstanding balance"""
         return self.total_amount - self.amount_paid
+
+
+class ClassInventoryCollectionModel(models.Model):
+    """
+    Tracks items collected for classroom use (e.g., Chalk, Dusters).
+    The 'Consumer' is the Class, the Student is just the messenger.
+    """
+    # The Class consuming the item
+    class_room = models.ForeignKey('admin_site.ClassesModel', on_delete=models.CASCADE,
+                                   related_name='class_inventory_collections')
+    class_section = models.ForeignKey(
+        ClassSectionModel,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='class_section_collections'
+    )
+    # The Messenger (Optional)
+    student_representative = models.ForeignKey(StudentModel, on_delete=models.SET_NULL, null=True, blank=True,
+                                               help_text="Student who came to collect the item")
+
+    item = models.ForeignKey(ItemModel, on_delete=models.PROTECT)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+
+    # Metadata
+    date_collected = models.DateField(default=timezone.now)
+    collected_by_staff = models.ForeignKey(StaffModel, on_delete=models.SET_NULL, null=True, blank=True)
+
+    session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL, null=True, blank=True)
+    term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date_collected']
+        verbose_name = "Class Inventory Collection"
+
+    def save(self, *args, **kwargs):
+        if not self.session or not self.term:
+            setting = SchoolSettingModel.objects.first()
+            if setting:
+                if not self.session: self.session = setting.session
+                if not self.term: self.term = setting.term
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        if self.class_section:
+            return f"{self.class_room} - {self.class_section} : {self.item} x{self.quantity}"
+        return f"{self.class_room} : {self.item} x{self.quantity}"
