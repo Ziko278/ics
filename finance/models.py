@@ -1056,7 +1056,7 @@ class DiscountApplicationModel(models.Model):
         verbose_name = "Discount Application"
 
     def __str__(self):
-        session_name = self.session.name if self.session else 'Global'
+        session_name = self.session.__str__() if self.session else 'Global'
         term_name = self.term.name if self.term else 'Current'
         return f"{self.discount.title} ({session_name} - {term_name})"
 
