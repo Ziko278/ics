@@ -27,6 +27,86 @@ def generate_payment_reference():
     return f"PAY-{timezone.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
 
 
+# If you don't have num2words library, add this to your model or utils.py
+
+def amount_to_words(amount):
+    """
+    Convert amount to words (simple English implementation)
+    For production, use: pip install num2words
+    """
+    ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine']
+    tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+    teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen',
+             'Nineteen']
+
+    def convert_below_thousand(num):
+        if num == 0:
+            return ''
+        elif num < 10:
+            return ones[num]
+        elif num < 20:
+            return teens[num - 10]
+        elif num < 100:
+            return tens[num // 10] + (' ' + ones[num % 10] if num % 10 != 0 else '')
+        else:
+            return ones[num // 100] + ' Hundred' + (
+                ' and ' + convert_below_thousand(num % 100) if num % 100 != 0 else '')
+
+    if amount == 0:
+        return 'Zero'
+
+    # Split into integer and decimal parts
+    amount_str = str(amount)
+    if '.' in amount_str:
+        integer_part, decimal_part = amount_str.split('.')
+        integer_part = int(integer_part)
+        decimal_part = int(decimal_part)
+    else:
+        integer_part = int(amount)
+        decimal_part = 0
+
+    result = ''
+
+    # Billions
+    if integer_part >= 1000000000:
+        result += convert_below_thousand(integer_part // 1000000000) + ' Billion '
+        integer_part %= 1000000000
+
+    # Millions
+    if integer_part >= 1000000:
+        result += convert_below_thousand(integer_part // 1000000) + ' Million '
+        integer_part %= 1000000
+
+    # Thousands
+    if integer_part >= 1000:
+        result += convert_below_thousand(integer_part // 1000) + ' Thousand '
+        integer_part %= 1000
+
+    # Hundreds
+    if integer_part > 0:
+        result += convert_below_thousand(integer_part)
+
+    # Add decimal part if exists
+    if decimal_part > 0:
+        result += f' and {decimal_part}/100'
+
+    return result.strip()
+
+
+# Then update the model method:
+def get_total_in_words(self):
+    """Convert amount to words for voucher"""
+    try:
+        from num2words import num2words
+        amount_str = num2words(float(self.amount), lang='en')
+    except ImportError:
+        # Fallback to custom function
+        amount_str = amount_to_words(float(self.amount))
+
+    currency_name = "Naira" if self.currency == self.Currency.NAIRA else "Dollars"
+    return f"{amount_str.title()} {currency_name} Only"
+
+
 class StudentFundingModel(models.Model):
     # ✔️ REFACTOR: Enforced data integrity using TextChoices.
     class PaymentMethod(models.TextChoices):
@@ -427,24 +507,6 @@ def get_current_term():
     return setting.term if setting and getattr(setting, "term", None) else None
 
 
-class ExpenseCategoryModel(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-
-    class Meta:
-        verbose_name = _("Expense Category")
-        verbose_name_plural = _("Expense Categories")
-        ordering = ("name",)
-        indexes = [
-            models.Index(fields=["is_active"]),
-            models.Index(fields=["name"]),
-        ]
-
-    def __str__(self):
-        return self.name
 
 
 class IncomeCategoryModel(models.Model):
@@ -465,73 +527,6 @@ class IncomeCategoryModel(models.Model):
 
     def __str__(self):
         return self.name
-
-
-class ExpenseModel(models.Model):
-    CASH = "cash"
-    CARD = "card"
-    TRANSFER = "transfer"
-    PAYMENT_METHOD_CHOICES = [
-        (CASH, "Cash"),
-        (CARD, "Card"),
-        (TRANSFER, "Bank Transfer"),
-    ]
-
-    category = models.ForeignKey(
-        ExpenseCategoryModel, on_delete=models.PROTECT, related_name="expenses"
-    )
-    amount = models.DecimalField(
-        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
-    )
-    expense_date = models.DateField(default=timezone.now, db_index=True)
-
-    payment_method = models.CharField(
-        max_length=50, choices=PAYMENT_METHOD_CHOICES, default=CASH
-    )
-    name = models.CharField(max_length=100, blank=True, null=True)
-    reference = models.CharField(max_length=100, blank=True, null=True)
-    receipt = models.FileField(
-        upload_to="finance/expenses/",
-        blank=True,
-        null=True,
-        validators=[FileExtensionValidator(allowed_extensions=["pdf", "jpg", "jpeg", "png"])],
-    )
-    notes = models.TextField(blank=True, null=True)
-
-    session = models.ForeignKey(
-        SessionModel, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
-    )
-    term = models.ForeignKey(
-        TermModel, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_expenses"
-    )
-
-    class Meta:
-        ordering = ("-expense_date", "-created_at")
-        indexes = [
-            models.Index(fields=["expense_date"]),
-            models.Index(fields=["category"]),
-            models.Index(fields=["session"]),
-            models.Index(fields=["term"]),
-        ]
-        verbose_name = _("Expense")
-        verbose_name_plural = _("Expenses")
-
-    def save(self, *args, **kwargs):
-        # set defaults only if not provided
-        if not self.session:
-            self.session = get_current_session()
-        if not self.term:
-            self.term = get_current_term()
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.category.__str__()} ({self.amount})"
 
 
 class IncomeModel(models.Model):
@@ -587,6 +582,195 @@ class IncomeModel(models.Model):
 
     def __str__(self):
         return f"{self.description} ({self.amount})"
+
+
+class ExpenseCategoryModel(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Expense Category")
+        verbose_name_plural = _("Expense Categories")
+        ordering = ("name",)
+        indexes = [
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["name"]),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ExpenseModel(models.Model):
+    # Payment Method Choices (Updated)
+    CASH = "cash"
+    CARD = "card"
+    TRANSFER = "transfer"
+    DOLLAR_PAY = "dollar_pay"
+    OTHERS = "others"
+
+    PAYMENT_METHOD_CHOICES = [
+        (CASH, "Cash"),
+        (CARD, "Card"),
+        (TRANSFER, "Bank Transfer"),
+        (DOLLAR_PAY, "Dollar Pay"),
+        (OTHERS, "Others"),
+    ]
+
+    # Currency Choices
+    class Currency(models.TextChoices):
+        NAIRA = 'naira', 'Naira (NGN)'
+        DOLLAR = 'dollar', 'Dollar (USD)'
+
+    # Core Fields
+    category = models.ForeignKey(
+        ExpenseCategoryModel, on_delete=models.PROTECT, related_name="expenses"
+    )
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
+    )
+    expense_date = models.DateField(default=timezone.now, db_index=True)
+
+    # Payment Details
+    payment_method = models.CharField(
+        max_length=50, choices=PAYMENT_METHOD_CHOICES, default=CASH
+    )
+    currency = models.CharField(
+        max_length=20, choices=Currency.choices, default=Currency.NAIRA
+    )
+    bank_account = models.ForeignKey(
+        'SchoolBankDetail', on_delete=models.PROTECT, null=True, blank=True,
+        related_name="expenses"
+    )
+
+    # Basic Info
+    name = models.CharField(max_length=100, blank=True, null=True)
+    reference = models.CharField(max_length=100, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    receipt = models.FileField(
+        upload_to="finance/expenses/",
+        blank=True,
+        null=True,
+        validators=[FileExtensionValidator(allowed_extensions=["pdf", "jpg", "jpeg", "png"])],
+    )
+    notes = models.TextField(blank=True, null=True)
+
+    # Voucher Specific Fields
+    voucher_number = models.CharField(max_length=50, blank=True, db_index=True)
+    vote_and_subhead = models.CharField(max_length=200, blank=True, null=True)
+    line_items = models.JSONField(default=list, blank=True)
+    # Format: [{"date": "2024-01-15", "particular": "Item description", "amount": "5000.00"}, ...]
+
+    # Staff Fields
+    prepared_by = models.ForeignKey(
+        'human_resource.StaffModel', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='prepared_expenses'
+    )
+    authorised_by = models.ForeignKey(
+        'human_resource.StaffModel', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authorised_expenses'
+    )
+    collected_by = models.ForeignKey(
+        'human_resource.StaffModel', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='collected_expenses'
+    )
+
+    # Cheque Details (Optional - for manual completion)
+    cheque_number = models.CharField(max_length=100, blank=True, null=True)
+    bank_name = models.CharField(max_length=200, blank=True, null=True)
+    cheque_by = models.CharField(max_length=100, blank=True, null=True)
+    cheque_prepared_date = models.DateField(blank=True, null=True)
+    cheque_signed_date = models.DateField(blank=True, null=True)
+
+    # System Fields
+    session = models.ForeignKey(
+        SessionModel, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
+    )
+    term = models.ForeignKey(
+        TermModel, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_expenses"
+    )
+
+    class Meta:
+        ordering = ("-expense_date", "-created_at")
+        indexes = [
+            models.Index(fields=["expense_date"]),
+            models.Index(fields=["category"]),
+            models.Index(fields=["session"]),
+            models.Index(fields=["term"]),
+            models.Index(fields=["voucher_number"]),
+        ]
+        verbose_name = _("Expense")
+        verbose_name_plural = _("Expenses")
+
+    def save(self, *args, **kwargs):
+        # Set defaults only if not provided
+        if not self.session:
+            self.session = get_current_session()
+        if not self.term:
+            self.term = get_current_term()
+
+        # Auto-generate voucher number from reference if blank
+        if not self.voucher_number:
+            if self.reference:
+                self.voucher_number = self.reference
+            else:
+                # Generate unique voucher number
+                self.voucher_number = self.generate_voucher_number()
+
+        # Note: Don't recalculate amount here - it's already set by the form
+        # The form handles line_items calculation before calling save()
+
+        super().save(*args, **kwargs)
+
+    def generate_voucher_number(self):
+        """Generate unique voucher number with format EXP-YYYY-NNNN"""
+        from django.db.models import Max
+        import re
+
+        current_year = timezone.now().year
+        prefix = f"EXP-{current_year}-"
+
+        # Get the last voucher number for this year
+        last_expense = ExpenseModel.objects.filter(
+            voucher_number__startswith=prefix
+        ).aggregate(Max('voucher_number'))
+
+        last_voucher = last_expense.get('voucher_number__max')
+
+        if last_voucher:
+            # Extract number from voucher like "EXP-2024-0042"
+            match = re.search(r'-(\d+)$', last_voucher)
+            if match:
+                last_num = int(match.group(1))
+                new_num = last_num + 1
+            else:
+                new_num = 1
+        else:
+            new_num = 1
+
+        return f"{prefix}{str(new_num).zfill(4)}"
+
+    def get_total_in_words(self):
+        """Convert amount to words for voucher"""
+        from num2words import num2words
+        try:
+            amount_str = num2words(float(self.amount), lang='en')
+            currency_name = "Naira" if self.currency == self.Currency.NAIRA else "Dollars"
+            return f"{amount_str.title()} {currency_name} Only"
+        except:
+            return f"{self.amount} Only"
+
+    def __str__(self):
+        return f"{self.category.__str__()} ({self.amount})"
 
 
 class FinanceSettingModel(models.Model):

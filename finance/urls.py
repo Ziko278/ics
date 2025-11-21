@@ -27,7 +27,7 @@ from finance.views import (
     StaffUploadDepositView, StaffDepositHistoryView, confirm_fee_payment_view, DiscountListView, DiscountCreateView,
     DiscountUpdateView, DiscountApplicationCreateView, DiscountDeleteView, DiscountApplicationUpdateView,
     DiscountApplicationDeleteView, DiscountApplicationListView, DiscountSelectStudentView, StudentDiscountAssignView,
-    StudentDiscountIndexView,
+    StudentDiscountIndexView, ExpensePrintVoucherView,
 )
 
 urlpatterns = [
@@ -120,6 +120,8 @@ urlpatterns = [
     path("expenses/create/", ExpenseCreateView.as_view(), name="expense_create"),
     path("expenses/<int:pk>/edit/", ExpenseUpdateView.as_view(), name="expense_update"),
     path("expenses/<int:pk>/", ExpenseDetailView.as_view(), name="expense_detail"),
+    path('expense/<int:pk>/print-voucher/', ExpensePrintVoucherView.as_view(), name='expense_print_voucher'),
+
 
     # Income Category URLs
     path("income-categories/", IncomeCategoryListView.as_view(), name="income_category_index"),

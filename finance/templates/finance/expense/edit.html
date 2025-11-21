@@ -10,23 +10,25 @@
                 <h4 class="card-title mb-0">Edit Expense Record</h4>
                 <div>
                     <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#expenseHelperModal"><b>Helper</b></button>
-                    <a href="{% url 'expense_index' %}" class="btn btn-secondary">
-                        <i class="bi bi-arrow-left"></i> Back to List
+                    <a href="{% url 'expense_detail' expense.pk %}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to Detail
                     </a>
                 </div>
             </div>
 
-
             <form method="POST" action="" enctype="multipart/form-data">
                 {% csrf_token %}
+                {{ form.line_items_json }}
+
                 <div class="row">
-                    <!-- Left column: form fields -->
                     <div class="col-md-8">
-                        <div class="card">
-                            <div class="card-header"><h5 class="mb-0">Expense Details</h5></div>
+                        <!-- Expense Details Card -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">Expense Details</h5>
+                            </div>
                             <div class="card-body">
                                 <div class="row">
-
                                     <!-- Category -->
                                     <div class="col-md-6 mb-3">
                                         <label for="{{ form.category.id_for_label }}" class="form-label">Category <span class="text-danger">*</span></label>
@@ -36,13 +38,22 @@
                                         {% endif %}
                                     </div>
 
-                                    <!-- Amount -->
+                                    <!-- Payment Method -->
                                     <div class="col-md-6 mb-3">
-                                        <label for="{{ form.amount.id_for_label }}" class="form-label">Amount (₦) <span class="text-danger">*</span></label>
-                                        {{ form.amount }}
-                                        {% if form.amount.errors %}
-                                            <div class="invalid-feedback d-block">{{ form.amount.errors|striptags }}</div>
-                                        {% endif %}
+                                        <label for="{{ form.payment_method.id_for_label }}" class="form-label">Payment Method</label>
+                                        {{ form.payment_method }}
+                                    </div>
+
+                                    <!-- Currency -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.currency.id_for_label }}" class="form-label">Currency <span class="text-danger">*</span></label>
+                                        {{ form.currency }}
+                                    </div>
+
+                                    <!-- Bank Account -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.bank_account.id_for_label }}" class="form-label">Bank Account</label>
+                                        {{ form.bank_account }}
                                     </div>
 
                                     <!-- Expense Date -->
@@ -54,24 +65,32 @@
                                         {% endif %}
                                     </div>
 
-                                    <!-- Payment Method -->
-                                    <div class="col-md-6 mb-3">
-                                        <label for="{{ form.payment_method.id_for_label }}" class="form-label">Payment Method</label>
-                                        {{ form.payment_method }}
-                                    </div>
-
                                     <!-- Reference -->
                                     <div class="col-md-6 mb-3">
-                                        <label for="{{ form.reference.id_for_label }}" class="form-label">Reference</label>
+                                        <label for="{{ form.reference.id_for_label }}" class="form-label">Reference / Voucher Number</label>
                                         {{ form.reference }}
+                                        <small class="form-text text-muted">Current: {{ expense.voucher_number }}</small>
                                     </div>
 
+                                    <!-- Name -->
                                     <div class="col-md-6 mb-3">
-                                        <label for="{{ form.name.id_for_label }}" class="form-label">Name</label>
+                                        <label for="{{ form.name.id_for_label }}" class="form-label">In Favour Of (Name)</label>
                                         {{ form.name }}
                                     </div>
 
-                                    <!-- Receipt (existing + upload) -->
+                                    <!-- Vote and Subhead -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.vote_and_subhead.id_for_label }}" class="form-label">Vote & Sub-head</label>
+                                        {{ form.vote_and_subhead }}
+                                    </div>
+
+                                    <!-- Description -->
+                                    <div class="col-md-12 mb-3">
+                                        <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                                        {{ form.description }}
+                                    </div>
+
+                                    <!-- Receipt -->
                                     <div class="col-md-12 mb-3">
                                         <label class="form-label">Receipt (optional)</label>
                                         {% if expense.receipt %}
@@ -91,55 +110,152 @@
                                         {% endif %}
                                     </div>
 
-                                    <!-- Description / Notes -->
+                                    <!-- Notes -->
                                     <div class="col-md-12">
-                                        <label for="{{ form.notes.id_for_label }}" class="form-label">Notes / Description</label>
+                                        <label for="{{ form.notes.id_for_label }}" class="form-label">Notes</label>
                                         {{ form.notes }}
-                                        {% if form.notes.errors %}
-                                            <div class="invalid-feedback d-block">{{ form.notes.errors|striptags }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Line Items Card -->
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Line Items (Optional)</h5>
+                                <button type="button" class="btn btn-sm btn-success" id="addLineItemBtn">
+                                    <i class="bi bi-plus-circle"></i> Add Item
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted small">Add multiple line items to break down the expense. Total will be calculated automatically.</p>
+
+                                <div id="lineItemsContainer">
+                                    <!-- Existing line items will be loaded here -->
+                                </div>
+
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <label for="{{ form.amount.id_for_label }}" class="form-label">Amount <span class="text-danger">*</span></label>
+                                        {{ form.amount }}
+                                        <small class="form-text text-muted" id="amountHelp">Enter amount or add line items above</small>
+                                        {% if form.amount.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.amount.errors|striptags }}</div>
                                         {% endif %}
                                     </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Calculated Total</label>
+                                        <h4 class="text-success" id="calculatedTotal">₦0.00</h4>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
+                        <!-- Staff & Cheque Details Card -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">Voucher Authorization</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <!-- Prepared By -->
+                                    <div class="col-md-4 mb-3">
+                                        <label for="{{ form.prepared_by.id_for_label }}" class="form-label">Prepared By</label>
+                                        {{ form.prepared_by }}
+                                    </div>
 
+                                    <!-- Authorised By -->
+                                    <div class="col-md-4 mb-3">
+                                        <label for="{{ form.authorised_by.id_for_label }}" class="form-label">Authorised By</label>
+                                        {{ form.authorised_by }}
+                                    </div>
+
+                                    <!-- Collected By -->
+                                    <div class="col-md-4 mb-3">
+                                        <label for="{{ form.collected_by.id_for_label }}" class="form-label">Collected By</label>
+                                        {{ form.collected_by }}
+                                    </div>
+                                </div>
+
+                                <hr>
+                                <h6 class="mb-3">Cheque Details (Optional)</h6>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="{{ form.cheque_number.id_for_label }}" class="form-label">Cheque Number</label>
+                                        {{ form.cheque_number }}
+                                    </div>
+
+                                    <div class="col-md-4 mb-3">
+                                        <label for="{{ form.bank_name.id_for_label }}" class="form-label">Bank Name</label>
+                                        {{ form.bank_name }}
+                                    </div>
+
+                                    <div class="col-md-4 mb-3">
+                                        <label for="{{ form.cheque_by.id_for_label }}" class="form-label">Cheque By</label>
+                                        {{ form.cheque_by }}
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.cheque_prepared_date.id_for_label }}" class="form-label">Cheque Prepared Date</label>
+                                        {{ form.cheque_prepared_date }}
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.cheque_signed_date.id_for_label }}" class="form-label">Cheque Signed Date</label>
+                                        {{ form.cheque_signed_date }}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Right column: actions -->
+                    <!-- Actions Sidebar -->
                     <div class="col-md-4">
-                        <div class="card">
+                        <div class="card mb-3">
                             <div class="card-header"><h5 class="mb-0">Actions</h5></div>
                             <div class="card-body">
                                 <p class="text-muted">Update fields as needed and click Save.</p>
-
-
 
                                 <div class="d-grid gap-2">
                                     <button type="submit" name="save" class="btn btn-primary">
                                         <i class="bi bi-check-circle"></i> Save Changes
                                     </button>
-                                    <a href="{% url 'expense_detail' form.instance.pk %}" class="btn btn-outline-secondary">Cancel</a>
+                                    <a href="{% url 'expense_detail' expense.pk %}" class="btn btn-outline-secondary">Cancel</a>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="card mt-3">
+                        <div class="card mb-3">
                             <div class="card-body">
                                 <h6 class="mb-2">Record Info</h6>
+                                <p class="mb-1"><strong>Voucher #:</strong> {{ expense.voucher_number }}</p>
                                 <p class="mb-1"><strong>Recorded At:</strong> {{ expense.created_at|date:"d M Y, P" }}</p>
                                 <p class="mb-0"><strong>Record ID:</strong> {{ expense.pk }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Session & Term -->
+                        <div class="card">
+                            <div class="card-header"><h6 class="mb-0">Session & Term</h6></div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="{{ form.session.id_for_label }}" class="form-label">Session</label>
+                                    {{ form.session }}
+                                </div>
+                                <div class="mb-0">
+                                    <label for="{{ form.term.id_for_label }}" class="form-label">Term</label>
+                                    {{ form.term }}
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </form>
-
         </div>
     </div>
 </div>
 
-<!-- Expense Helper Modal (same as create) -->
+<!-- Expense Helper Modal -->
 <div class="modal fade" id="expenseHelperModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -148,7 +264,8 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>This form edits a recorded expense. Use reference for transaction numbers and receipt for supporting docs.</p>
+                <p>This form edits a recorded expense. Update any field and save changes.</p>
+                <p class="mb-0">Line items allow you to break down expenses into detailed components with automatic total calculation.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Got it</button>
@@ -156,5 +273,127 @@
         </div>
     </div>
 </div>
+
+<style>
+.line-item-row {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let lineItemCount = 0;
+    const lineItemsContainer = document.getElementById('lineItemsContainer');
+    const amountField = document.getElementById('id_amount');
+    const calculatedTotalEl = document.getElementById('calculatedTotal');
+    const lineItemsJsonField = document.getElementById('id_line_items_json');
+    const addLineItemBtn = document.getElementById('addLineItemBtn');
+
+    // Load existing line items
+    const existingLineItems = lineItemsJsonField.value ? JSON.parse(lineItemsJsonField.value) : [];
+    existingLineItems.forEach(item => {
+        addLineItemToDOM(item.date, item.particular, item.amount);
+    });
+
+    function addLineItemToDOM(date = '', particular = '', amount = '') {
+        lineItemCount++;
+        const lineItemHtml = `
+            <div class="line-item-row" data-item-id="${lineItemCount}">
+                <div class="row align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Date</label>
+                        <input type="date" class="form-control line-item-date" value="${date}" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Particular/Details</label>
+                        <input type="text" class="form-control line-item-particular" placeholder="Item description" value="${particular}" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Amount</label>
+                        <input type="number" class="form-control line-item-amount" step="0.01" min="0.01" placeholder="0.00" value="${amount}" required />
+                    </div>
+                    <div class="col-md-1">
+                        <button type="button" class="btn btn-danger btn-sm remove-line-item">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        lineItemsContainer.insertAdjacentHTML('beforeend', lineItemHtml);
+        updateLineItems();
+    }
+
+    // Add line item
+    addLineItemBtn.addEventListener('click', function() {
+        addLineItemToDOM();
+    });
+
+    // Remove line item
+    lineItemsContainer.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-line-item')) {
+            e.target.closest('.line-item-row').remove();
+            updateLineItems();
+        }
+    });
+
+    // Update on any change
+    lineItemsContainer.addEventListener('input', updateLineItems);
+
+    function updateLineItems() {
+        const lineItems = [];
+        let total = 0;
+
+        document.querySelectorAll('.line-item-row').forEach(row => {
+            const date = row.querySelector('.line-item-date').value;
+            const particular = row.querySelector('.line-item-particular').value;
+            const amount = parseFloat(row.querySelector('.line-item-amount').value) || 0;
+
+            if (particular && amount > 0) {
+                lineItems.push({
+                    date: date || '',
+                    particular: particular,
+                    amount: amount.toFixed(2)
+                });
+                total += amount;
+            }
+        });
+
+        // Update hidden field
+        lineItemsJsonField.value = JSON.stringify(lineItems);
+
+        // Update calculated total display
+        calculatedTotalEl.textContent = '₦' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+        // Control amount field
+        if (lineItems.length > 0) {
+            amountField.value = total.toFixed(2);
+            amountField.readOnly = true;
+            amountField.style.backgroundColor = '#e9ecef';
+            document.getElementById('amountHelp').textContent = 'Calculated from line items (read-only)';
+        } else {
+            amountField.readOnly = false;
+            amountField.style.backgroundColor = '';
+            document.getElementById('amountHelp').textContent = 'Enter amount or add line items above';
+        }
+    }
+
+    // Initialize on page load
+    updateLineItems();
+
+    // Initialize Select2 for staff fields if available
+    if (typeof $.fn.select2 !== 'undefined') {
+        $('.select2-staff').select2({
+            placeholder: 'Search and select staff',
+            allowClear: true,
+            width: '100%'
+        });
+    }
+});
+</script>
 
 {% endblock %}

@@ -335,35 +335,77 @@ class ExpenseCategoryForm(forms.ModelForm):
 # -------------------- EXPENSE FORM --------------------
 
 class ExpenseForm(forms.ModelForm):
-    # expose receipt as a FileField so we can validate size
+    # Expose receipt as a FileField so we can validate size
     receipt = forms.FileField(required=False, validators=[validate_file_size])
+
+    # Line items as a hidden JSON field (will be populated via JavaScript)
+    line_items_json = forms.CharField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = ExpenseModel
         fields = [
             "category", "amount", "expense_date",
-            "payment_method", "reference", "name", "receipt", "notes",
+            "payment_method", "currency", "bank_account", "reference", "name",
+            "description", "receipt", "notes",
+            "vote_and_subhead",
+            "prepared_by", "authorised_by", "collected_by",
+            "cheque_number", "bank_name", "cheque_by", "cheque_prepared_date", "cheque_signed_date",
             "session", "term",
         ]
+        # Note: line_items excluded - handled via line_items_json hidden field
         widgets = {
             "category": forms.Select(attrs={"class": "form-control"}),
-            "amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0.01"}),
+            "amount": forms.NumberInput(attrs={
+                "class": "form-control",
+                "step": "0.01",
+                "min": "0.01",
+                "id": "id_amount"
+            }),
             "expense_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "payment_method": forms.Select(attrs={"class": "form-control"}),
+            "currency": forms.Select(attrs={"class": "form-control"}),
+            "bank_account": forms.Select(attrs={"class": "form-control"}),
             "reference": forms.TextInput(attrs={"class": "form-control"}),
             "name": forms.TextInput(attrs={"class": "form-control"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "vote_and_subhead": forms.TextInput(attrs={"class": "form-control"}),
             "session": forms.Select(attrs={"class": "form-control"}),
             "term": forms.Select(attrs={"class": "form-control"}),
+
+            # Staff fields with Select2
+            "prepared_by": forms.Select(attrs={"class": "form-control select2-staff"}),
+            "authorised_by": forms.Select(attrs={"class": "form-control select2-staff"}),
+            "collected_by": forms.Select(attrs={"class": "form-control select2-staff"}),
+
+            # Cheque fields
+            "cheque_number": forms.TextInput(attrs={"class": "form-control"}),
+            "bank_name": forms.TextInput(attrs={"class": "form-control"}),
+            "cheque_by": forms.TextInput(attrs={"class": "form-control"}),
+            "cheque_prepared_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "cheque_signed_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # only categories that are active
-        self.fields["category"].queryset = ExpenseCategoryModel.objects.filter(is_active=True).order_by("name")
+        # Only categories that are active
+        self.fields["category"].queryset = ExpenseCategoryModel.objects.filter(
+            is_active=True
+        ).order_by("name")
 
-        # set defaults from SchoolSettingModel when available
+        # Staff queryset - only active staff
+        active_staff = StaffModel.objects.filter(status='active').order_by('first_name', 'last_name')
+        self.fields["prepared_by"].queryset = active_staff
+        self.fields["authorised_by"].queryset = active_staff
+        self.fields["collected_by"].queryset = active_staff
+
+        # Make staff fields not required
+        self.fields["prepared_by"].required = False
+        self.fields["authorised_by"].required = False
+        self.fields["collected_by"].required = False
+
+        # Set defaults from SchoolSettingModel when available
         setting = get_current_setting()
         if setting:
             if not self.initial.get("session") and hasattr(setting, "session"):
@@ -371,8 +413,27 @@ class ExpenseForm(forms.ModelForm):
             if not self.initial.get("term") and hasattr(setting, "term"):
                 self.initial["term"] = setting.term
 
+        # Populate line_items_json from instance if editing
+        if self.instance and self.instance.pk and self.instance.line_items:
+            import json
+            self.fields['line_items_json'].initial = json.dumps(self.instance.line_items)
+
     def clean_amount(self):
         amount = self.cleaned_data.get("amount")
+        line_items_json = self.cleaned_data.get("line_items_json")
+
+        # If line items exist, amount should be calculated from them
+        if line_items_json:
+            try:
+                import json
+                line_items = json.loads(line_items_json)
+                if line_items and len(line_items) > 0:
+                    # Amount will be calculated in save(), so we allow any value here
+                    return amount
+            except:
+                pass
+
+        # Standard validation if no line items
         if amount is None:
             raise ValidationError("Amount is required.")
         try:
@@ -401,12 +462,68 @@ class ExpenseForm(forms.ModelForm):
             pm = pm.strip()
             if len(pm) > 50:
                 raise ValidationError("Payment method is too long.")
-            # simple character check
+            # Simple character check
             if not re.match(r'^[\w\s\-\/&,]+$', pm):
                 raise ValidationError("Payment method contains invalid characters.")
         return pm
 
+    def clean_line_items_json(self):
+        """Validate and parse line items JSON"""
+        line_items_json = self.cleaned_data.get("line_items_json")
+        if not line_items_json:
+            return []
 
+        try:
+            import json
+            # Check if it's already a list/dict or needs parsing
+            if isinstance(line_items_json, str):
+                line_items = json.loads(line_items_json)
+            else:
+                line_items = line_items_json
+
+            # Validate structure
+            if not isinstance(line_items, list):
+                raise ValidationError("Invalid line items format.")
+
+            for item in line_items:
+                if not isinstance(item, dict):
+                    raise ValidationError("Invalid line item structure.")
+                if 'particular' not in item or 'amount' not in item:
+                    raise ValidationError("Each line item must have 'particular' and 'amount'.")
+
+                # Validate amount
+                try:
+                    Decimal(item['amount'])
+                except:
+                    raise ValidationError(f"Invalid amount in line item: {item.get('particular', '')}")
+
+            return line_items
+        except json.JSONDecodeError:
+            raise ValidationError("Invalid JSON format for line items.")
+        except ValidationError:
+            raise
+        except Exception as e:
+            raise ValidationError(f"Error processing line items: {str(e)}")
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        # Get the cleaned line items (already validated and parsed in clean_line_items_json)
+        parsed_items = self.cleaned_data.get('line_items_json', [])
+
+        instance.line_items = parsed_items
+
+        # Recalculate amount from line items if they exist
+        if parsed_items and len(parsed_items) > 0:
+            from decimal import Decimal
+            total = sum(Decimal(item.get('amount', 0)) for item in parsed_items)
+            instance.amount = total
+
+        if commit:
+            instance.save()
+        return instance
+
+    
 # -------------------- INCOME CATEGORY FORM --------------------
 
 class IncomeCategoryForm(forms.ModelForm):

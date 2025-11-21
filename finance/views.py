@@ -1301,9 +1301,10 @@ class ExpenseListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        # only select related fields that exist on your model
+        # Select related fields that exist on your model
         queryset = ExpenseModel.objects.select_related(
-            'category', 'session', 'term', 'created_by'
+            'category', 'session', 'term', 'created_by', 'bank_account',
+            'prepared_by', 'authorised_by', 'collected_by'
         ).order_by('-expense_date')
 
         # Filter by category, session, term
@@ -1319,12 +1320,15 @@ class ExpenseListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         if term:
             queryset = queryset.filter(term_id=term)
 
-        # Search over description and reference
+        # Search over description, reference, name, and voucher_number
         search = self.request.GET.get('search')
         if search:
             queryset = queryset.filter(
                 Q(description__icontains=search) |
-                Q(reference__icontains=search)
+                Q(reference__icontains=search) |
+                Q(name__icontains=search) |
+                Q(voucher_number__icontains=search) |
+                Q(notes__icontains=search)
             )
 
         return queryset
@@ -1332,8 +1336,11 @@ class ExpenseListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['categories'] = ExpenseCategoryModel.objects.all().order_by('name')
-        # removed departments - not in your model
         context['total_amount'] = self.get_queryset().aggregate(Sum('amount'))['amount__sum'] or 0
+
+        # Pass search query back to template
+        context['search_query'] = self.request.GET.get('search', '')
+
         return context
 
 
@@ -1354,6 +1361,7 @@ class ExpenseUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormEr
     form_class = ExpenseForm
     template_name = 'finance/expense/edit.html'
     success_message = 'Expense Successfully Updated'
+    context_object_name = "expense"
 
     def get_success_url(self):
         return reverse('expense_detail', kwargs={'pk': self.object.pk})
@@ -1364,6 +1372,28 @@ class ExpenseDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView)
     permission_required = 'finance.view_expensemodel'
     template_name = 'finance/expense/detail.html'
     context_object_name = "expense"
+
+
+class ExpensePrintVoucherView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
+    """
+    View for printing payment voucher
+    """
+    model = ExpenseModel
+    permission_required = 'finance.view_expensemodel'
+    template_name = 'finance/expense/print_voucher.html'
+    context_object_name = "expense"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Get school settings if available
+        try:
+            from admin_site.models import SchoolInfoModel
+            context['school_setting'] = SchoolInfoModel.objects.first()
+        except:
+            context['school_setting'] = None
+
+        return context
 
 
 # -------------------------

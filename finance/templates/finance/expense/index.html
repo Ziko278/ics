@@ -1,107 +1,107 @@
 {% extends 'admin_site/layout.html' %}
+{% load static %}
 {% load humanize %}
+
 {% block 'main' %}
-
 <div class="col-12">
-    <div class="card recent-sales overflow-auto">
-        <div class="filter px-2">
-            <a title="Actions" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
-            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
-                <li class="dropdown-header text-start"><h6>Action</h6></li>
-
-                <li>
-                    <a class="dropdown-item" href="{% url 'expense_create' %}">
-                        <button title="Add Expense" type="button" style="width:100%" class="btn btn-sm btn-primary">Add New Expense</button>
-                    </a>
-                </li>
-
-                <li>
-                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#expenseHelperModal">Helper</a>
-                </li>
-            </ul>
-        </div>
-
+    <div class="card">
         <div class="card-body">
-            <h5 class="card-title">Expense Records</h5>
-
-            <!-- Filter Form -->
-            <div class="card mb-4" style="background-color: #f8f9fa;">
-                <div class="card-body py-3">
-                    <form method="get" class="row g-3 align-items-end">
-                        <div class="col-md-5">
-                            <label class="form-label small">Search</label>
-                            <input type="text" name="search" value="{{ request.GET.search|default:'' }}"
-                                   placeholder="Search description or reference..." class="form-control">
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="form-label small">Category</label>
-                            <select name="category" class="form-select">
-                                <option value="">All Categories</option>
-                                {% for cat in categories %}
-                                <option value="{{ cat.id }}" {% if request.GET.category == cat.id|stringformat:"s" %}selected{% endif %}>{{ cat.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div class="col-md-3">
-                            <button type="submit" class="btn btn-primary w-100">
-                                <i class="bi bi-funnel"></i> Filter
-                            </button>
-                        </div>
-                    </form>
-                </div>
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="card-title mb-0">Expense Records</h4>
+                <a href="{% url 'expense_create' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle"></i> Record New Expense
+                </a>
             </div>
+
+            <!-- Filters -->
+            <form method="GET" class="mb-4">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <select name="category" class="form-control">
+                            <option value="">All Categories</option>
+                            {% for cat in categories %}
+                                <option value="{{ cat.id }}" {% if request.GET.category == cat.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ cat.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" name="search" class="form-control" placeholder="Search description, reference, name..." value="{{ search_query }}">
+                    </div>
+                    <div class="col-md-auto">
+                        <button type="submit" class="btn btn-secondary">
+                            <i class="bi bi-search"></i> Filter
+                        </button>
+                        <a href="{% url 'expense_index' %}" class="btn btn-outline-secondary">Clear</a>
+                    </div>
+                </div>
+            </form>
 
             <!-- Summary -->
-            <div class="alert alert-info">
-                <strong>Total Amount for Filtered Expenses: ₦{{ total_amount|intcomma }}</strong>
+            <div class="alert alert-info mb-3">
+                <strong>Total Expenses:</strong> ₦{{ total_amount|intcomma }}
             </div>
 
-            <!-- Expense Table -->
+            <!-- Expense List Table -->
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-bordered table-hover">
                     <thead class="table-light">
                         <tr>
-                            <th>#</th>
-                            <th>Category</th>
-                            <th>Amount</th>
-                            <th>Date</th>
-                            <th>Payment Method</th>
-                            <th>Name</th>
-                            <th>Session</th>
-                            <th>Term</th>
-                            <th>Action</th>
+                            <th width="10%">Voucher #</th>
+                            <th width="10%">Date</th>
+                            <th width="15%">Category</th>
+                            <th width="12%">In Favour Of</th>
+                            <th width="25%">Description</th>
+                            <th width="10%" class="text-end">Amount</th>
+                            <th width="10%">Payment Method</th>
+                            <th width="8%">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for expense in expense_list %}
                         <tr>
-                            <th scope="row">{% if page_obj %}{{ forloop.counter0|add:page_obj.start_index }}{% else %}{{ forloop.counter }}{% endif %}</th>
-
-                            <td>{{ expense.category.name|title }}</td>
-                            <td>₦{{ expense.amount|intcomma }}</td>
-                            <td>{{ expense.expense_date|date:"d M Y" }}</td>
-                            <td>{{ expense.payment_method|default:"—"|title }}</td>
-                            <td>{{ expense.name|default:"—"|title }}</td>
-                            <td>{% if expense.session %}{{ expense.session }}{% else %}—{% endif %}</td>
-                            <td>{% if expense.term %}{{ expense.term }}{% else %}—{% endif %}</td>
-
                             <td>
-                                <a href="{% url 'expense_detail' expense.pk %}" class="btn btn-sm btn-outline-primary" title="View Details"><i class="bi bi-eye"></i></a>
-                                <a href="{% url 'expense_update' expense.pk %}" class="btn btn-sm btn-outline-warning" title="Edit"><i class="bi bi-pencil-square"></i></a>
-
-
+                                <strong>{{ expense.voucher_number }}</strong>
+                            </td>
+                            <td>{{ expense.expense_date|date:"d M Y" }}</td>
+                            <td>{{ expense.category.name }}</td>
+                            <td>{{ expense.name|default:"—"|truncatewords:3 }}</td>
+                            <td>
+                                {% if expense.description %}
+                                    {{ expense.description|truncatewords:10 }}
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <strong>
+                                    {% if expense.currency == 'dollar' %}${% else %}₦{% endif %}{{ expense.amount|intcomma }}
+                                </strong>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ expense.get_payment_method_display }}</span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'expense_detail' expense.pk %}" class="btn btn-outline-primary" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{% url 'expense_update' expense.pk %}" class="btn btn-outline-warning" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a href="{% url 'expense_print_voucher' expense.pk %}" target="_blank" class="btn btn-outline-success" title="Print Voucher">
+                                        <i class="bi bi-printer"></i>
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="10" class="text-center py-5">
-                                <div class="text-muted">
-                                    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-                                    <h5 class="mt-3">No expense records found</h5>
-                                    <p>Try adjusting your search filters or create a new expense record.</p>
-                                </div>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                                <p class="mb-0 mt-2">No expense records found</p>
                             </td>
                         </tr>
                         {% endfor %}
@@ -111,16 +111,28 @@
 
             <!-- Pagination -->
             {% if is_paginated %}
-            <nav aria-label="Page navigation" class="mt-4">
+            <nav aria-label="Page navigation">
                 <ul class="pagination justify-content-center">
                     {% if page_obj.has_previous %}
-                        <li class="page-item"><a class="page-link" href="?page=1&{{ request.GET.urlencode }}" aria-label="First">&laquo; First</a></li>
-                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}">Previous</a></li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">First</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a>
+                        </li>
                     {% endif %}
-                    <li class="page-item active" aria-current="page"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+
+                    <li class="page-item active">
+                        <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+
                     {% if page_obj.has_next %}
-                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}">Next</a></li>
-                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ request.GET.urlencode }}" aria-label="Last">Last &raquo;</a></li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Last</a>
+                        </li>
                     {% endif %}
                 </ul>
             </nav>
@@ -128,24 +140,4 @@
         </div>
     </div>
 </div>
-
-<!-- Expense Helper Modal -->
-<div class="modal fade" id="expenseHelperModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Expense Records - Help</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>Use this screen to manage expense records. Search filters check description and reference.</p>
-                <p>Prefer attaching receipts and keeping references for audit trails.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 {% endblock %}

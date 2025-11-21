@@ -33,6 +33,15 @@
     <!-- Template Main CSS File -->
     <link href="{% static 'admin_site/styles/style.css' %}" rel="stylesheet">
 
+    <!-- Add these to your base template (admin_site/layout.html) in the <head> section -->
+
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+<!-- Select2 Bootstrap 5 Theme (optional, for better styling) -->
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+
     <!-- =======================================================
     * Template Name: NiceAdmin - v2.2.2
     * Template URL: https://bootstrapmade.com/nice-admin-bootstrap-admin-html-template/
@@ -905,6 +914,23 @@
 
   <!-- Template Main JS File -->
   <script src="{% static 'admin_site/scripts/main.js' %}"></script>
+<!-- Add these before the closing </body> tag, AFTER jQuery -->
+
+<!-- Select2 JS (requires jQuery) -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<!-- Initialize Select2 globally for staff fields -->
+<script>
+$(document).ready(function() {
+    // Initialize Select2 for all staff select fields
+    $('.select2-staff').select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Search and select staff',
+        allowClear: true,
+        width: '100%'
+    });
+});
+</script>
 
 </body>
 

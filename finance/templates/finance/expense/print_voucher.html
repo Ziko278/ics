@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Voucher - {{ expense.voucher_number }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+            padding: 20px;
+        }
+
+        .voucher-container {
+            max-width: 800px;
+            margin: 0 auto;
+            border: 2px solid #000;
+            padding: 15px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            color: #2563eb;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 10px;
+            margin: 2px 0;
+        }
+
+        .voucher-title {
+            background: #2563eb;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .voucher-number {
+            text-align: right;
+            font-size: 11px;
+            margin-bottom: 10px;
+        }
+
+        .in-favour {
+            border: 1px solid #000;
+            padding: 8px;
+            margin-bottom: 15px;
+        }
+
+        .in-favour-label {
+            font-size: 10px;
+            font-style: italic;
+            margin-bottom: 3px;
+        }
+
+        .in-favour-value {
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .line-items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        .line-items-table th,
+        .line-items-table td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .line-items-table th {
+            background: #f0f0f0;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .line-items-table .amount-col {
+            text-align: right;
+            width: 150px;
+        }
+
+        .line-items-table .date-col {
+            width: 100px;
+        }
+
+        .total-row {
+            font-weight: bold;
+            background: #f9f9f9;
+        }
+
+        .signature-section {
+            margin-top: 20px;
+            font-size: 11px;
+        }
+
+        .signature-line {
+            margin-bottom: 15px;
+        }
+
+        .signature-line label {
+            display: inline-block;
+            width: 140px;
+            font-weight: bold;
+        }
+
+        .signature-line .line {
+            display: inline-block;
+            border-bottom: 1px solid #000;
+            width: 300px;
+        }
+
+        .two-column {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .two-column > div {
+            flex: 1;
+        }
+
+        .cheque-section {
+            border: 2px solid #000;
+            padding: 10px;
+            margin: 15px 0;
+        }
+
+        .cheque-section .field {
+            margin-bottom: 8px;
+        }
+
+        .amount-in-words {
+            margin: 15px 0;
+            padding: 8px;
+            border: 1px solid #000;
+        }
+
+        .amount-in-words label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .bottom-section {
+            margin-top: 20px;
+        }
+
+        .field-inline {
+            margin-bottom: 10px;
+        }
+
+        .field-inline label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .field-inline .value {
+            border-bottom: 1px solid #000;
+            display: inline-block;
+            min-width: 200px;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+            }
+            .voucher-container {
+                border: none;
+                max-width: 100%;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="text-align: center; margin-bottom: 20px;">
+        <button onclick="window.print()" style="padding: 10px 30px; font-size: 14px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 4px;">
+            Print Voucher
+        </button>
+        <button onclick="window.close()" style="padding: 10px 30px; font-size: 14px; cursor: pointer; background: #6b7280; color: white; border: none; border-radius: 4px; margin-left: 10px;">
+            Close
+        </button>
+    </div>
+
+    <div class="voucher-container">
+        <!-- Header -->
+        <div class="header">
+            {% if school_setting and school_setting.name %}
+                <h1>{{ school_setting.name|upper }}</h1>
+                {% if school_setting.address %}
+                    <p>{{ school_setting.address }}</p>
+                {% endif %}
+                {% if school_setting.mobile %}
+                    <p>{{ school_setting.mobile }} | {{ school_setting.email }}</p>
+                {% endif %}
+                
+            {% else %}
+                <h1>SCHOOL NAME</h1>
+                <p>School Address</p>
+            {% endif %}
+        </div>
+
+        <!-- Voucher Title -->
+        <div class="voucher-title">
+            PAYMENT VOUCHER
+        </div>
+
+        <!-- Voucher Number -->
+        <div class="voucher-number">
+            <strong>No.</strong> {{ expense.voucher_number }}
+        </div>
+
+        <!-- In Favour Of -->
+        <div class="in-favour">
+            <div class="in-favour-label">In Favour of Name & Address</div>
+            <div class="in-favour-value">{{ expense.name|default:"_____________________________________" }}</div>
+        </div>
+
+        <!-- Line Items Table -->
+        <table class="line-items-table">
+            <thead>
+                <tr>
+                    <th class="date-col">DATE</th>
+                    <th>PARTICULARS & DETAILS</th>
+                    <th class="amount-col">AMOUNT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if expense.line_items %}
+                    {% for item in expense.line_items %}
+                    <tr>
+                        <td class="date-col">{{ item.date|default:"" }}</td>
+                        <td>{{ item.particular }}</td>
+                        <td class="amount-col">{{ item.amount }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td class="date-col">{{ expense.expense_date|date:"d/m/Y" }}</td>
+                        <td>{{ expense.category.name }} {% if expense.description %}- {{ expense.description }}{% endif %}</td>
+                        <td class="amount-col">{{ expense.amount }}</td>
+                    </tr>
+                    <!-- Add empty rows for manual entry -->
+                    {% for i in "123" %}
+                    <tr>
+                        <td class="date-col">&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td class="amount-col">&nbsp;</td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
+            </tbody>
+            <tfoot>
+                <tr class="total-row">
+                    <td colspan="2" style="text-align: right; padding-right: 15px;"><strong>TOTAL</strong></td>
+                    <td class="amount-col"><strong>{{ expense.amount }}</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <!-- Signature Section -->
+        <div class="signature-section">
+            <div class="two-column">
+                <div>
+                    <div class="signature-line">
+                        <div class="line" style="width: 100%;"></div>
+                        <div style="margin-top: 3px; text-align: center; font-size: 10px;">Signature & Date</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="two-column">
+                <div class="signature-line">
+                    <label>Prepared By:</label>
+                    <div class="line">{{ expense.prepared_by|default:"" }}</div>
+                </div>
+                <div class="signature-line">
+                    <label>Vote & Sub-head:</label>
+                    <div class="line">{{ expense.vote_and_subhead|default:"" }}</div>
+                </div>
+            </div>
+
+            <div class="two-column">
+                <div class="signature-line">
+                    <label>Account Title:</label>
+                    <div class="line">{{ expense.bank_account|default:"" }}</div>
+                </div>
+                <div>
+                    <div class="line" style="width: 100%;"></div>
+                    <div style="margin-top: 3px; text-align: center; font-size: 10px;">Signature & Date</div>
+                </div>
+            </div>
+
+            <div class="signature-line">
+                <label>Authorised / Approved By:</label>
+                <div class="line" style="width: 400px;">{{ expense.authorised_by|default:"" }}</div>
+                <div class="line" style="width: 150px; margin-left: 20px;"></div>
+                <div style="margin-top: 3px; text-align: right; font-size: 10px; margin-right: 5px;">Signature & Date</div>
+            </div>
+        </div>
+
+        <!-- Cheque Section -->
+        <div class="cheque-section">
+            <div class="field">
+                <label>Cheque No</label>
+                <span class="line">{{ expense.cheque_number|default:"_____________" }}</span>
+                <label style="margin-left: 20px;">Of (Name of Bank)</label>
+                <span class="line">{{ expense.bank_name|default:"_____________" }}</span>
+                <label style="margin-left: 20px;">By</label>
+                <span class="line">{{ expense.cheque_by|default:"_____________" }}</span>
+            </div>
+            <div class="field">
+                <label>Date Cheque was prepared:</label>
+                <span class="line">{{ expense.cheque_prepared_date|date:"d/m/Y"|default:"_____________" }}</span>
+                <label style="margin-left: 40px;">Sign</label>
+                <span class="line">_____________</span>
+            </div>
+            <div class="field">
+                <label>Date Cheque was signed by Authorised Signatory</label>
+                <span class="line">{{ expense.cheque_signed_date|date:"d/m/Y"|default:"_____________" }}</span>
+            </div>
+        </div>
+
+        <!-- Amount in Words -->
+        <div class="amount-in-words">
+            <label>Amount Collected in words</label>
+            <span>{{ expense.get_total_in_words }}</span>
+        </div>
+
+        <!-- Bottom Section -->
+        <div class="bottom-section">
+            <div class="field-inline">
+                <label>Collected By Name</label>
+                <span class="value">{{ expense.collected_by|default:"" }}</span>
+            </div>
+
+            <div class="two-column">
+                <div class="field-inline">
+                    <label>Date:</label>
+                    <span class="value">{{ expense.expense_date|date:"d/m/Y" }}</span>
+                </div>
+            </div>
+
+            <div class="two-column">
+                <div class="field-inline">
+                    <label>Signature</label>
+                    <span class="value" style="min-width: 150px;"></span>
+                </div>
+                <div class="field-inline" style="text-align: right;">
+                    <label>Place Official Stamp</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Auto print on load (optional - comment out if not needed)
+        // window.onload = function() { window.print(); }
+    </script>
+</body>
+</html>
