@@ -351,7 +351,7 @@ class InvoiceModel(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.invoice_number
+        return f"{self.invoice_number} {self.student} {self.student.student_class} {self.student.class_section}"
 
     @property
     def amount_paid(self):
