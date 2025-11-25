@@ -65,6 +65,20 @@
                                 <td scope="row" {% if payment.status == 'pending' %} class='text-warning' {% elif payment.status == 'declined'  %} class='text-danger' {% else %} class='text-success' {% endif %}>{{ payment.status|title }}</td>
                                 <td scope="row" class="text-center">
                                     <a title="View Fee Payment Detail" style="font-size:12px" class="btn btn-primary" href="{% url 'staff_deposit_detail' payment.id %}"><i class="bi bi-eye"></i> </a>
+                                    {% if payment.status == 'confirmed' %}
+                                        <button
+                                            type="button"
+                                            class="btn btn-warning btn-revert"
+                                            data-toggle="modal"
+                                            data-target="#staffRevertModal"
+                                            data-funding-id="{{ payment.id }}"
+                                            data-funding-amount="{{ payment.amount }}"
+                                            data-staff-name="{{ payment.staff|escapejs }}"
+                                            title="Revert Funding"
+                                            style="font-size:12px">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}
@@ -75,5 +89,136 @@
         </div>
     </div>
 </div>
+
+<!-- Staff Revert Modal -->
+<div class="modal fade" id="staffRevertModal" tabindex="-1" role="dialog" aria-labelledby="staffRevertModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <form id="staffRevertForm" method="post">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staffRevertModalLabel">Confirm Revert</h5>
+
+        </div>
+        <div class="modal-body">
+          <p id="staffRevertModalBody">You are about to revert <strong id="staffRevertAmount"></strong> from <strong id="staffRevertStaff"></strong>'s wallet.</p>
+
+          <div class="form-group">
+            <label for="staffReasonInput">Reason for Revert <span class="text-danger">*</span></label>
+            <textarea id="staffReasonInput" name="reason" class="form-control" required rows="3" placeholder="Provide reason for revert"></textarea>
+          </div>
+
+          <input type="hidden" id="staffFundingIdInput" name="funding_id" value="">
+        </div>
+        <div class="modal-footer">
+          <button type="submit" id="staffConfirmRevertBtn" class="btn btn-danger">Proceed with Revert</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Select revert buttons (cover both class names if used)
+    const revertButtons = Array.from(document.querySelectorAll('.btn-revert'))
+        .concat(Array.from(document.querySelectorAll('.btn-revert-staff')));
+
+    const staffRevertForm = document.getElementById('staffRevertForm');
+    const fundingIdInput = document.getElementById('staffFundingIdInput');
+    const reasonInput = document.getElementById('staffReasonInput');
+    const revertAmountElem = document.getElementById('staffRevertAmount');
+    const revertStaffElem = document.getElementById('staffRevertStaff');
+    const modalEl = document.getElementById('staffRevertModal');
+
+    if (!modalEl) {
+        console.warn('staffRevertModal element not found - modal will not open');
+        return;
+    }
+
+    // Helper to show the modal for Bootstrap4 (jQuery) or Bootstrap5
+    function showModal() {
+        // Bootstrap 4 + jQuery
+        if (window.jQuery && typeof window.jQuery(modalEl).modal === 'function') {
+            window.jQuery(modalEl).modal('show');
+            return;
+        }
+
+        // Bootstrap 5+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const inst = bootstrap.Modal.getOrCreateInstance(modalEl);
+            inst.show();
+            return;
+        }
+
+        // Fallback: make modal visible (basic)
+        modalEl.style.display = 'block';
+        modalEl.classList.add('show');
+    }
+
+    // Helper to hide modal (used optionally after submit)
+    function hideModal() {
+        if (window.jQuery && typeof window.jQuery(modalEl).modal === 'function') {
+            window.jQuery(modalEl).modal('hide');
+            return;
+        }
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const inst = bootstrap.Modal.getInstance(modalEl);
+            if (inst) inst.hide();
+            return;
+        }
+        modalEl.style.display = 'none';
+        modalEl.classList.remove('show');
+    }
+
+    // Wire each button to populate modal + show it
+    revertButtons.forEach(btn => {
+        btn.addEventListener('click', function (e) {
+            const fundingId = this.getAttribute('data-funding-id') || '';
+            const fundingAmount = this.getAttribute('data-funding-amount') || '';
+            const staffName = this.getAttribute('data-staff-name') || '';
+
+            if (fundingIdInput) fundingIdInput.value = fundingId;
+            if (revertAmountElem) revertAmountElem.textContent = fundingAmount ? ('₦' + Number(fundingAmount).toLocaleString()) : '';
+            if (revertStaffElem) revertStaffElem.textContent = staffName;
+
+            if (staffRevertForm) {
+                try {
+                    // Django URL trick: replace placeholder 0 with actual id
+                    staffRevertForm.action = "{% url 'staff_deposit_revert' 0 %}".replace('/0/', '/' + fundingId + '/');
+                } catch (err) {
+                    console.warn('Could not set form.action automatically:', err);
+                }
+            }
+
+            if (reasonInput) reasonInput.value = '';
+
+            showModal();
+        });
+    });
+
+    // Client-side validation: require reason before allowing the form to submit
+    if (staffRevertForm) {
+        staffRevertForm.addEventListener('submit', function (e) {
+            if (reasonInput && reasonInput.value.trim() === '') {
+                e.preventDefault();
+                // Focus and show a small message
+                reasonInput.focus();
+                // Use any flash UI you have, otherwise fallback to alert
+                if (typeof toastr !== 'undefined') {
+                    toastr.error('Please provide a reason for the revert.');
+                } else {
+                    alert('Please provide a reason for the revert.');
+                }
+                return false;
+            }
+            // Optional: disable submit button to prevent double submits
+            const submitBtn = staffRevertForm.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+            return true; // allow submit
+        });
+    }
+});
+</script>
 
 {%endblock %}

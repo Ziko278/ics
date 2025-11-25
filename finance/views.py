@@ -2351,6 +2351,65 @@ def deposit_create_view(request, student_pk):
     }
     return render(request, 'finance/funding/create.html', context)
 
+
+@login_required
+@permission_required("finance.change_studentfundingmodel", raise_exception=True)
+def deposit_revert_view(request, pk):
+    """
+    Revert a funding (refund). POST only. Expects 'reason' in POST.
+    Conditions:
+      - funding must be CONFIRMED (or you can adapt to other statuses),
+      - student wallet balance must be >= funding.amount
+    On success: deduct from wallet, mark funding as REVERTED, record who and why.
+    """
+    funding = get_object_or_404(StudentFundingModel, pk=pk)
+    student = funding.student
+
+    # Only allow revert for confirmed (customize if you allow other statuses)
+    if funding.status != StudentFundingModel.PaymentStatus.CONFIRMED:
+        messages.error(request, "Only confirmed funding records can be reverted.")
+        return redirect('deposit_detail', pk=funding.pk)
+
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('deposit_detail', pk=funding.pk)
+
+    reason = request.POST.get('reason', '').strip()
+    if not reason:
+        messages.error(request, "Please provide a reason for the revert.")
+        return redirect('deposit_detail', pk=funding.pk)
+
+    try:
+        profile = StaffProfileModel.objects.get(user=request.user)
+        staff = profile.staff
+    except Exception:
+        staff = None
+
+    # Perform atomic wallet and funding update
+    with transaction.atomic():
+        student_wallet, created = StudentWalletModel.objects.select_for_update().get_or_create(student=student)
+
+        refund_amount = funding.amount
+
+        # Check wallet sufficiency
+        if student_wallet.balance < refund_amount:
+            messages.error(request, "Student wallet balance is insufficient to perform this revert.")
+            return redirect('deposit_detail', pk=funding.pk)
+
+        # Deduct from wallet
+        student_wallet.balance = student_wallet.balance - refund_amount
+        student_wallet.save()
+
+        # Mark funding reverted and store reason/who/when
+        funding.mark_reverted(reason=reason, staff=staff)
+
+        funding.save()
+
+    messages.success(request, f"Funding of ₦{refund_amount} has been reverted successfully.")
+    # Redirect to deposit detail page (you can change to index if you prefer)
+    return redirect('deposit_detail', pk=funding.pk)
+
+
 @login_required
 @permission_required("finance.view_studentfundingmodel", raise_exception=True)
 def deposit_detail_view(request, pk):
@@ -2596,6 +2655,56 @@ def staff_decline_payment_view(request, payment_id):
         # or just redirect with a message. Assuming redirect for simplicity.
         messages.info(request, "Method Not Supported.")
         return redirect(reverse('staff_pending_deposit_index'))  # Replace with your actual URL name
+
+
+@login_required
+@permission_required("finance.change_stafffundingmodel", raise_exception=True)
+def staff_deposit_revert_view(request, pk):
+    """
+    Revert a staff funding (refund). POST only. Expects 'reason' in POST.
+    Conditions:
+      - funding.status must be CONFIRMED (adjust if you allow others)
+      - staff wallet balance must be >= funding.amount
+    """
+    funding = get_object_or_404(StaffFundingModel, pk=pk)
+    staff_person = funding.staff
+
+    if funding.status != StaffFundingModel.PaymentStatus.CONFIRMED:
+        messages.error(request, "Only confirmed funding records can be reverted.")
+        return redirect('staff_deposit_detail', pk=funding.pk)
+
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('staff_deposit_detail', pk=funding.pk)
+
+    reason = request.POST.get('reason', '').strip()
+    if not reason:
+        messages.error(request, "Please provide a reason for the revert.")
+        return redirect('staff_deposit_detail', pk=funding.pk)
+
+    try:
+        profile = StaffProfileModel.objects.get(user=request.user)
+        acting_staff = profile.staff
+    except Exception:
+        acting_staff = None
+
+    with transaction.atomic():
+        staff_wallet = StaffWalletModel.objects.select_for_update().get_or_create(staff=staff_person)[0]
+        refund_amount = funding.amount
+
+        if staff_wallet.balance < refund_amount:
+            messages.error(request, "Staff wallet balance is insufficient to perform this revert.")
+            return redirect('staff_deposit_detail', pk=funding.pk)
+
+        # Deduct from staff wallet
+        staff_wallet.balance = staff_wallet.balance - refund_amount
+        staff_wallet.save()
+
+        # Mark funding as reverted (records who/when/reason)
+        funding.mark_reverted(reason=reason, staff=acting_staff)
+
+    messages.success(request, f"Funding of ₦{refund_amount} has been reverted successfully.")
+    return redirect('staff_deposit_detail', pk=funding.pk)
 
 
 class StaffUploadDepositView(LoginRequiredMixin, CreateView):
@@ -3484,7 +3593,6 @@ class DiscountCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
         if request.method == 'GET':
             return redirect(self.get_success_url())
         return super().dispatch(request, *args, **kwargs)
-
 
 class DiscountUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = DiscountModel

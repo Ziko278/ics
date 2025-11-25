@@ -27,7 +27,7 @@ from finance.views import (
     StaffUploadDepositView, StaffDepositHistoryView, confirm_fee_payment_view, DiscountListView, DiscountCreateView,
     DiscountUpdateView, DiscountApplicationCreateView, DiscountDeleteView, DiscountApplicationUpdateView,
     DiscountApplicationDeleteView, DiscountApplicationListView, DiscountSelectStudentView, StudentDiscountAssignView,
-    StudentDiscountIndexView, ExpensePrintVoucherView,
+    StudentDiscountIndexView, ExpensePrintVoucherView, deposit_revert_view, staff_deposit_revert_view,
 )
 
 urlpatterns = [
@@ -189,6 +189,7 @@ urlpatterns = [
     path('deposit/payment/index', deposit_payment_list_view, name='deposit_index'),
     path('deposit/<int:pk>/detail', deposit_detail_view, name='deposit_detail'),
     path('deposit/<int:student_pk>/create', deposit_create_view, name='deposit_create'),
+    path('deposit/<int:pk>/revert/', deposit_revert_view, name='deposit_revert'),
 
     path('deposit/payment/pending/index', pending_deposit_payment_list_view, name='pending_deposit_index'),
     path('deposit/<int:payment_id>/confirm/', confirm_payment_view, name='confirm_payment'),
@@ -203,6 +204,7 @@ urlpatterns = [
     path('staff-deposit/payment/pending/index', staff_pending_deposit_payment_list_view, name='staff_pending_deposit_index'),
     path('staff-deposit/<int:payment_id>/confirm/', staff_confirm_payment_view, name='staff_confirm_payment'),
     path('staff-deposit/<int:payment_id>/cancel/', staff_decline_payment_view, name='staff_decline_payment'),
+    path('staff-deposit/<int:pk>/revert/', staff_deposit_revert_view, name='staff_deposit_revert'),
 
     path('my-funding/upload/', StaffUploadDepositView.as_view(), name='staff_upload_deposit'),
 

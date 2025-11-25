@@ -42,7 +42,7 @@
     <div class="col-md-12">
         <div class="card">
             <div class="card-body pt-3" style="overflow-x:auto">
-                <h5 class="card-title">Fee Payments for {{ current_session }} Session - {{ current_term }}</h5>
+                <h5 class="card-title">Student Wallet Funding for {{ current_session }} Session - {{ current_term }}</h5>
                 <table class="table table-bordered datatable" style="font-size:14px">
                     <thead>
                         <tr>
@@ -63,9 +63,24 @@
                                 <td scope="row">{{ payment.amount|intcomma }}</td>
                                 <td scope="row">{{ payment.created_at|date }}</td>
                                 <td scope="row">{{ payment.mode|title }}</td>
-                                <td scope="row" {% if payment.status == 'pending' %} class='text-warning' {% elif payment.status == 'declined'  %} class='text-danger' {% else %} class='text-success' {% endif %}>{{ payment.status|title }}</td>
+                                <td scope="row" {% if payment.status == 'pending' %} class='text-warning' {% elif payment.status == 'declined'  %} class='text-danger' {% elif payment.status == 'reverted'  %} class='text-danger' {% else %} class='text-success' {% endif %}>{{ payment.status|title }}</td>
                                 <td scope="row" class="text-center">
                                     <a title="View Fee Payment Detail" style="font-size:12px" class="btn btn-primary" href="{% url 'deposit_detail' payment.id %}"><i class="bi bi-eye"></i> </a>
+                                    {% if payment.status == 'confirmed' %}
+                                    <!-- Revert button - opens modal -->
+                                    <button
+                                        type="button"
+                                        class="btn btn-warning btn-revert"
+                                        data-toggle="modal"
+                                        data-target="#revertModal"
+                                        data-funding-id="{{ payment.id }}"
+                                        data-funding-amount="{{ payment.amount }}"
+                                        data-student-name="{{ payment.student|escapejs }}"
+                                        title="Revert Funding"
+                                        style="font-size:12px">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                    </button>
+                                {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}
@@ -76,5 +91,110 @@
         </div>
     </div>
 </div>
+
+<!-- Revert Modal -->
+<div class="modal fade" id="revertModal" tabindex="-1" role="dialog" aria-labelledby="revertModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <form id="revertForm" method="post">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="revertModalLabel">Confirm Revert</h5>
+                </div>
+        <div class="modal-body">
+          <p id="revertModalBody">You are about to revert <strong id="revertAmount"></strong> from <strong id="revertStudent"></strong>'s wallet.</p>
+
+          <div class="form-group">
+            <label for="reasonInput">Reason for Revert <span class="text-danger">*</span></label>
+            <textarea id="reasonInput" name="reason" class="form-control" required rows="3" placeholder="Provide reason for revert"></textarea>
+          </div>
+
+          <input type="hidden" id="fundingIdInput" name="funding_id" value="">
+        </div>
+        <div class="modal-footer">
+          <button type="submit" id="confirmRevertBtn" class="btn btn-danger">Proceed with Revert</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const revertButtons = document.querySelectorAll('.btn-revert');
+    const modalEl = document.getElementById('revertModal');
+    const reasonInput = document.getElementById('reasonInput');
+    const fundingIdInput = document.getElementById('fundingIdInput');
+    const revertAmountElem = document.getElementById('revertAmount');
+    const revertStudentElem = document.getElementById('revertStudent');
+    const revertForm = document.getElementById('revertForm');
+
+    if (!modalEl) {
+        console.warn('revertModal element not found - modal will not open');
+        return;
+    }
+
+    // Helper to show the modal for Bootstrap4 (jQuery) or Bootstrap5
+    function showModal() {
+        // Bootstrap 4 + jQuery
+        if (window.jQuery && typeof window.jQuery(modalEl).modal === 'function') {
+            window.jQuery(modalEl).modal('show');
+            return;
+        }
+
+        // Bootstrap 5+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            // getOrCreate instance (Bootstrap 5)
+            const inst = bootstrap.Modal.getOrCreateInstance(modalEl);
+            inst.show();
+            return;
+        }
+
+        // Fallback (very basic): make modal visible (works only for very simple markup)
+        modalEl.style.display = 'block';
+        modalEl.classList.add('show');
+    }
+
+    revertButtons.forEach(btn => {
+        btn.addEventListener('click', function (e) {
+            const fundingId = this.getAttribute('data-funding-id');
+            const fundingAmount = this.getAttribute('data-funding-amount');
+            const studentName = this.getAttribute('data-student-name');
+
+            if (fundingIdInput) fundingIdInput.value = fundingId || '';
+            if (revertAmountElem) revertAmountElem.textContent = fundingAmount ? ('₦' + Number(fundingAmount).toLocaleString()) : '';
+            if (revertStudentElem) revertStudentElem.textContent = studentName || '';
+
+            // Set form action dynamically to deposit_revert URL (adjust if your URL is different)
+            if (revertForm) {
+                try {
+                    // Django URL trick: replace placeholder 0 with actual id
+                    revertForm.action = "{% url 'deposit_revert' 0 %}".replace('/0/', '/' + fundingId + '/');
+                } catch (err) {
+                    // If template tag not available or fails, just log
+                    console.warn('Could not set form.action automatically:', err);
+                }
+            }
+
+            // Clear reason from previous usage
+            if (reasonInput) reasonInput.value = '';
+
+            // Finally show the modal
+            showModal();
+        });
+    });
+
+    // Keep original behavior for submit (server handles everything)
+    if (revertForm) {
+        revertForm.addEventListener('submit', function (e) {
+            // you can add client-side checks here, e.g. ensure reason is present
+            if (reasonInput && reasonInput.value.trim() === '') {
+                e.preventDefault();
+                alert('Please provide a reason for the revert.');
+            }
+        });
+    }
+});
+</script>
 
 {%endblock %}

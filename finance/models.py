@@ -123,6 +123,7 @@ class StudentFundingModel(models.Model):
         PENDING = 'pending', 'Pending'
         CONFIRMED = 'confirmed', 'Confirmed'
         FAILED = 'failed', 'Failed'
+        REVERTED = 'reverted', 'Reverted'
 
     student = models.ForeignKey(StudentModel, on_delete=models.CASCADE, related_name='funding_list')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -139,6 +140,11 @@ class StudentFundingModel(models.Model):
     teller_number = models.CharField(max_length=50, null=True, blank=True)
     decline_reason = models.CharField(max_length=250, null=True, blank=True)
     reference = models.CharField(max_length=250, null=True, blank=True, help_text="Unique reference for this transaction.")
+
+    refund_reason = models.CharField(max_length=500, null=True, blank=True, help_text="Reason for revert/refund.")
+    reverted_by = models.ForeignKey(StaffModel, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='reverted_fundings')
+    reverted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Student Funding Record"
@@ -164,6 +170,17 @@ class StudentFundingModel(models.Model):
         is_new = self.pk is None
         super().save(*args, **kwargs)
 
+    def mark_reverted(self, reason: str = None, staff: StaffModel = None):
+        """
+        Helper to mark this funding as reverted.
+        Does NOT change the wallet — that must be done by the view in a transaction.
+        """
+        self.status = self.PaymentStatus.REVERTED
+        self.refund_reason = reason
+        self.reverted_by = staff
+        self.reverted_at = timezone.now()
+        self.save(update_fields=['status', 'refund_reason', 'reverted_by', 'reverted_at'])
+
 
 class StaffFundingModel(models.Model):
     # ✔️ REFACTOR: Enforced data integrity using TextChoices.
@@ -181,6 +198,7 @@ class StaffFundingModel(models.Model):
         PENDING = 'pending', 'Pending'
         CONFIRMED = 'confirmed', 'Confirmed'
         FAILED = 'failed', 'Failed'
+        REVERTED = 'reverted', 'Reverted'
 
     staff = models.ForeignKey(StaffModel, on_delete=models.CASCADE, related_name='staff_funding_list')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -197,6 +215,10 @@ class StaffFundingModel(models.Model):
     teller_number = models.CharField(max_length=50, null=True, blank=True)
     decline_reason = models.CharField(max_length=250, null=True, blank=True)
     reference = models.CharField(max_length=250, null=True, blank=True, help_text="Unique reference for this transaction.")
+    refund_reason = models.CharField(max_length=500, null=True, blank=True, help_text="Reason for revert/refund.")
+    reverted_by = models.ForeignKey(StaffModel, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='reverted_staff_fundings')
+    reverted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Student Funding Record"
@@ -222,6 +244,16 @@ class StaffFundingModel(models.Model):
         is_new = self.pk is None
         super().save(*args, **kwargs)
 
+    def mark_reverted(self, reason: str = None, staff: StaffModel = None):
+        """
+        Mark this funding as reverted and save metadata.
+        Does NOT change the wallet — the view should perform wallet updates in an atomic block.
+        """
+        self.status = self.PaymentStatus.REVERTED
+        self.refund_reason = reason
+        self.reverted_by = staff
+        self.reverted_at = timezone.now()
+        self.save(update_fields=['status', 'refund_reason', 'reverted_by', 'reverted_at'])
 
 # ===================================================================
 # Fee Structure Setup Models (The "Price List")
@@ -505,8 +537,6 @@ def get_current_session():
 def get_current_term():
     setting = SchoolSettingModel.objects.first()
     return setting.term if setting and getattr(setting, "term", None) else None
-
-
 
 
 class IncomeCategoryModel(models.Model):

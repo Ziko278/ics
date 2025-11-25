@@ -40,6 +40,18 @@
                         <dt class="col-sm-4">Term:</dt>
                         <dd class="col-sm-8">{{ funding.get_term_display }}</dd>
 
+                        <dt class="col-sm-4">Status:</dt>
+                        <dd class="col-sm-8">
+                            <span
+                              {% if funding.status == 'pending' %} class="text-warning"
+                              {% elif funding.status == 'reverted' %} class="text-danger"
+                              {% else %} class="text-success"
+                              {% endif %}
+                            >
+                              {{ funding.get_status_display }}
+                            </span>
+                        </dd>
+
                         {% if funding.teller_number %}
                         <dt class="col-sm-4">Teller Number:</dt>
                         <dd class="col-sm-8">{{ funding.teller_number }}</dd>
@@ -59,11 +71,45 @@
                         <dt class="col-sm-4">Proof of Payment:</dt>
                         <dd class="col-sm-8"><a href="{{ funding.proof_of_payment.url }}" target="_blank">View Proof</a></dd>
                         {% endif %}
+
+                        {# --- Revert details shown only when reverted --- #}
+                        {% if funding.status == 'reverted' %}
+                            {% if funding.refund_reason %}
+                            <dt class="col-sm-4">Refund Reason:</dt>
+                            <dd class="col-sm-8 text-danger">{{ funding.refund_reason }}</dd>
+                            {% endif %}
+
+                            <dt class="col-sm-4">Reverted By:</dt>
+                            <dd class="col-sm-8">
+                                {% if funding.reverted_by %}
+                                    <a href="{% url 'staff_detail' pk=funding.reverted_by.pk %}">{{ funding.reverted_by|title }}</a>
+                                {% else %}
+                                    {{ funding.reverted_by|default:"System" }}
+                                {% endif %}
+                            </dd>
+
+                            <dt class="col-sm-4">Reverted At:</dt>
+                            <dd class="col-sm-8">
+                                {% if funding.reverted_at %}
+                                    {{ funding.reverted_at|date:"M d, Y P" }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </dd>
+                        {% endif %}
+                        {# --- end revert block --- #}
+
                     </dl>
                     <hr>
                     <div class="d-flex justify-content-between">
                         <a href="{% url 'deposit_index' %}" class="btn btn-secondary">Back to List</a>
-                        <button class="btn btn-info" onclick="printReceipt()">Print Receipt</button>
+                        <div>
+                            {# Optionally show revert action here if still allowed; otherwise only print #}
+                            {% if funding.status == 'confirmed' and perms.finance.change_studentfundingmodel %}
+                                <button class="btn btn-warning mr-2" data-toggle="modal" data-target="#revertModal" id="openRevertFromDetail">Revert</button>
+                            {% endif %}
+                            <button class="btn btn-info" onclick="printReceipt()">Print Receipt</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -71,12 +117,71 @@
     </div>
 </div>
 
+{# If you included the central revert modal on the index page, you can reuse it here.
+   For convenience, here's a small modal that POSTs to the same revert URL pattern.
+   If you already have one globally, you can omit this. #}
+<div class="modal fade" id="revertModal" tabindex="-1" role="dialog" aria-labelledby="revertModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <form id="revertFormDetail" method="post">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="revertModalLabel">Confirm Revert</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p id="revertModalBody">You are about to revert <strong id="revertAmountDetail">₦{{ funding.amount|floatformat:2 }}</strong> from <strong id="revertStudentDetail">{{ funding.student|title }}</strong>'s wallet.</p>
+
+          <div class="form-group">
+            <label for="reasonInputDetail">Reason for Revert <span class="text-danger">*</span></label>
+            <textarea id="reasonInputDetail" name="reason" class="form-control" required rows="3" placeholder="Provide reason for revert"></textarea>
+          </div>
+
+          <input type="hidden" id="fundingIdInputDetail" name="funding_id" value="{{ funding.id }}">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="submit" id="confirmRevertBtnDetail" class="btn btn-danger">Proceed with Revert</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
+    // Wire the detail revert modal (if present) to post to the revert URL
+    document.addEventListener('DOMContentLoaded', function () {
+        const openRevertBtn = document.getElementById('openRevertFromDetail');
+        const revertForm = document.getElementById('revertFormDetail');
+        if (openRevertBtn && revertForm) {
+            // set action to the revert URL for this funding
+            revertForm.action = "{% url 'deposit_revert' funding.id %}";
+        }
+
+        // Also allow index-style modal reuse: if you use a single modal elsewhere populate URL dynamically
+        const globalRevertButtons = document.querySelectorAll('.btn-revert');
+        if (globalRevertButtons.length > 0) {
+            globalRevertButtons.forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const fundingId = this.getAttribute('data-funding-id');
+                    const reasonInput = document.getElementById('reasonInput');
+                    if (reasonInput) reasonInput.value = '';
+                    const form = document.getElementById('revertFormDetail') || document.getElementById('revertForm');
+                    if (form) {
+                        form.action = "{% url 'deposit_revert' 0 %}".replace('/0/', '/' + fundingId + '/');
+                    }
+                });
+            });
+        }
+    });
+
     function printReceipt() {
         const funding = {
-            studentName: "{{ funding.student|title }}",
+            studentName: "{{ funding.student|title|escapejs }}",
             amount: "{{ funding.amount|floatformat:2|escapejs }}",
-            balance: "{{ funding.balance|floatformat:2|escapejs }}",
+            balance: "{{ funding.balance|default_if_none:'0.00'|floatformat:2|escapejs }}",
             method: "{{ funding.get_method_display|escapejs }}",
             mode: "{{ funding.get_mode_display|escapejs }}",
             createdAt: "{{ funding.created_at|date:'M d, Y P'|escapejs }}",
@@ -86,10 +191,24 @@
             tellerNumber: "{% if funding.teller_number %}{{ funding.teller_number|escapejs }}{% else %}N/A{% endif %}",
             reference: "{% if funding.reference %}{{ funding.reference|escapejs }}{% else %}N/A{% endif %}",
             schoolName: "{% if school_info %}{{ school_info.name|title|escapejs }}{% else %}Your School Name{% endif %}",
-            schoolAddress: "{% if school_info %}{{ school_setting.address|escapejs }}{% else %}Your School Address{% endif %}",
-            schoolPhone: "{% if school_info %}{{ school_setting.mobile|escapejs }}{% else %}Your School Phone{% endif %}",
+            schoolAddress: "{% if school_setting %}{{ school_setting.address|escapejs }}{% else %}Your School Address{% endif %}",
+            schoolPhone: "{% if school_setting %}{{ school_setting.mobile|escapejs }}{% else %}Your School Phone{% endif %}",
             schoolEmail: "{% if school_info %}{{ school_info.email|escapejs }}{% else %}Your School Email{% endif %}",
+            status: "{{ funding.get_status_display|escapejs }}",
+            isReverted: {% if funding.status == 'reverted' %}true{% else %}false{% endif %},
+            refundReason: "{% if funding.refund_reason %}{{ funding.refund_reason|escapejs }}{% else %}N/A{% endif %}",
+            revertedBy: "{% if funding.reverted_by %}{{ funding.reverted_by.get_full_name|escapejs }}{% else %}N/A{% endif %}",
+            revertedAt: "{% if funding.reverted_at %}{{ funding.reverted_at|date:'M d, Y P'|escapejs }}{% else %}N/A{% endif %}"
         };
+
+        const refundedSection = funding.isReverted ? `
+            <div style="margin-top:10px;padding:10px;border:1px dashed #ff4d4d;background:#fff5f5;">
+                <p style="margin:0;"><strong>REFUNDED</strong></p>
+                <p style="margin:0;"><strong>Reason:</strong> ${funding.refundReason}</p>
+                <p style="margin:0;"><strong>Reverted By:</strong> ${funding.revertedBy}</p>
+                <p style="margin:0;"><strong>Reverted At:</strong> ${funding.revertedAt}</p>
+            </div>
+        ` : '';
 
         const receiptContent = `
             <html>
@@ -118,7 +237,6 @@
                         <h2>${funding.schoolName}</h2>
                         <p>${funding.schoolAddress}</p>
                         <p>Phone: ${funding.schoolPhone} | Email: ${funding.schoolEmail}</p>
-                        <p>${funding.schoolWebsite}</p>
                         <hr>
                         <h3>RECEIPT</h3>
                     </div>
@@ -132,12 +250,16 @@
                         ${funding.tellerNumber !== 'N/A' ? `<p><strong>Teller No:</strong> ${funding.tellerNumber}</p>` : ''}
                         ${funding.reference !== 'N/A' ? `<p><strong>Reference:</strong> ${funding.reference}</p>` : ''}
                         <p><strong>Recorded By:</strong> ${funding.recordedBy}</p>
+                        <p><strong>Status:</strong> ${funding.status}</p>
                     </div>
                     <div class="amount-section">
                         <p style="margin-bottom: 5px;">Amount Paid:</p>
                         <h3>₦${funding.amount}</h3>
                         <p style="margin-top: 5px;">Balance: ₦${funding.balance}</p>
                     </div>
+
+                    ${refundedSection}
+
                     <div class="footer">
                         <p>Thank you for your payment!</p>
                         <p>This is a computer generated receipt, no signature is required.</p>
@@ -149,10 +271,9 @@
 
         const printWindow = window.open('', '_blank');
         printWindow.document.write(receiptContent);
-        printWindow.document.close(); // Close the document to ensure content is loaded
-        printWindow.focus(); // Focus the new window
-        printWindow.print(); // Trigger the print dialog
-        // printWindow.close(); // Optional: Close the window after printing (might be too fast for some browsers)
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
     }
 </script>
 {% endblock %}
