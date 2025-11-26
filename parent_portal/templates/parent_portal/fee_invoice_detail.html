@@ -13,11 +13,13 @@
       <li class="breadcrumb-item active">{{ invoice.invoice_number }}</li>
     </ol>
   </nav>
-</div><section class="section">
+</div>
+
+<section class="section">
     <div class="row">
         <div class="col-lg-12">
             <div class="card">
-                 <div class="card-body printable-area"> {# Add a class for potential printing styles #}
+                 <div class="card-body printable-area">
                     <div class="d-flex justify-content-between align-items-center border-bottom pt-3 pb-2 mb-3">
                         <div>
                             <h4 class="mb-0">{{ school_info.name|default:"School Name"|upper }}</h4>
@@ -41,6 +43,28 @@
                         </div>
                     </div>
 
+                    <!-- Invoice Summary -->
+                    <div class="alert alert-light border mb-4">
+                        <div class="row text-center">
+                            <div class="col-6 col-md-3">
+                                <small class="text-muted d-block">Total Amount</small>
+                                <strong>₦{{ invoice.total_amount|floatformat:2|intcomma }}</strong>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <small class="text-muted d-block">Discount</small>
+                                <strong class="text-success">₦{{ invoice.total_discount|floatformat:2|intcomma }}</strong>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <small class="text-muted d-block">After Discount</small>
+                                <strong>₦{{ invoice.amount_after_discount|floatformat:2|intcomma }}</strong>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <small class="text-muted d-block">Balance Due</small>
+                                <strong class="text-danger">₦{{ invoice.balance|floatformat:2|intcomma }}</strong>
+                            </div>
+                        </div>
+                    </div>
+
                     <h5 class="card-title pt-2 pb-0">Invoice Items</h5>
                     <div class="table-responsive">
                         <table class="table table-bordered">
@@ -48,41 +72,105 @@
                                 <tr>
                                     <th>S/N</th>
                                     <th>Fee Description</th>
-                                    <th class="text-end">Amount (₦)</th>
+                                    <th class="text-end">Amount</th>
+                                    <th class="text-end">Discount</th>
+                                    <th class="text-end">After Discount</th>
+                                    <th class="text-end">Paid</th>
+                                    <th class="text-end">Balance</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for item in invoice_items %}
                                 <tr>
                                     <td>{{ forloop.counter }}</td>
-                                    <td>{{ item.description|title }} ({{ item.fee_master.fee.get_occurrence_display }})</td>
-                                    <td class="text-end">{{ item.amount|floatformat:2|intcomma }}</td>
+                                    <td>
+                                        {{ item.description|title }} ({{ item.fee_master.fee.get_occurrence_display }})
+                                        {% if item.paid_by_sibling %}
+                                        <br><small class="text-success">
+                                            <i class="bi bi-check-circle"></i> Paid by sibling: {{ item.paid_by_sibling.first_name }}
+                                        </small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">₦{{ item.amount|floatformat:2|intcomma }}</td>
+                                    <td class="text-end text-success">₦{{ item.total_discount|floatformat:2|intcomma }}</td>
+                                    <td class="text-end">₦{{ item.amount_after_discount|floatformat:2|intcomma }}</td>
+                                    <td class="text-end text-info">₦{{ item.amount_paid|floatformat:2|intcomma }}</td>
+                                    <td class="text-end {% if item.balance > 0 %}text-danger{% else %}text-success{% endif %}">
+                                        ₦{{ item.balance|floatformat:2|intcomma }}
+                                    </td>
                                 </tr>
                                 {% empty %}
-                                <tr><td colspan="3" class="text-center text-muted">No items on this invoice.</td></tr>
+                                <tr><td colspan="7" class="text-center text-muted">No items on this invoice.</td></tr>
                                 {% endfor %}
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colspan="2" class="text-end border-0"><strong>Total Amount Due:</strong></td>
-                                    <td class="text-end table-primary"><strong>₦{{ invoice.total_amount|floatformat:2|intcomma }}</strong></td>
+                                    <td colspan="2" class="text-end border-0"><strong>Subtotal:</strong></td>
+                                    <td class="text-end"><strong>₦{{ invoice.total_amount|floatformat:2|intcomma }}</strong></td>
+                                    <td colspan="4"></td>
                                 </tr>
-                                 <tr>
+                                <tr>
+                                    <td colspan="2" class="text-end border-0"><strong>Total Discount:</strong></td>
+                                    <td colspan="2" class="text-end text-success"><strong>-₦{{ invoice.total_discount|floatformat:2|intcomma }}</strong></td>
+                                    <td colspan="3"></td>
+                                </tr>
+                                <tr class="table-primary">
+                                    <td colspan="2" class="text-end border-0"><strong>Amount Due (After Discount):</strong></td>
+                                    <td colspan="2" class="text-end"><strong>₦{{ invoice.amount_after_discount|floatformat:2|intcomma }}</strong></td>
+                                    <td colspan="3"></td>
+                                </tr>
+                                <tr class="table-success">
                                     <td colspan="2" class="text-end border-0"><strong>Amount Paid:</strong></td>
-                                    <td class="text-end table-success"><strong>₦{{ invoice.amount_paid|floatformat:2|intcomma }}</strong></td>
+                                    <td colspan="2" class="text-end"><strong>₦{{ invoice.amount_paid|floatformat:2|intcomma }}</strong></td>
+                                    <td colspan="3"></td>
                                 </tr>
-                                 <tr class="{% if invoice.balance > 0 %}table-danger{% else %}table-light{% endif %}">
+                                <tr class="{% if invoice.balance > 0 %}table-danger{% else %}table-light{% endif %}">
                                     <td colspan="2" class="text-end border-0"><strong>Balance Remaining:</strong></td>
-                                    <td class="text-end"><strong>₦{{ invoice.balance|floatformat:2|intcomma }}</strong></td>
+                                    <td colspan="2" class="text-end"><strong>₦{{ invoice.balance|floatformat:2|intcomma }}</strong></td>
+                                    <td colspan="3"></td>
                                 </tr>
                             </tfoot>
                         </table>
                     </div>
 
+                    <!-- Show Applied Discounts -->
+                    {% if invoice_discounts %}
+                    <div class="alert alert-success mt-3">
+                        <h6 class="alert-heading"><i class="bi bi-percent"></i> Applied Discounts</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-borderless mb-0">
+                                <tbody>
+                                    {% for discount in invoice_discounts %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ discount.discount_application.discount.title }}</strong>
+                                            <small class="text-muted d-block">
+                                                {{ discount.invoice_item.description }}
+                                                {% if discount.discount_application.discount_type == 'percentage' %}
+                                                    ({{ discount.discount_application.discount_amount }}% off)
+                                                {% else %}
+                                                    (Fixed discount)
+                                                {% endif %}
+                                            </small>
+                                        </td>
+                                        <td class="text-end">-₦{{ discount.amount_discounted|floatformat:2|intcomma }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="fw-bold border-top">
+                                        <td>Total Discount:</td>
+                                        <td class="text-end">-₦{{ invoice.total_discount|floatformat:2|intcomma }}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div class="mt-4">
                         <h6>Payment Instructions:</h6>
                         <p>Please make payments to the school bank account and upload proof via the portal.</p>
-                        {# You can add bank details here dynamically if needed #}
                     </div>
 
                     <p class="text-muted text-center small mt-4">Generated on: {% now "d M, Y, h:i A" %}</p>
@@ -104,7 +192,7 @@
     .card { border: none !important; box-shadow: none !important; }
     body { background-color: white; }
     .pagetitle { display: none; }
-    @page { size: A4; margin: 1cm; } /* Basic print styling */
+    @page { size: A4; margin: 1cm; }
   }
 </style>
 {% endblock %}

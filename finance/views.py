@@ -20,13 +20,14 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.utils import timezone
 from django.utils.timezone import now
 from django.views import View
+from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView, CreateView, UpdateView, ListView, DetailView, DeleteView, FormView
 from openpyxl.styles import Font
 
 from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ActivityLogModel
 from admin_site.views import FlashFormErrorsMixin
 from human_resource.models import StaffModel, StaffProfileModel, StaffWalletModel
-from inventory.models import PurchaseOrderModel, PurchaseAdvanceModel
+from inventory.models import PurchaseOrderModel, PurchaseAdvanceModel, SaleModel, SaleItemModel
 from student.models import StudentModel, StudentWalletModel
 from student.signals import get_day_ordinal_suffix
 from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePaymentModel, FeeModel, FeeGroupModel, \
@@ -1047,6 +1048,63 @@ class FeePaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         return context
 
 
+class FeePendingPaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = FeePaymentModel
+    permission_required = 'finance.view_feemodel'  # Assumes default permission
+    template_name = 'finance/payment/pending_payment_index.html'
+    context_object_name = 'payment_list'
+    paginate_by = 25
+
+    def get_queryset(self):
+        # Start with a base queryset, pre-fetching related data for efficiency
+        queryset = FeePaymentModel.objects.filter(status='pending').select_related(
+            'invoice__student',
+            'invoice__session',
+            'invoice__term',
+        ).order_by('-date', '-created_at')
+
+        # Get filter parameters from the URL
+        session_id = self.request.GET.get('session', '')
+        term_id = self.request.GET.get('term', '')
+        search_query = self.request.GET.get('search', '').strip()
+
+        # Apply filters if they exist
+        if session_id:
+            queryset = queryset.filter(invoice__session_id=session_id)
+
+        if term_id:
+            queryset = queryset.filter(invoice__term_id=term_id)
+
+        # Apply search query if it exists
+        if search_query:
+            # Annotate the student's full name to make it searchable
+            queryset = queryset.annotate(
+                student_full_name=Concat(
+                    'invoice__student__first_name', Value(' '), 'invoice__student__last_name'
+                )
+            ).filter(
+                Q(student_full_name__icontains=search_query) |
+                Q(invoice__student__registration_number__icontains=search_query) |
+                Q(invoice__invoice_number__icontains=search_query)
+            )
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Pass data for the filter dropdowns
+        context['session_list'] = SessionModel.objects.all().order_by('-start_year')
+        context['term_list'] = TermModel.objects.all().order_by('order')
+
+        # Pass current filter values back to the template to maintain state
+        context['current_session_id'] = self.request.GET.get('session', '')
+        context['current_term_id'] = self.request.GET.get('term', '')
+        context['search_query'] = self.request.GET.get('search', '')
+
+        return context
+
+
 class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
     """
     Handles a single "bulk" payment that is intelligently allocated
@@ -1133,12 +1191,17 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
 def confirm_fee_payment_view(request, payment_id):
     """
     Confirms a pending fee payment uploaded by parent.
+    Supports both quick payment (auto-distribute) and itemized payment (parent's allocation).
+    Staff can override parent's allocation if needed.
     """
     payment = get_object_or_404(FeePaymentModel, pk=payment_id)
 
     if payment.status != FeePaymentModel.PaymentStatus.PENDING:
         messages.warning(request, "This payment has already been processed.")
-        return redirect('pending_fee_payment_list')  # Update with your actual URL name
+        return redirect('pending_fee_payment_list')
+
+    # Check if this is a confirmation with override
+    override_allocation = request.POST.get('override_allocation') == 'true'
 
     with transaction.atomic():
         # Confirm the payment
@@ -1146,39 +1209,111 @@ def confirm_fee_payment_view(request, payment_id):
         payment.confirmed_by = request.user
         payment.save(update_fields=['status', 'confirmed_by'])
 
-        # Apply payment to invoice items
         invoice = payment.invoice
         amount_to_allocate = payment.amount
 
-        for item in invoice.items.filter(amount_paid__lt=F('amount')).order_by('id'):
-            if amount_to_allocate <= 0:
-                break
+        # Check if parent specified item allocations
+        import json
+        import re
+        parent_allocations = {}
 
-            payable = min(item.balance, amount_to_allocate)
-            item.amount_paid += payable
-            item.save(update_fields=['amount_paid'])
-            amount_to_allocate -= payable
+        if payment.notes:
+            # Try to extract JSON allocation from notes
+            match = re.search(r'Item Allocations:\s*(\{[^}]+\}|\[[^\]]+\])', payment.notes, re.DOTALL)
+            if match:
+                try:
+                    allocations_str = match.group(1)
+                    # Handle potential multi-line JSON
+                    full_json_match = re.search(r'Item Allocations:\s*(\{.*?\n.*?\})', payment.notes, re.DOTALL)
+                    if full_json_match:
+                        allocations_str = full_json_match.group(1)
+                    parent_allocations = json.loads(allocations_str)
+                except json.JSONDecodeError:
+                    pass
 
-            # Handle parent-bound fees
-            if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount:
-                student = invoice.student
-                siblings = student.parent.wards.exclude(pk=student.pk)
-                for sibling in siblings:
-                    try:
-                        sibling_invoice = InvoiceModel.objects.get(
-                            student=sibling,
-                            session=invoice.session,
-                            term=invoice.term
-                        )
-                        sibling_item = InvoiceItemModel.objects.get(
-                            invoice=sibling_invoice,
-                            fee_master=item.fee_master
-                        )
-                        sibling_item.paid_by_sibling = student
-                        sibling_item.amount_paid = sibling_item.amount
-                        sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
-                    except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
-                        continue
+        # Determine allocation strategy
+        if parent_allocations and not override_allocation:
+            # Use parent's specified allocations
+            for item_id_str, allocation_data in parent_allocations.items():
+                try:
+                    item_id = int(item_id_str)
+                    allocated_amount = Decimal(str(allocation_data['amount']))
+
+                    item = InvoiceItemModel.objects.get(pk=item_id, invoice=invoice)
+
+                    # Apply payment to this specific item
+                    payable = min(item.balance, allocated_amount)
+                    item.amount_paid += payable
+                    item.save(update_fields=['amount_paid'])
+                    amount_to_allocate -= payable
+
+                    # Handle parent-bound fees
+                    if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
+                        student = invoice.student
+                        if student.parent:
+                            siblings = student.parent.wards.exclude(pk=student.pk)
+                            for sibling in siblings:
+                                try:
+                                    sibling_invoice = InvoiceModel.objects.get(
+                                        student=sibling,
+                                        session=invoice.session,
+                                        term=invoice.term
+                                    )
+                                    sibling_item = InvoiceItemModel.objects.get(
+                                        invoice=sibling_invoice,
+                                        fee_master=item.fee_master
+                                    )
+                                    sibling_item.paid_by_sibling = student
+                                    sibling_item.amount_paid = sibling_item.amount_after_discount
+                                    sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
+                                except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
+                                    continue
+
+                except (ValueError, InvoiceItemModel.DoesNotExist):
+                    continue
+
+            # If there's leftover amount (due to balance changes), distribute it
+            if amount_to_allocate > Decimal('0.01'):
+                for item in invoice.items.filter(amount_paid__lt=F('amount_after_discount')).order_by('id'):
+                    if amount_to_allocate <= 0:
+                        break
+                    payable = min(item.balance, amount_to_allocate)
+                    item.amount_paid += payable
+                    item.save(update_fields=['amount_paid'])
+                    amount_to_allocate -= payable
+
+        else:
+            # Auto-distribute payment across items (original behavior or staff override)
+            for item in invoice.items.filter(amount_paid__lt=F('amount_after_discount')).order_by('id'):
+                if amount_to_allocate <= 0:
+                    break
+
+                payable = min(item.balance, amount_to_allocate)
+                item.amount_paid += payable
+                item.save(update_fields=['amount_paid'])
+                amount_to_allocate -= payable
+
+                # Handle parent-bound fees
+                if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
+                    student = invoice.student
+                    if student.parent:
+                        siblings = student.parent.wards.exclude(pk=student.pk)
+                        for sibling in siblings:
+                            try:
+                                sibling_invoice = InvoiceModel.objects.get(
+                                    student=sibling,
+                                    session=invoice.session,
+                                    term=invoice.term
+                                )
+                                sibling_item = InvoiceItemModel.objects.get(
+                                    invoice=sibling_invoice,
+                                    fee_master=item.fee_master
+                                )
+                                sibling_item.paid_by_sibling = student
+                                sibling_item.amount_paid = sibling_item.amount_after_discount
+                                sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
+                            except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
+                                continue
 
         # Update invoice status
         invoice.refresh_from_db()
@@ -1188,8 +1323,27 @@ def confirm_fee_payment_view(request, payment_id):
             invoice.status = InvoiceModel.Status.PARTIALLY_PAID
         invoice.save(update_fields=['status'])
 
-    messages.success(request, f"Payment of ₦{payment.amount:,.2f} confirmed successfully.")
+    allocation_method = "auto-distributed" if (
+                not parent_allocations or override_allocation) else "parent's specified items"
+    messages.success(request, f"Payment of ₦{payment.amount:,.2f} confirmed successfully ({allocation_method}).")
     return redirect('pending_fee_payment_list')
+
+
+@login_required
+@permission_required('finance.change_feepaymentmodel', raise_exception=True)
+def payment_review_view(request, payment_id):
+    """
+    Confirms a pending fee payment uploaded by parent.
+    Supports both quick payment (auto-distribute) and itemized payment (parent's allocation).
+    Staff can override parent's allocation if needed.
+    """
+    payment = get_object_or_404(FeePaymentModel, pk=payment_id)
+
+    # Check if this is a confirmation with override
+    context = {
+        'payment': payment
+    }
+    return render(request, 'finance/payment/review.html', context)
 
 
 class FeePaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, View):
@@ -3934,3 +4088,664 @@ class StudentDiscountIndexView(LoginRequiredMixin, PermissionRequiredMixin, List
         )['total'] or Decimal('0.00')
 
         return context
+
+
+@login_required
+@permission_required("finance.view_incomemodel", raise_exception=True)
+def income_expense_report(request):
+    """Display comprehensive income and expense report with net income calculation."""
+
+    # Get date parameters, default to current month
+    today = date.today()
+    first_day_of_month = today.replace(day=1)
+    date_from = request.GET.get('date_from', '').strip() or str(first_day_of_month)
+    date_to = request.GET.get('date_to', '').strip() or str(today)
+    session_filter = request.GET.get('session', '').strip()
+    term_filter = request.GET.get('term', '').strip()
+    download_pdf = request.GET.get('download', '') == 'pdf'
+
+    # Validate date range
+    try:
+        from_date = date.fromisoformat(date_from)
+        to_date = date.fromisoformat(date_to)
+
+        if from_date > to_date:
+            from_date, to_date = to_date, from_date
+            date_from, date_to = date_to, date_from
+    except ValueError:
+        from_date = first_day_of_month
+        to_date = today
+        date_from = str(first_day_of_month)
+        date_to = str(today)
+
+    # Generate title based on date range
+    if date_from == date_to:
+        report_title = from_date.strftime("%B %d, %Y")
+    else:
+        report_title = f"{from_date.strftime('%B %d, %Y')} - {to_date.strftime('%B %d, %Y')}"
+
+    # ========================================================================
+    # INCOME SECTION
+    # ========================================================================
+
+    # 1. Fee Payments (by fee type)
+    fee_payments_qs = FeePaymentModel.objects.filter(
+        date__range=[from_date, to_date],
+        status='confirmed'
+    ).select_related('invoice').prefetch_related('invoice__items__fee_master__fee')
+
+    if session_filter:
+        fee_payments_qs = fee_payments_qs.filter(invoice__session_id=session_filter)
+    if term_filter:
+        fee_payments_qs = fee_payments_qs.filter(invoice__term_id=term_filter)
+
+    # Calculate fee breakdown
+    fee_breakdown = {}
+    for payment in fee_payments_qs:
+        invoice_total = payment.invoice.total_amount
+        if invoice_total > 0:
+            for item in payment.invoice.items.all():
+                fee_name = item.fee_master.fee.name
+                # Proportional allocation
+                item_percentage = item.amount / invoice_total
+                allocated_amount = payment.amount * item_percentage
+                fee_breakdown[fee_name] = fee_breakdown.get(fee_name, Decimal('0.00')) + allocated_amount
+
+    total_fee_payments = sum(fee_breakdown.values())
+    fee_breakdown_list = [{'name': k, 'amount': v} for k, v in
+                          sorted(fee_breakdown.items(), key=lambda x: x[1], reverse=True)]
+
+    # 2. Sales Revenue (Cash/POS only - excluding wallet to avoid double counting)
+    sales_qs = SaleModel.objects.filter(
+        sale_date__date__range=[from_date, to_date],
+        status='completed',
+        payment_method__in=['cash', 'pos']
+    )
+
+    if session_filter:
+        sales_qs = sales_qs.filter(session_id=session_filter)
+    if term_filter:
+        sales_qs = sales_qs.filter(term_id=term_filter)
+
+    sales_data = sales_qs.values('payment_method').annotate(
+        total_before_discount=Sum(F('items__quantity') * F('items__unit_price')),
+        total_discount=Sum('discount')
+    )
+
+    cash_sales = Decimal('0.00')
+    pos_sales = Decimal('0.00')
+
+    for sale in sales_data:
+        revenue = (sale['total_before_discount'] or Decimal('0.00')) - (sale['total_discount'] or Decimal('0.00'))
+        if sale['payment_method'] == 'cash':
+            cash_sales = revenue
+        elif sale['payment_method'] == 'pos':
+            pos_sales = revenue
+
+    total_sales_revenue = cash_sales + pos_sales
+
+    # 3. Wallet Funding
+    student_funding_qs = StudentFundingModel.objects.filter(
+        created_at__date__range=[from_date, to_date],
+        status='confirmed'
+    )
+    staff_funding_qs = StaffFundingModel.objects.filter(
+        created_at__date__range=[from_date, to_date],
+        status='confirmed'
+    )
+
+    if session_filter:
+        student_funding_qs = student_funding_qs.filter(session_id=session_filter)
+        staff_funding_qs = staff_funding_qs.filter(session_id=session_filter)
+    if term_filter:
+        student_funding_qs = student_funding_qs.filter(term_id=term_filter)
+        staff_funding_qs = staff_funding_qs.filter(term_id=term_filter)
+
+    student_funding = student_funding_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    staff_funding = staff_funding_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    total_wallet_funding = student_funding + staff_funding
+
+    # 4. Other Income (by category)
+    other_income_qs = IncomeModel.objects.filter(
+        income_date__range=[from_date, to_date]
+    )
+
+    if session_filter:
+        other_income_qs = other_income_qs.filter(session_id=session_filter)
+    if term_filter:
+        other_income_qs = other_income_qs.filter(term_id=term_filter)
+
+    other_income_data = other_income_qs.values('category__name').annotate(
+        total=Sum('amount')
+    ).order_by('-total')
+
+    total_other_income = sum(item['total'] for item in other_income_data)
+
+    # 5. Debt Recoveries
+    loan_repayments_qs = StaffLoanRepayment.objects.filter(
+        payment_date__range=[from_date, to_date]
+    )
+
+    if session_filter:
+        loan_repayments_qs = loan_repayments_qs.filter(session_id=session_filter)
+    if term_filter:
+        loan_repayments_qs = loan_repayments_qs.filter(term_id=term_filter)
+
+    loan_repayments = loan_repayments_qs.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+
+    # Salary advance repayments from payroll
+    salary_records_qs = SalaryRecord.objects.filter(
+        paid_date__range=[from_date, to_date],
+        is_paid=True
+    )
+
+    if session_filter:
+        salary_records_qs = salary_records_qs.filter(session_id=session_filter)
+    if term_filter:
+        salary_records_qs = salary_records_qs.filter(term_id=term_filter)
+
+    advance_repayments = salary_records_qs.aggregate(total=Sum('salary_advance_deduction'))['total'] or Decimal('0.00')
+
+    total_debt_recoveries = loan_repayments + advance_repayments
+
+    # TOTAL REVENUE
+    total_revenue = (
+            total_fee_payments +
+            total_sales_revenue +
+            total_wallet_funding +
+            total_other_income +
+            total_debt_recoveries
+    )
+
+    # ========================================================================
+    # EXPENSE SECTION
+    # ========================================================================
+
+    # 1. Cost of Goods Sold (COGS)
+    cogs_qs = SaleItemModel.objects.filter(
+        sale__sale_date__date__range=[from_date, to_date],
+        sale__status='completed'
+    )
+
+    if session_filter:
+        cogs_qs = cogs_qs.filter(sale__session_id=session_filter)
+    if term_filter:
+        cogs_qs = cogs_qs.filter(sale__term_id=term_filter)
+
+    cogs = cogs_qs.aggregate(
+        total_cogs=Sum(F('quantity') * F('unit_cost'))
+    )['total_cogs'] or Decimal('0.00')
+
+    # 2. Salary Payments
+    salary_payments_qs = SalaryRecord.objects.filter(
+        paid_date__range=[from_date, to_date],
+        is_paid=True
+    )
+
+    if session_filter:
+        salary_payments_qs = salary_payments_qs.filter(session_id=session_filter)
+    if term_filter:
+        salary_payments_qs = salary_payments_qs.filter(term_id=term_filter)
+
+    salary_data = salary_payments_qs.aggregate(
+        total=Sum('amount_paid'),
+        count=Count('id')
+    )
+    total_salaries = salary_data['total'] or Decimal('0.00')
+    staff_count = salary_data['count']
+
+    # 3. General Expenses (by category)
+    general_expenses_qs = ExpenseModel.objects.filter(
+        expense_date__range=[from_date, to_date]
+    )
+
+    if session_filter:
+        general_expenses_qs = general_expenses_qs.filter(session_id=session_filter)
+    if term_filter:
+        general_expenses_qs = general_expenses_qs.filter(term_id=term_filter)
+
+    general_expenses_data = general_expenses_qs.values('category__name').annotate(
+        total=Sum('amount')
+    ).order_by('-total')
+
+    total_general_expenses = sum(item['total'] for item in general_expenses_data)
+
+    # 4. Supplier Payments
+    supplier_payments_qs = SupplierPaymentModel.objects.filter(
+        payment_date__range=[from_date, to_date],
+        status='completed'
+    )
+
+    if session_filter:
+        supplier_payments_qs = supplier_payments_qs.filter(session_id=session_filter)
+    if term_filter:
+        supplier_payments_qs = supplier_payments_qs.filter(term_id=term_filter)
+
+    supplier_payments = supplier_payments_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 5. Advances & Loans Disbursed
+    salary_advances_qs = SalaryAdvance.objects.filter(
+        approved_date__range=[from_date, to_date],
+        status='disbursed'
+    )
+    staff_loans_qs = StaffLoan.objects.filter(
+        approved_date__range=[from_date, to_date],
+        status='disbursed'
+    )
+    purchase_advances_qs = PurchaseAdvancePaymentModel.objects.filter(
+        payment_date__range=[from_date, to_date]
+    )
+
+    if session_filter:
+        salary_advances_qs = salary_advances_qs.filter(session_id=session_filter)
+        staff_loans_qs = staff_loans_qs.filter(session_id=session_filter)
+    if term_filter:
+        salary_advances_qs = salary_advances_qs.filter(term_id=term_filter)
+        staff_loans_qs = staff_loans_qs.filter(term_id=term_filter)
+
+    salary_advances = salary_advances_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    staff_loans = staff_loans_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    purchase_advances = purchase_advances_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    total_advances = salary_advances + staff_loans + purchase_advances
+
+    # TOTAL EXPENSES
+    total_operating_expenses = (
+            total_salaries +
+            total_general_expenses +
+            supplier_payments +
+            total_advances
+    )
+
+    total_expenses = cogs + total_operating_expenses
+
+    # GROSS PROFIT & NET INCOME
+    gross_profit = total_revenue - cogs
+    net_income = total_revenue - total_expenses
+
+    # ========================================================================
+    # CONTEXT DATA
+    # ========================================================================
+
+    context = {
+        'report_title': report_title,
+        'date_from': date_from,
+        'date_to': date_to,
+        'session_filter': session_filter,
+        'term_filter': term_filter,
+
+        # Income Data
+        'fee_breakdown': fee_breakdown_list,
+        'total_fee_payments': total_fee_payments,
+        'cash_sales': cash_sales,
+        'pos_sales': pos_sales,
+        'total_sales_revenue': total_sales_revenue,
+        'student_funding': student_funding,
+        'staff_funding': staff_funding,
+        'total_wallet_funding': total_wallet_funding,
+        'other_income_data': other_income_data,
+        'total_other_income': total_other_income,
+        'loan_repayments': loan_repayments,
+        'advance_repayments': advance_repayments,
+        'total_debt_recoveries': total_debt_recoveries,
+        'total_revenue': total_revenue,
+
+        # Expense Data
+        'cogs': cogs,
+        'gross_profit': gross_profit,
+        'total_salaries': total_salaries,
+        'staff_count': staff_count,
+        'general_expenses_data': general_expenses_data,
+        'total_general_expenses': total_general_expenses,
+        'supplier_payments': supplier_payments,
+        'salary_advances': salary_advances,
+        'staff_loans': staff_loans,
+        'purchase_advances': purchase_advances,
+        'total_advances': total_advances,
+        'total_operating_expenses': total_operating_expenses,
+        'total_expenses': total_expenses,
+
+        # Net Result
+        'net_income': net_income,
+
+        # Filters
+        'sessions': SessionModel.objects.all().order_by('-id'),
+        'terms': TermModel.objects.all().order_by('order'),
+    }
+
+    # Generate PDF if requested
+    if download_pdf:
+        return generate_income_expense_pdf(context)
+
+    return render(request, 'finance/reports/income_expense_report.html', context)
+
+
+def generate_income_expense_pdf(context):
+    """Generate PDF for income and expense report."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+        from io import BytesIO
+
+        # Create PDF buffer
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=20,
+            textColor=colors.HexColor('#2c3e50'),
+            spaceAfter=10,
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph("INCOME & EXPENSE STATEMENT", title_style))
+
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Normal'],
+            fontSize=14,
+            textColor=colors.HexColor('#3498db'),
+            spaceAfter=20,
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph(context['report_title'], subtitle_style))
+        elements.append(Spacer(1, 0.3 * inch))
+
+        # ====================================================================
+        # INCOME SECTION
+        # ====================================================================
+
+        section_style = ParagraphStyle(
+            'SectionHeader',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#2c3e50'),
+            spaceAfter=10,
+            spaceBefore=10
+        )
+        elements.append(Paragraph("REVENUE (INCOME)", section_style))
+
+        income_data = [
+            ['Description', 'Amount (₦)'],
+        ]
+
+        # Fee Payments
+        if context['fee_breakdown']:
+            income_data.append(['Fee Payments', ''])
+            for fee in context['fee_breakdown']:
+                income_data.append([f"  • {fee['name']}", f"{fee['amount']:,.2f}"])
+            income_data.append(['', f"{context['total_fee_payments']:,.2f}"])
+
+        # Sales Revenue
+        if context['total_sales_revenue'] > 0:
+            income_data.append(['Sales Revenue (Cash/POS)', ''])
+            if context['cash_sales'] > 0:
+                income_data.append([f"  • Cash Sales", f"{context['cash_sales']:,.2f}"])
+            if context['pos_sales'] > 0:
+                income_data.append([f"  • POS Sales", f"{context['pos_sales']:,.2f}"])
+            income_data.append(['', f"{context['total_sales_revenue']:,.2f}"])
+
+        # Wallet Funding
+        if context['total_wallet_funding'] > 0:
+            income_data.append(['Wallet Funding', ''])
+            if context['student_funding'] > 0:
+                income_data.append([f"  • Student Wallets", f"{context['student_funding']:,.2f}"])
+            if context['staff_funding'] > 0:
+                income_data.append([f"  • Staff Wallets", f"{context['staff_funding']:,.2f}"])
+            income_data.append(['', f"{context['total_wallet_funding']:,.2f}"])
+
+        # Other Income
+        if context['other_income_data']:
+            income_data.append(['Other Income', ''])
+            for item in context['other_income_data']:
+                income_data.append([f"  • {item['category__name']}", f"{item['total']:,.2f}"])
+            income_data.append(['', f"{context['total_other_income']:,.2f}"])
+
+        # Debt Recoveries
+        if context['total_debt_recoveries'] > 0:
+            income_data.append(['Debt Recoveries', ''])
+            if context['loan_repayments'] > 0:
+                income_data.append([f"  • Loan Repayments", f"{context['loan_repayments']:,.2f}"])
+            if context['advance_repayments'] > 0:
+                income_data.append([f"  • Advance Repayments", f"{context['advance_repayments']:,.2f}"])
+            income_data.append(['', f"{context['total_debt_recoveries']:,.2f}"])
+
+        # Total Revenue
+        income_data.append(['', ''])
+        income_data.append(['TOTAL REVENUE', f"{context['total_revenue']:,.2f}"])
+
+        # Create income table
+        income_table = Table(income_data, colWidths=[4 * inch, 2 * inch])
+        income_table.setStyle(TableStyle([
+            # Header
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+
+            # Data rows
+            ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8f9fa')]),
+
+            # Total row
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#3498db')),
+            ('TEXTCOLOR', (0, -1), (-1, -1), colors.whitesmoke),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, -1), (-1, -1), 12),
+            ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#2c3e50')),
+        ]))
+
+        elements.append(income_table)
+        elements.append(Spacer(1, 0.3 * inch))
+
+        # ====================================================================
+        # EXPENSE SECTION
+        # ====================================================================
+
+        elements.append(Paragraph("EXPENSES", section_style))
+
+        expense_data = [
+            ['Description', 'Amount (₦)'],
+        ]
+
+        # COGS
+        if context['cogs'] > 0:
+            expense_data.append(['Cost of Goods Sold', f"{context['cogs']:,.2f}"])
+            expense_data.append(['', ''])
+            expense_data.append(['Gross Profit (Revenue - COGS)', f"{context['gross_profit']:,.2f}"])
+            expense_data.append(['', ''])
+            expense_data.append(['OPERATING EXPENSES', ''])
+
+        # Salary Payments
+        if context['total_salaries'] > 0:
+            expense_data.append(['Salary Payments', ''])
+            expense_data.append([f"  • {context['staff_count']} Staff Members", f"{context['total_salaries']:,.2f}"])
+
+        # General Expenses
+        if context['general_expenses_data']:
+            expense_data.append(['General Expenses', ''])
+            for item in context['general_expenses_data']:
+                expense_data.append([f"  • {item['category__name']}", f"{item['total']:,.2f}"])
+            expense_data.append(['', f"{context['total_general_expenses']:,.2f}"])
+
+        # Supplier Payments
+        if context['supplier_payments'] > 0:
+            expense_data.append(['Supplier Payments', f"{context['supplier_payments']:,.2f}"])
+
+        # Advances & Loans
+        if context['total_advances'] > 0:
+            expense_data.append(['Advances & Loans Disbursed', ''])
+            if context['salary_advances'] > 0:
+                expense_data.append([f"  • Salary Advances", f"{context['salary_advances']:,.2f}"])
+            if context['staff_loans'] > 0:
+                expense_data.append([f"  • Staff Loans", f"{context['staff_loans']:,.2f}"])
+            if context['purchase_advances'] > 0:
+                expense_data.append([f"  • Purchase Advances", f"{context['purchase_advances']:,.2f}"])
+            expense_data.append(['', f"{context['total_advances']:,.2f}"])
+
+        # Total Operating Expenses
+        expense_data.append(['', ''])
+        expense_data.append(['Total Operating Expenses', f"{context['total_operating_expenses']:,.2f}"])
+
+        # Total Expenses
+        expense_data.append(['', ''])
+        expense_data.append(['TOTAL EXPENSES (COGS + Operating)', f"{context['total_expenses']:,.2f}"])
+
+        # Create expense table
+        expense_table = Table(expense_data, colWidths=[4 * inch, 2 * inch])
+        expense_table.setStyle(TableStyle([
+            # Header
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+
+            # Data rows
+            ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8f9fa')]),
+
+            # Total row
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e74c3c')),
+            ('TEXTCOLOR', (0, -1), (-1, -1), colors.whitesmoke),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, -1), (-1, -1), 12),
+            ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#2c3e50')),
+        ]))
+
+        elements.append(expense_table)
+        elements.append(Spacer(1, 0.3 * inch))
+
+        # ====================================================================
+        # NET INCOME
+        # ====================================================================
+
+        net_income_color = colors.HexColor('#27ae60') if context['net_income'] >= 0 else colors.HexColor('#e74c3c')
+        net_income_text = "NET INCOME" if context['net_income'] >= 0 else "NET LOSS"
+
+        net_data = [
+            [net_income_text, f"₦{context['net_income']:,.2f}"]
+        ]
+
+        net_table = Table(net_data, colWidths=[4 * inch, 2 * inch])
+        net_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), net_income_color),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('TOPPADDING', (0, 0), (-1, 0), 15),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 15),
+            ('BOX', (0, 0), (-1, -1), 2, colors.HexColor('#2c3e50')),
+        ]))
+
+        elements.append(net_table)
+
+        # Footer note
+        elements.append(Spacer(1, 0.2 * inch))
+        note_style = ParagraphStyle(
+            'Note',
+            parent=styles['Normal'],
+            fontSize=8,
+            textColor=colors.HexColor('#7f8c8d'),
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph(
+            "Note: Sales revenue excludes wallet-based payments to avoid double-counting with wallet funding.",
+            note_style
+        ))
+
+        from django.utils import timezone
+        elements.append(Paragraph(
+            f"Generated on {timezone.now().strftime('%B %d, %Y at %H:%M')}",
+            note_style
+        ))
+
+        # Build PDF
+        doc.build(elements)
+
+        # Return response
+        pdf_content = buffer.getvalue()
+        buffer.close()
+
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        filename = f"income_expense_report_{context['date_from']}_{context['date_to']}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    except ImportError:
+        messages.error(request, 'PDF generation requires reportlab. Please install it.')
+        return redirect('income_expense_report')
+
+
+@require_http_methods(["GET"])
+def get_invoice_items_json(request, invoice_id):
+    """
+    AJAX endpoint to get invoice items for itemized payment selection.
+    Returns JSON data with item details including discounts.
+    """
+    try:
+        # Get the parent's selected ward from session
+        parent = request.user.parent_profile.parent
+        ward_id = request.session.get('selected_ward_id')
+
+        if not ward_id:
+            return JsonResponse({'error': 'No ward selected'}, status=400)
+
+        ward = parent.wards.get(pk=ward_id)
+
+        # Get the invoice and verify it belongs to this ward
+        invoice = InvoiceModel.objects.get(pk=invoice_id, student=ward)
+
+        # Build items data
+        items_data = []
+        for item in invoice.items.all():
+            items_data.append({
+                'id': item.pk,
+                'description': item.description,
+                'amount': str(item.amount),
+                'total_discount': str(item.total_discount),
+                'amount_after_discount': str(item.amount_after_discount),
+                'amount_paid': str(item.amount_paid),
+                'balance': str(item.balance),
+                'paid_by_sibling': bool(item.paid_by_sibling),
+                'sibling_name': item.paid_by_sibling.first_name if item.paid_by_sibling else None
+            })
+
+        return JsonResponse({
+            'success': True,
+            'items': items_data,
+            'invoice': {
+                'number': invoice.invoice_number,
+                'total_amount': str(invoice.total_amount),
+                'total_discount': str(invoice.total_discount),
+                'amount_after_discount': str(invoice.amount_after_discount),
+                'balance': str(invoice.balance)
+            }
+        })
+
+    except InvoiceModel.DoesNotExist:
+        return JsonResponse({'error': 'Invoice not found or does not belong to your ward'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+

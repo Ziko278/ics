@@ -1,4 +1,6 @@
 # parent_portal/views.py
+from decimal import Decimal
+
 from django.core.files.storage import default_storage
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
@@ -12,7 +14,8 @@ from django.utils import timezone
 from admin_site.models import SchoolSettingModel
 # Import models from other apps (adjust paths as needed)
 from student.models import StudentModel, ParentProfileModel
-from finance.models import InvoiceModel, InvoiceItemModel, StudentFundingModel, SchoolBankDetail, FeePaymentModel
+from finance.models import InvoiceModel, InvoiceItemModel, StudentFundingModel, SchoolBankDetail, FeePaymentModel, \
+    StudentDiscountModel
 from inventory.models import InventoryAssignmentModel, InventoryCollectionModel, SaleModel, SaleItemModel
 from cafeteria.models import MealCollectionModel
 
@@ -152,6 +155,7 @@ class DashboardView(ParentPortalMixin, TemplateView):
             student=ward, status__in=['unpaid', 'partially_paid']
         ).order_by('issue_date')
         context['total_due'] = sum(inv.balance for inv in context['pending_invoices'])
+        context['total_discount'] = sum(inv.total_discount for inv in context['pending_invoices'])
 
         # Recent Shop Spending
         context['recent_sales'] = SaleModel.objects.filter(
@@ -202,6 +206,9 @@ class FeeInvoiceDetailView(ParentPortalMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['invoice_items'] = self.object.items.all()
+        context['invoice_discounts'] = StudentDiscountModel.objects.filter(
+            invoice_item__invoice=self.object
+        ).select_related('discount_application__discount')
         return context
 
 
@@ -213,63 +220,129 @@ class FeeUploadView(ParentPortalMixin, FormView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['student'] = self.selected_ward
-        # Pass the 'type' GET param to the form's __init__
-        # Default to 'fee' if not specified
         kwargs['upload_type'] = self.request.GET.get('type', 'fee')
         return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Get the type, default to 'fee'
         transaction_type = self.request.GET.get('type', 'fee')
         context['transaction_type'] = transaction_type
 
-        # Conditionally load bank details based on the transaction type
         if transaction_type == 'wallet':
-            # Load wallet funding account from SchoolSettingModel
             try:
                 context['funding_account'] = SchoolSettingModel.objects.first()
             except SchoolSettingModel.DoesNotExist:
                 context['funding_account'] = None
-            context['bank_details'] = None # Ensure fee accounts are not passed
+            context['bank_details'] = None
         else:
-            # Load fee payment accounts (original behavior)
             context['bank_details'] = SchoolBankDetail.objects.all()
-            context['funding_account'] = None # Ensure wallet account is not passed
+            context['funding_account'] = None
 
         return context
 
     def form_valid(self, form):
         cleaned_data = form.cleaned_data
-        # This logic works perfectly now:
-        # If type=wallet, form.__init__ removed target_invoice, so .get() returns None
-        # If type=fee, target_invoice is present and required
-        target_invoice: InvoiceModel = cleaned_data.get('target_invoice')
+        target_invoice = cleaned_data.get('target_invoice')
         proof_file = self.request.FILES.get('proof_of_payment')
         parent_user = self.request.user
+        payment_type = self.request.POST.get('payment_type', 'quick')  # 'quick' or 'itemized'
 
         if target_invoice:
-            # --- Create FeePaymentModel ---
+            # --- Create FeePaymentModel for invoice payment ---
             try:
                 if target_invoice.student != self.selected_ward:
                     messages.error(self.request, "Selected invoice does not belong to the current student.")
                     return self.form_invalid(form)
 
+                # Save proof file
                 proof_file_name = None
                 if proof_file:
                     file_name = f"parent_proofs/{self.selected_ward.registration_number}_{target_invoice.invoice_number}_{proof_file.name}"
                     proof_file_name = default_storage.save(file_name, proof_file)
 
+                # Get or create a default bank account for parent uploads
+                bank_account = SchoolBankDetail.objects.first()
+                if not bank_account:
+                    messages.error(self.request, "No bank account configured. Please contact administration.")
+                    return self.form_invalid(form)
+
+                # Build notes with payment allocation details
+                notes_parts = [
+                    f"Parent Upload via Portal.",
+                    f"User: {parent_user.username}.",
+                    f"Proof File: {proof_file_name or 'Not Saved'}.",
+                    f"Student: {self.selected_ward}.",
+                    f"Payment Type: {payment_type.title()}"
+                ]
+
+                # Handle itemized payment
+                if payment_type == 'itemized':
+                    item_allocations = {}
+                    total_allocated = Decimal('0.00')
+
+                    for key, value in self.request.POST.items():
+                        if key.startswith('item_') and value:
+                            try:
+                                item_id = int(key.split('_')[1])
+                                amount_for_item = Decimal(value)
+
+                                if amount_for_item > 0:
+                                    item = get_object_or_404(InvoiceItemModel, pk=item_id, invoice=target_invoice)
+
+                                    # Don't allow overpayment on a single item
+                                    payable_amount = min(amount_for_item, item.balance)
+
+                                    if payable_amount != amount_for_item:
+                                        messages.warning(
+                                            self.request,
+                                            f"Amount for '{item.description}' adjusted from ₦{amount_for_item:,.2f} to ₦{payable_amount:,.2f} (item balance)"
+                                        )
+
+                                    item_allocations[item_id] = {
+                                        'description': item.description,
+                                        'amount': float(payable_amount)
+                                    }
+                                    total_allocated += payable_amount
+
+                            except (ValueError, TypeError, InvoiceItemModel.DoesNotExist):
+                                continue
+
+                    # Validate that allocated amounts match the total payment
+                    if total_allocated != cleaned_data['amount']:
+                        messages.error(
+                            self.request,
+                            f"Item allocations (₦{total_allocated:,.2f}) must equal the total amount paid (₦{cleaned_data['amount']:,.2f})"
+                        )
+                        return self.form_invalid(form)
+
+                    if not item_allocations:
+                        messages.error(self.request, "Please select at least one fee item to pay.")
+                        return self.form_invalid(form)
+
+                    # Store item allocations as JSON in notes
+                    import json
+                    notes_parts.append(f"Item Allocations: {json.dumps(item_allocations, indent=2)}")
+
+                notes = "\n".join(notes_parts)
+
                 FeePaymentModel.objects.create(
                     invoice=target_invoice,
                     amount=cleaned_data['amount'],
                     payment_mode=cleaned_data['method'],
+                    bank_account=bank_account,
                     date=timezone.now().date(),
                     reference=cleaned_data.get('teller_number', ''),
                     status=FeePaymentModel.PaymentStatus.PENDING,
-                    notes=f"Parent Upload via Portal.\nUser: {parent_user.username}.\nProof File: {proof_file_name or 'Not Saved'}.\nStudent: {self.selected_ward}.",
+                    notes=notes,
                 )
-                messages.success(self.request, "Payment proof for invoice submitted. Pending review.")
+
+                if payment_type == 'itemized':
+                    messages.success(
+                        self.request,
+                        f"Payment proof of ₦{cleaned_data['amount']:,.2f} for {len(item_allocations)} fee item(s) submitted. Pending review."
+                    )
+                else:
+                    messages.success(self.request, "Payment proof for invoice submitted. Pending review.")
 
             except Exception as e:
                 messages.error(self.request, f"Error saving invoice payment proof: {e}")
@@ -290,25 +363,26 @@ class FeeUploadView(ParentPortalMixin, FormView):
                     mode='online',
                 )
                 try:
-                    # from admin_site.models import SchoolSettingModel # Already imported
                     setting = SchoolSettingModel.objects.first()
                     if setting:
                         funding.session = setting.session
                         funding.term = setting.term
-                except Exception: pass
+                except Exception:
+                    pass
 
                 funding.save()
                 messages.success(self.request, "Wallet funding proof submitted. Pending review.")
 
             except Exception as e:
-                 messages.error(self.request, f"Error saving wallet funding proof: {e}")
-                 return self.form_invalid(form)
+                messages.error(self.request, f"Error saving wallet funding proof: {e}")
+                return self.form_invalid(form)
 
         return redirect(self.success_url)
 
     def form_invalid(self, form):
         for field, errors in form.errors.items():
-            field_label = "__all__" if field == "__all__" else form.fields.get(field).label if form.fields.get(field) else field.replace('_', ' ').title()
+            field_label = "__all__" if field == "__all__" else form.fields.get(field).label if form.fields.get(
+                field) else field.replace('_', ' ').title()
             for error in errors:
                 messages.error(self.request, f"{field_label}: {error}")
         return self.render_to_response(self.get_context_data(form=form))

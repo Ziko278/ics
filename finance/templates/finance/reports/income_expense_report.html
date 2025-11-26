@@ -1,0 +1,392 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="card-title mb-0">Income & Expense Statement</h4>
+            <a href="?date_from={{ date_from }}&date_to={{ date_to }}{% if session_filter %}&session={{ session_filter }}{% endif %}{% if term_filter %}&term={{ term_filter }}{% endif %}&download=pdf" 
+               class="btn btn-danger">
+                <i class="fas fa-file-pdf"></i> Download PDF
+            </a>
+        </div>
+
+        <!-- Filter Form -->
+        <form method="GET" class="mb-4">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small">From Date</label>
+                    <input type="date" name="date_from" class="form-control" value="{{ date_from }}" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">To Date</label>
+                    <input type="date" name="date_to" class="form-control" value="{{ date_to }}" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Session (Optional)</label>
+                    <select name="session" class="form-select">
+                        <option value="">All Sessions</option>
+                        {% for session in sessions %}
+                        <option value="{{ session.id }}" {% if session_filter == session.id|stringformat:"s" %}selected{% endif %}>
+                            {{ session.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Term (Optional)</label>
+                    <select name="term" class="form-select">
+                        <option value="">All Terms</option>
+                        {% for term in terms %}
+                        <option value="{{ term.id }}" {% if term_filter == term.id|stringformat:"s" %}selected{% endif %}>
+                            {{ term.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter"></i> Apply
+                    </button>
+                </div>
+            </div>
+
+            {% if session_filter or term_filter %}
+            <div class="mt-2">
+                <a href="?date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-times"></i> Clear Filters
+                </a>
+            </div>
+            {% endif %}
+        </form>
+
+        <!-- Report Title -->
+        <div class="text-center mb-4">
+            <h5 class="text-primary">{{ report_title }}</h5>
+        </div>
+
+        <!-- Two-Column Layout -->
+        <div class="row">
+            <!-- INCOME COLUMN -->
+            <div class="col-lg-6">
+                <div class="card border-success mb-3">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-arrow-down"></i> REVENUE (INCOME)</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Description</th>
+                                    <th class="text-end">Amount (₦)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Fee Payments -->
+                                {% if total_fee_payments > 0 %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Fee Payments</strong></td>
+                                </tr>
+                                {% for fee in fee_breakdown %}
+                                <tr>
+                                    <td class="ps-4">{{ fee.name }}</td>
+                                    <td class="text-end">{{ fee.amount|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                                <tr class="fw-bold">
+                                    <td class="text-end">Subtotal:</td>
+                                    <td class="text-end">{{ total_fee_payments|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                {% endif %}
+
+                                <!-- Sales Revenue -->
+                                {% if total_sales_revenue > 0 %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Sales Revenue (Cash/POS)</strong></td>
+                                </tr>
+                                {% if cash_sales > 0 %}
+                                <tr>
+                                    <td class="ps-4">Cash Sales</td>
+                                    <td class="text-end">{{ cash_sales|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if pos_sales > 0 %}
+                                <tr>
+                                    <td class="ps-4">POS Sales</td>
+                                    <td class="text-end">{{ pos_sales|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                <tr class="fw-bold">
+                                    <td class="text-end">Subtotal:</td>
+                                    <td class="text-end">{{ total_sales_revenue|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                {% endif %}
+
+                                <!-- Wallet Funding -->
+                                {% if total_wallet_funding > 0 %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Wallet Funding</strong></td>
+                                </tr>
+                                {% if student_funding > 0 %}
+                                <tr>
+                                    <td class="ps-4">Student Wallets</td>
+                                    <td class="text-end">{{ student_funding|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if staff_funding > 0 %}
+                                <tr>
+                                    <td class="ps-4">Staff Wallets</td>
+                                    <td class="text-end">{{ staff_funding|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                <tr class="fw-bold">
+                                    <td class="text-end">Subtotal:</td>
+                                    <td class="text-end">{{ total_wallet_funding|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                {% endif %}
+
+                                <!-- Other Income -->
+                                {% if other_income_data %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Other Income</strong></td>
+                                </tr>
+                                {% for item in other_income_data %}
+                                <tr>
+                                    <td class="ps-4">{{ item.category__name }}</td>
+                                    <td class="text-end">{{ item.total|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                                <tr class="fw-bold">
+                                    <td class="text-end">Subtotal:</td>
+                                    <td class="text-end">{{ total_other_income|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                {% endif %}
+
+                                <!-- Debt Recoveries -->
+                                {% if total_debt_recoveries > 0 %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Debt Recoveries</strong></td>
+                                </tr>
+                                {% if loan_repayments > 0 %}
+                                <tr>
+                                    <td class="ps-4">Loan Repayments</td>
+                                    <td class="text-end">{{ loan_repayments|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if advance_repayments > 0 %}
+                                <tr>
+                                    <td class="ps-4">Advance Repayments</td>
+                                    <td class="text-end">{{ advance_repayments|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                <tr class="fw-bold">
+                                    <td class="text-end">Subtotal:</td>
+                                    <td class="text-end">{{ total_debt_recoveries|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                            <tfoot class="table-success">
+                                <tr class="fw-bold fs-5">
+                                    <td>TOTAL REVENUE</td>
+                                    <td class="text-end">₦{{ total_revenue|floatformat:2 }}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EXPENSE COLUMN -->
+            <div class="col-lg-6">
+                <div class="card border-danger mb-3">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0"><i class="fas fa-arrow-up"></i> EXPENSES</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Description</th>
+                                    <th class="text-end">Amount (₦)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- COGS -->
+                                {% if cogs > 0 %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Cost of Goods Sold</strong></td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4">Items Sold (at cost)</td>
+                                    <td class="text-end">{{ cogs|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                
+                                <tr class="table-info fw-bold">
+                                    <td>Gross Profit (Revenue - COGS)</td>
+                                    <td class="text-end">{{ gross_profit|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>OPERATING EXPENSES</strong></td>
+                                </tr>
+                                {% endif %}
+
+                                <!-- Salary Payments -->
+                                {% if total_salaries > 0 %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Salary Payments</strong></td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4">{{ staff_count }} Staff Member{{ staff_count|pluralize }}</td>
+                                    <td class="text-end">{{ total_salaries|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                {% endif %}
+
+                                <!-- General Expenses -->
+                                {% if general_expenses_data %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>General Expenses</strong></td>
+                                </tr>
+                                {% for item in general_expenses_data %}
+                                <tr>
+                                    <td class="ps-4">{{ item.category__name }}</td>
+                                    <td class="text-end">{{ item.total|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                                <tr class="fw-bold">
+                                    <td class="text-end">Subtotal:</td>
+                                    <td class="text-end">{{ total_general_expenses|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                {% endif %}
+
+                                <!-- Supplier Payments -->
+                                {% if supplier_payments > 0 %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Supplier Payments</strong></td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4">Total Supplier Payments</td>
+                                    <td class="text-end">{{ supplier_payments|floatformat:2 }}</td>
+                                </tr>
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                {% endif %}
+
+                                <!-- Advances & Loans -->
+                                {% if total_advances > 0 %}
+                                <tr class="table-active">
+                                    <td colspan="2"><strong>Advances & Loans Disbursed</strong></td>
+                                </tr>
+                                {% if salary_advances > 0 %}
+                                <tr>
+                                    <td class="ps-4">Salary Advances</td>
+                                    <td class="text-end">{{ salary_advances|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if staff_loans > 0 %}
+                                <tr>
+                                    <td class="ps-4">Staff Loans</td>
+                                    <td class="text-end">{{ staff_loans|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if purchase_advances > 0 %}
+                                <tr>
+                                    <td class="ps-4">Purchase Advances</td>
+                                    <td class="text-end">{{ purchase_advances|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                <tr class="fw-bold">
+                                    <td class="text-end">Subtotal:</td>
+                                    <td class="text-end">{{ total_advances|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+
+                                {% if cogs > 0 %}
+                                <tr><td colspan="2" class="p-1"></td></tr>
+                                <tr class="table-warning fw-bold">
+                                    <td>Total Operating Expenses</td>
+                                    <td class="text-end">{{ total_operating_expenses|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                            <tfoot class="table-danger">
+                                <tr class="fw-bold fs-5">
+                                    <td>TOTAL EXPENSES</td>
+                                    <td class="text-end">₦{{ total_expenses|floatformat:2 }}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NET INCOME SECTION -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card {% if net_income >= 0 %}border-success bg-success{% else %}border-danger bg-danger{% endif %} text-white">
+                    <div class="card-body text-center py-4">
+                        <h3 class="mb-2">
+                            {% if net_income >= 0 %}
+                                <i class="fas fa-check-circle"></i> NET INCOME
+                            {% else %}
+                                <i class="fas fa-exclamation-triangle"></i> NET LOSS
+                            {% endif %}
+                        </h3>
+                        <h1 class="display-4 fw-bold">₦{{ net_income|floatformat:2 }}</h1>
+                        <p class="mb-0 mt-3">
+                            <small>
+                                <i class="fas fa-info-circle"></i> 
+                                Note: Sales revenue excludes wallet-based payments to avoid double-counting with wallet funding.
+                            </small>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        {% if total_revenue == 0 and total_expenses == 0 %}
+        <div class="text-center py-5">
+            <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No financial data found for the selected period</h5>
+            <p class="text-muted">Try adjusting your date range or filters.</p>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+
+<style>
+    .table-sm td, .table-sm th {
+        padding: 0.4rem;
+    }
+    
+    .ps-4 {
+        padding-left: 1.5rem !important;
+    }
+    
+    .card-header h5 {
+        font-size: 1.1rem;
+    }
+    
+    .display-4 {
+        font-size: 3rem;
+    }
+    
+    @media print {
+        .btn, form {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}

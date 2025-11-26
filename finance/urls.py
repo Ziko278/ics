@@ -28,6 +28,7 @@ from finance.views import (
     DiscountUpdateView, DiscountApplicationCreateView, DiscountDeleteView, DiscountApplicationUpdateView,
     DiscountApplicationDeleteView, DiscountApplicationListView, DiscountSelectStudentView, StudentDiscountAssignView,
     StudentDiscountIndexView, ExpensePrintVoucherView, deposit_revert_view, staff_deposit_revert_view,
+    income_expense_report, get_invoice_items_json, payment_review_view, FeePendingPaymentListView,
 )
 
 urlpatterns = [
@@ -98,6 +99,7 @@ urlpatterns = [
     path('student-payments/ajax/get-by-class/', get_students_by_class_ajax, name='finance_ajax_get_students_by_class'),
     path('student-payments/ajax/get-by-reg-no/', get_students_by_reg_no_ajax, name='finance_ajax_get_students_by_reg_no'),
     path('payments/', FeePaymentListView.as_view(), name='finance_payment_index'),
+    path('payments/pending/', FeePendingPaymentListView.as_view(), name='finance_pending_payment_index'),
 
     path('student/<int:pk>/dashboard/', StudentFinancialDashboardView.as_view(), name='finance_student_dashboard'),
     path('invoice/<int:pk>/receipt/', InvoiceReceiptView.as_view(), name='finance_invoice_receipt'),
@@ -109,6 +111,9 @@ urlpatterns = [
     path('finance/student-payments/<int:pk>/revert/', FeePaymentRevertView.as_view(), name='finance_fee_payment_revert'),
     path('finance/student-payments/<int:pk>/receipt/', FeePaymentReceiptView.as_view(), name='finance_fee_payment_receipt'),
     path('fee-payments/<int:payment_id>/confirm/', confirm_fee_payment_view, name='confirm_fee_payment'),
+
+    path('get-invoice-items/<int:invoice_id>/', get_invoice_items_json, name='get_invoice_items_json'),
+    path('payment/review/<int:payment_id>/', payment_review_view, name='review_fee_payment'),
 
     path("expense-categories/", ExpenseCategoryListView.as_view(), name="expense_category_index"),
     path("expense-categories/create/", ExpenseCategoryCreateView.as_view(), name="expense_category_create"),
@@ -213,4 +218,7 @@ urlpatterns = [
 
     path('fee/dashboard/', fee_dashboard, name='fee_dashboard'),
     path('dashboard/', finance_dashboard, name='finance_dashboard'),
+
+    path('reports/income-expense/', income_expense_report, name='income_expense_report'),
+
 ]

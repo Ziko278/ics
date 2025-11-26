@@ -454,6 +454,11 @@
                     </a>
                 </li>
                 <li>
+                    <a href="{% url 'finance_pending_payment_index' %}">
+                        <i class="bi bi-circle"></i><span>Pending Fee Payment</span>
+                    </a>
+                </li>
+                <li>
                     <a href="{% url 'finance_invoice_list' %}">
                         <i class="bi bi-circle"></i><span>Fee Invoices</span>
                     </a>
@@ -515,6 +520,12 @@
                             <i class="bi bi-circle"></i><span>Finance Dashboard</span>
                         </a>
                     </li>
+                    <li>
+                        <a href="{% url 'income_expense_report' %}">
+                            <i class="bi bi-circle"></i><span>Income & Expense Report</span>
+                        </a>
+                    </li>
+
                     {% endif %}
 
                     {% if 'finance.add_studentfundingmodel' in perms %}

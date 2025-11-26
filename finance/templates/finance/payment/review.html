@@ -1,0 +1,216 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="pagetitle">
+  <h1>Review Payment</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'pending_fee_payment_list' %}">Pending Payments</a></li>
+      <li class="breadcrumb-item active">Review</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Payment Details</h5>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Student:</strong> {{ payment.invoice.student|title }}<br>
+                            <strong>Reg No:</strong> {{ payment.invoice.student.registration_number }}<br>
+                            <strong>Class:</strong> {{ payment.invoice.student.student_class }} {{ payment.invoice.student.class_section }}
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <strong>Invoice:</strong> {{ payment.invoice.invoice_number }}<br>
+                            <strong>Amount:</strong> ₦{{ payment.amount|floatformat:2|intcomma }}<br>
+                            <strong>Method:</strong> {{ payment.get_payment_mode_display }}<br>
+                            <strong>Date:</strong> {{ payment.date|date:"d M, Y" }}
+                        </div>
+                    </div>
+
+                    {% if payment.reference %}
+                    <div class="alert alert-info">
+                        <strong>Reference/Teller:</strong> {{ payment.reference }}
+                    </div>
+                    {% endif %}
+
+                    <h6 class="mt-4">Payment Allocation Strategy</h6>
+                    
+                    {# Check if parent specified item allocations #}
+                    {% if 'Item Allocations:' in payment.notes %}
+                    <div class="alert alert-success">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-check-circle-fill"></i> <strong>Parent Specified Items</strong>
+                                <p class="mb-0 small">The parent selected specific fees to pay. Review below.</p>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="overrideAllocation" name="override_allocation">
+                                <label class="form-check-label" for="overrideAllocation">Override & Auto-Distribute</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Parse and display parent's allocations #}
+                    <div id="parentAllocations">
+                        <h6>Parent's Selected Items:</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Fee Item</th>
+                                        <th class="text-end">Item Balance</th>
+                                        <th class="text-end">Parent Wants to Pay</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="allocationTableBody">
+                                    {# JavaScript will populate this #}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-primary">
+                        <i class="bi bi-info-circle-fill"></i> <strong>Quick Payment Mode</strong>
+                        <p class="mb-0 small">Parent paid any amount. System will auto-distribute across unpaid fees in order.</p>
+                    </div>
+                    {% endif %}
+
+                    <h6 class="mt-4">Invoice Breakdown</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Fee Description</th>
+                                    <th class="text-end">Amount</th>
+                                    <th class="text-end">Discount</th>
+                                    <th class="text-end">After Discount</th>
+                                    <th class="text-end">Paid</th>
+                                    <th class="text-end">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in payment.invoice.items.all %}
+                                <tr>
+                                    <td>{{ item.description|title }}</td>
+                                    <td class="text-end">₦{{ item.amount|floatformat:2|intcomma }}</td>
+                                    <td class="text-end text-success">₦{{ item.total_discount|floatformat:2|intcomma }}</td>
+                                    <td class="text-end">₦{{ item.amount_after_discount|floatformat:2|intcomma }}</td>
+                                    <td class="text-end text-info">₦{{ item.amount_paid|floatformat:2|intcomma }}</td>
+                                    <td class="text-end text-danger">₦{{ item.balance|floatformat:2|intcomma }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-bold">
+                                    <td colspan="4" class="text-end">Invoice Balance:</td>
+                                    <td colspan="2" class="text-end text-danger">₦{{ payment.invoice.balance|floatformat:2|intcomma }}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="mt-4">
+                        <h6>Notes:</h6>
+                        <pre class="bg-light p-3 rounded">{{ payment.notes|default:"No additional notes" }}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            {# Proof of Payment #}
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Proof of Payment</h5>
+                    {% if payment.notes and 'Proof File:' in payment.notes %}
+                        {# Extract file path from notes #}
+                        <div class="text-center">
+                            <img src="{{ MEDIA_URL }}parent_proofs/{{ payment.invoice.student.registration_number }}_{{ payment.invoice.invoice_number }}_proof.jpg" 
+                                 class="img-fluid rounded" alt="Payment Proof" 
+                                 onerror="this.src='{% static 'admin_site/images/no-image.png' %}'">
+                            <p class="small text-muted mt-2">Click to enlarge</p>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning text-center">
+                            No proof file attached
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Actions #}
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Actions</h5>
+                    
+                    <form method="POST" action="{% url 'confirm_fee_payment' payment.pk %}" id="confirmForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="override_allocation" id="overrideInput" value="false">
+                        
+                        <button type="submit" class="btn btn-success w-100 mb-2">
+                            <i class="bi bi-check-circle"></i> Confirm Payment
+                        </button>
+                    </form>
+                    
+                    <form method="POST" action="{% url 'reject_fee_payment' payment.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger w-100" onclick="return confirm('Are you sure you want to reject this payment?')">
+                            <i class="bi bi-x-circle"></i> Reject Payment
+                        </button>
+                    </form>
+
+                    <a href="{% url 'pending_fee_payment_list' %}" class="btn btn-secondary w-100 mt-2">
+                        <i class="bi bi-arrow-left"></i> Back to List
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const overrideCheckbox = document.getElementById('overrideAllocation');
+    const overrideInput = document.getElementById('overrideInput');
+    
+    if (overrideCheckbox) {
+        overrideCheckbox.addEventListener('change', function() {
+            overrideInput.value = this.checked ? 'true' : 'false';
+        });
+    }
+
+    // Parse and display parent allocations from notes
+    const notesText = {{ payment.notes|safe|escapejs }};
+    const allocationsMatch = notesText.match(/Item Allocations:\s*(\{[\s\S]*?\})/);
+    
+    if (allocationsMatch) {
+        try {
+            const allocations = JSON.parse(allocationsMatch[1]);
+            const tbody = document.getElementById('allocationTableBody');
+            
+            if (tbody) {
+                let html = '';
+                for (const [itemId, data] of Object.entries(allocations)) {
+                    html += `<tr>
+                        <td>${data.description}</td>
+                        <td class="text-end">-</td>
+                        <td class="text-end fw-bold text-success">₦${parseFloat(data.amount).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    </tr>`;
+                }
+                tbody.innerHTML = html;
+            }
+        } catch (e) {
+            console.error('Error parsing allocations:', e);
+        }
+    }
+});
+</script>
+
+{% endblock %}
