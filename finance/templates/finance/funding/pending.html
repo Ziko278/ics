@@ -67,7 +67,7 @@
                                 <td scope="row" {% if payment.status == 'pending' %} class='text-warning' {% else %} class='text-success' {% endif %}>{{ payment.status|title }}</td>
                                 <td scope="row" class="text-center">
                                     <a title="View Fee Payment Detail" style="font-size:12px" class="btn btn-primary" href="{% url 'deposit_detail' payment.id %}"><i class="bi bi-eye"></i> </a>
-                                    {% if 'student.change_studentfundingmodel' in perms  %}
+                                    {% if 'finance.change_studentfundingmodel' in perms  %}
                                     <button type="button" title="confirm Payment" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#verticalycentered1{{forloop.counter}}"><i class="bi bi-check"></i> </button>
                                     <button type="button" title="decline Payment" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#verticalycentered2{{forloop.counter}}">X</button>
                                     {% endif %}
