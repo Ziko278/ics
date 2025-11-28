@@ -62,7 +62,7 @@
                                 <td scope="row">{% if payment.student.student_class %} {{ payment.student.student_class|upper }} {{ payment.student.class_section|upper }} {% endif %}</td>
                                 <td scope="row">{{ payment.amount|intcomma }}</td>
                                 <td scope="row">{{ payment.created_at|date }}</td>
-                                <td scope="row">{{ payment.mode|title }}</td>
+                                <td scope="row">{{ payment.mode|title }} {% if payment.method %} ({{ payment.method|title }}) {% endif %}</td>
                                 <td scope="row" {% if payment.status == 'pending' %} class='text-warning' {% elif payment.status == 'declined'  %} class='text-danger' {% elif payment.status == 'reverted'  %} class='text-danger' {% else %} class='text-success' {% endif %}>{{ payment.status|title }}</td>
                                 <td scope="row" class="text-center">
                                     <a title="View Fee Payment Detail" style="font-size:12px" class="btn btn-primary" href="{% url 'deposit_detail' payment.id %}"><i class="bi bi-eye"></i> </a>
