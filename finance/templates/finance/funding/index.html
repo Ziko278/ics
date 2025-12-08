@@ -8,11 +8,12 @@
 <div class="col-lg-12 grid-margin stretch-card">
     <div class="card">
         <div class="card-body">
-            <h4 class="card-title">Select Fee Record</h4>
+            <h4 class="card-title">Filter and Search</h4>
             <form>
                 <div class="row">
-                    <div class="col-4">
-                        <select name="session" required class="form-control">
+                    <div class="col-3">
+                        <label for="session">Session</label>
+                        <select id="session" name="session" required class="form-control">
                             <option value="">-------------------</option>
                             {% for session in session_list %}
                             <option {% if current_session.id == session.id %} selected {% endif %} value="{{session.id}}">{{ session }}</option>
@@ -20,8 +21,9 @@
                         </select>
                     </div>
 
-                    <div class="col-4">
-                        <select name="term" required class="form-control">
+                    <div class="col-3">
+                        <label for="term">Term</label>
+                        <select id="term" name="term" required class="form-control">
                             <option value="">-------------------</option>
                             {% for term in term_list %}
                             <option {% if current_term.id == term.id %} selected {% endif %} value="{{term.id}}">{{ term|title }}</option>
@@ -30,7 +32,15 @@
                     </div>
 
                     <div class="col-4">
-                        <input style="width:50%;margin-left:25%" type="submit" value="Proceed" class="btn btn-success">
+                        <label for="search">Search Student</label>
+                        <input type="text" id="search" name="search" class="form-control" value="{{ search_query }}" placeholder="Search by first or last name">
+                    </div>
+
+                    <div class="col-2">
+                        <label>&nbsp;</label>
+                        <div>
+                            <input type="submit" value="Filter" class="btn btn-success w-100">
+                        </div>
                     </div>
                 </div>
             </form>
@@ -42,8 +52,10 @@
     <div class="col-md-12">
         <div class="card">
             <div class="card-body pt-3" style="overflow-x:auto">
-                <h5 class="card-title">Student Wallet Funding for {{ current_session }} Session - {{ current_term }}</h5>
-                <table class="table table-bordered datatable" style="font-size:14px">
+                <h5 class="card-title">Student Wallet Funding for {{ current_session }} Session - {{ current_term }}
+                    {% if search_query %} (Search: "{{ search_query }}"){% endif %}
+                </h5>
+                <table class="table table-bordered" style="font-size:14px">
                     <thead>
                         <tr>
                             <th scope="col" style="min-width:150px">Student</th>
@@ -83,9 +95,42 @@
                                 {% endif %}
                                 </td>
                             </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">No records found matching your criteria.</td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+
+                <!-- Pagination Controls -->
+                {% if fee_payment_list.has_other_pages %}
+                <nav aria-label="Page navigation">
+                    <ul class="pagination justify-content-center">
+                        {% if fee_payment_list.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}">First</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ fee_payment_list.previous_page_number }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}">Previous</a>
+                            </li>
+                        {% endif %}
+
+                        <li class="page-item active">
+                            <span class="page-link">Page {{ fee_payment_list.number }} of {{ fee_payment_list.paginator.num_pages }}</span>
+                        </li>
+
+                        {% if fee_payment_list.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ fee_payment_list.next_page_number }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}">Next</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ fee_payment_list.paginator.num_pages }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}">Last</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
 
             </div>
         </div>

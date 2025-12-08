@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models import Q, Sum, Avg, F, DecimalField, Value, Count, Prefetch
@@ -2440,6 +2441,9 @@ def deposit_get_class_students_by_reg_number(request):
 def deposit_payment_list_view(request):
     session_id = request.GET.get('session', None)
     term_id = request.GET.get('term', None)
+    search_query = request.GET.get('search', '').strip()
+    page = request.GET.get('page', 1)
+
     school_setting = SchoolSettingModel.objects.first()
     if not session_id:
         session = school_setting.session
@@ -2452,13 +2456,32 @@ def deposit_payment_list_view(request):
     session_list = SessionModel.objects.all()
     term_list = TermModel.objects.all()
 
-    fee_payment_list = StudentFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
+    # Base queryset
+    queryset = StudentFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
+
+    # Apply search filter if search query is provided
+    if search_query:
+        queryset = queryset.filter(
+            Q(student__first_name__icontains=search_query) |
+            Q(student__last_name__icontains=search_query)
+        )
+
+    # Apply pagination
+    paginator = Paginator(queryset, 50)
+    try:
+        fee_payment_list = paginator.page(page)
+    except PageNotAnInteger:
+        fee_payment_list = paginator.page(1)
+    except EmptyPage:
+        fee_payment_list = paginator.page(paginator.num_pages)
+
     context = {
         'fee_payment_list': fee_payment_list,
         'current_session': session,
         'current_term': term,
         'session_list': session_list,
-        'term_list': term_list
+        'term_list': term_list,
+        'search_query': search_query  # Pass search query to template
     }
     return render(request, 'finance/funding/index.html', context)
 
@@ -2468,6 +2491,9 @@ def deposit_payment_list_view(request):
 def staff_deposit_payment_list_view(request):
     session_id = request.GET.get('session', None)
     term_id = request.GET.get('term', None)
+    search_query = request.GET.get('search', '').strip()
+    page = request.GET.get('page', 1)
+
     school_setting = SchoolSettingModel.objects.first()
     if not session_id:
         session = school_setting.session
@@ -2480,13 +2506,32 @@ def staff_deposit_payment_list_view(request):
     session_list = SessionModel.objects.all()
     term_list = TermModel.objects.all()
 
-    fee_payment_list = StaffFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
+    # Base queryset
+    queryset = StaffFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
+
+    # Apply search filter if search query is provided
+    if search_query:
+        queryset = queryset.filter(
+            Q(staff__first_name__icontains=search_query) |
+            Q(staff__last_name__icontains=search_query)
+        )
+
+    # Apply pagination
+    paginator = Paginator(queryset, 50)
+    try:
+        fee_payment_list = paginator.page(page)
+    except PageNotAnInteger:
+        fee_payment_list = paginator.page(1)
+    except EmptyPage:
+        fee_payment_list = paginator.page(paginator.num_pages)
+
     context = {
         'fee_payment_list': fee_payment_list,
         'current_session': session,
         'current_term': term,
         'session_list': session_list,
-        'term_list': term_list
+        'term_list': term_list,
+        'search_query': search_query  # Pass search query to template
     }
     return render(request, 'finance/funding/staff_index.html', context)
 

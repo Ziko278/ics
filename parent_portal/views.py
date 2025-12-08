@@ -445,6 +445,7 @@ class ShopHistoryView(ParentPortalMixin, ListView):
             customer=self.selected_ward
         ).order_by('-sale_date')
 
+
 class ShopHistoryDetailView(ParentPortalMixin, DetailView):
     model = SaleModel
     template_name = 'parent_portal/shop_detail.html'
