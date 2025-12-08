@@ -78,6 +78,7 @@
                                         <th class="text-end">After Discount (₦)</th>
                                         <th class="text-end">Amount Paid (₦)</th>
                                         <th class="text-end">Balance Due (₦)</th>
+                                        <th class="text-center">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -89,6 +90,11 @@
                                         <td class="text-end">{{ item.amount_after_discount|floatformat:2|intcomma }}</td>
                                         <td class="text-end text-success">{{ item.amount_paid|floatformat:2|intcomma }}</td>
                                         <td class="text-end text-danger fw-bold">{{ item.balance|floatformat:2|intcomma }}</td>
+                                        <td class="text-center">
+                                            <a title="Delete Item" href="{% url 'finance_invoice_item_delete' item.pk %}" class="btn btn-sm btn-danger">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -100,6 +106,7 @@
                                         <td class="text-end">₦{{ invoice.amount_after_discount|floatformat:2|intcomma }}</td>
                                         <td class="text-end text-success">₦{{ invoice.amount_paid|floatformat:2|intcomma }}</td>
                                         <td class="text-end text-danger">₦{{ invoice.balance|floatformat:2|intcomma }}</td>
+                                        <td></td>
                                     </tr>
                                 </tfoot>
                             </table>

@@ -766,6 +766,77 @@ class InvoiceDetailView(LoginRequiredMixin, PermissionRequiredMixin, CreateView)
         return redirect('finance_invoice_detail', pk=invoice.pk)
 
 
+class InvoiceItemDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = InvoiceItemModel
+    permission_required = 'finance.delete_invoiceitemmodel'
+    template_name = 'finance/invoice/delete_item.html'
+
+    def get_success_url(self):
+        return reverse('finance_invoice_detail', kwargs={'pk': self.object.invoice.pk})
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        invoice_item = self.get_object()
+        invoice = invoice_item.invoice
+
+        # Check if there are any confirmed payments for this invoice
+        has_confirmed_payments = invoice.payments.filter(status='confirmed').exists()
+
+        context['invoice'] = invoice
+        context['has_confirmed_payments'] = has_confirmed_payments
+        return context
+
+    def delete(self, request, *args, **kwargs):
+        invoice_item = self.get_object()
+        invoice = invoice_item.invoice
+
+        # Check if there are any confirmed payments for this invoice
+        has_confirmed_payments = invoice.payments.filter(status='confirmed').exists()
+
+        if has_confirmed_payments:
+            messages.error(request, "Cannot delete invoice item because the invoice has confirmed payments.")
+            return redirect('finance_invoice_detail', pk=invoice.pk)
+
+        messages.success(request, f"Invoice item '{invoice_item.description}' has been deleted successfully.")
+        return super().delete(request, *args, **kwargs)
+
+
+class InvoiceDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = InvoiceModel
+    permission_required = 'finance.delete_invoicemodel'
+    template_name = 'finance/invoice/delete.html'
+    success_url = reverse_lazy('finance_invoice_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        invoice = self.get_object()
+
+        # Check if there are any confirmed payments for this invoice
+        has_confirmed_payments = invoice.payments.filter(status='confirmed').exists()
+
+        # Get all items for display in the confirmation page
+        items = invoice.items.all()
+        total_amount = items.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        context['has_confirmed_payments'] = has_confirmed_payments
+        context['items'] = items
+        context['total_amount'] = total_amount
+        return context
+
+    def delete(self, request, *args, **kwargs):
+        invoice = self.get_object()
+
+        # Check if there are any confirmed payments for this invoice
+        has_confirmed_payments = invoice.payments.filter(status='confirmed').exists()
+
+        if has_confirmed_payments:
+            messages.error(request, "Cannot delete invoice because it has confirmed payments.")
+            return redirect('finance_invoice_list')
+
+        messages.success(request, f"Invoice '{invoice.invoice_number}' has been deleted successfully.")
+        return super().delete(request, *args, **kwargs)
+
+
 class StudentFeeSearchView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = 'finance.add_feemodel'
     template_name = 'finance/payment/select_student.html'
@@ -4087,6 +4158,26 @@ class StudentDiscountIndexView(LoginRequiredMixin, PermissionRequiredMixin, List
             total=Sum('amount_discounted')
         )['total'] or Decimal('0.00')
 
+        return context
+
+
+class StudentDiscountDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    """Delete a student discount with confirmation."""
+    model = StudentDiscountModel
+    template_name = 'finance/discount/delete_discount.html'
+    permission_required = 'finance.delete_studentdiscountmodel'
+    context_object_name = 'discount'
+
+    def get_success_url(self):
+        # Redirect to the discount index page after deletion
+        return reverse('finance_discount_index')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Get the student discount object
+        discount = self.get_object()
+        context['discount'] = discount
+        context['student'] = discount.student
         return context
 
 

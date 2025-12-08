@@ -97,9 +97,12 @@
                             {{ invoice.get_status_display }}
                         </span>
                     </td>
-                    <td class="text-center">
+                    <td class="text-center" style="min-width:150px">
                         <a title="Manage Payments" href="{% url 'finance_invoice_detail' invoice.pk %}" class="btn btn-sm btn-primary">
                             <i class="bi bi-wallet2"></i> Manage
+                        </a>
+                        <a title="Delete Invoice" href="{% url 'finance_invoice_delete' invoice.pk %}" class="btn btn-sm btn-danger">
+                            <i class="bi bi-trash"></i>
                         </a>
                     </td>
                 </tr>

@@ -1,0 +1,31 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Student Discount</h4>
+            
+            <p>You are about to permanently delete the following discount record:</p>
+            <h5 class="text-center my-3">
+                <em>"{{ discount.discount_application.discount.title|title }}" 
+                ({{ discount.discount_application.session.name }} - {{ discount.discount_application.term.name }})</em>
+            </h5>
+            <p class="text-center">Applied to: <strong>{{ student|title }}</strong></p>
+            <p class="text-center">Amount Discounted: <strong>₦{{ discount.amount_discounted|floatformat:2 }}</strong></p>
+
+            <div class="alert alert-warning">
+                <strong>Warning:</strong> This action is permanent and cannot be undone.
+            </div>
+            
+            <p>Are you sure you want to proceed?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                <a class="btn btn-secondary" href="{% url 'finance_discount_index' %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

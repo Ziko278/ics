@@ -1,0 +1,59 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-lg-8 offset-lg-2 col-md-12">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Confirm Deletion of Invoice</h4>
+
+            <p>You are about to permanently delete the following invoice:</p>
+            <h5 class="text-center my-3"><em>"{{ object.invoice_number }}"</em></h5>
+            <p class="text-center">Student: <strong>{{ object.student|title }}</strong></p>
+            <p class="text-center">Session/Term: <strong>{{ object.session }} / {{ object.term.name|title }}</strong></p>
+
+            {% if has_confirmed_payments %}
+                 <div class="alert alert-danger">
+                    <strong>Warning:</strong> This invoice cannot be deleted because it has confirmed payments.
+                </div>
+            {% else %}
+                <div class="alert alert-warning">
+                    <strong>Warning:</strong> This action is permanent and cannot be undone.
+                </div>
+
+                <h5 class="mt-4">Items that will be deleted:</h5>
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th class="text-end">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td>{{ item.description|title }}</td>
+                            <td class="text-end">₦{{ item.amount|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-light fw-bold">
+                            <td>Total:</td>
+                            <td class="text-end">₦{{ total_amount|floatformat:2|intcomma }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            {% endif %}
+
+            <p>Are you sure you want to proceed?</p>
+
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger" {% if has_confirmed_payments %}disabled{% endif %}>Yes, Delete</button>
+                <a class="btn btn-secondary" href="{% url 'finance_invoice_list' %}">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -425,6 +425,10 @@ class InvoiceModel(models.Model):
         """Balance after discounts and payments"""
         return self.amount_after_discount - self.amount_paid
 
+    def has_confirmed_payments(self):
+        """Check if the invoice has any confirmed payments"""
+        return self.payments.filter(status='confirmed').exists()
+
 
 class InvoiceItemModel(models.Model):
     """A single line item on an invoice, representing a specific fee."""
@@ -1346,7 +1350,7 @@ class StudentDiscountModel(models.Model):
         verbose_name = "Student Discount Record"
 
     def __str__(self):
-        return f"{self.student.first_name} received ₦{self.amount_discounted} discount on {self.invoice_item.description}"
+        return f"{self.student.__str__()} received ₦{self.amount_discounted} discount on {self.invoice_item.description}"
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
