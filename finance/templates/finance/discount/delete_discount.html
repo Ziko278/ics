@@ -1,5 +1,6 @@
 {% extends 'admin_site/layout.html' %}
 {% block 'main' %}
+{% load humanize %}
 
 <div class="col-lg-8 offset-lg-2 col-md-12">
     <div class="card">
@@ -12,7 +13,7 @@
                 ({{ discount.discount_application.session.name }} - {{ discount.discount_application.term.name }})</em>
             </h5>
             <p class="text-center">Applied to: <strong>{{ student|title }}</strong></p>
-            <p class="text-center">Amount Discounted: <strong>₦{{ discount.amount_discounted|floatformat:2 }}</strong></p>
+            <p class="text-center">Amount Discounted: <strong>₦{{ discount.amount_discounted|floatformat:2|intcomma }}</strong></p>
 
             <div class="alert alert-warning">
                 <strong>Warning:</strong> This action is permanent and cannot be undone.
