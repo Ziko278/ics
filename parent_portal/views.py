@@ -1,12 +1,15 @@
 # parent_portal/views.py
 from decimal import Decimal
-
+import logging
+from django.contrib.auth.decorators import login_required
 from django.core.files.storage import default_storage
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views import View
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView, ListView, DetailView, FormView
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.utils import timezone
@@ -20,6 +23,8 @@ from inventory.models import InventoryAssignmentModel, InventoryCollectionModel,
 from cafeteria.models import MealCollectionModel
 
 from .forms import FeeUploadForm
+
+logger = logging.getLogger(__name__)
 
 
 # --- Helper Mixin ---
@@ -487,3 +492,79 @@ class CafeteriaHistoryView(ParentPortalMixin, ListView):
         return MealCollectionModel.objects.filter(
             student=self.selected_ward
         ).select_related('meal').order_by('-collection_date', '-collection_time')
+
+
+@login_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def parent_change_password_view(request):
+    """
+    View to handle password change for authenticated parents.
+    Validates current password and updates to new password.
+    """
+
+    if request.method == 'POST':
+        # Get form data
+        current_password = request.POST.get('current_password', '').strip()
+        new_password1 = request.POST.get('new_password1', '').strip()
+        new_password2 = request.POST.get('new_password2', '').strip()
+
+        # Validation
+        errors = []
+
+        # Check if all fields are provided
+        if not current_password:
+            errors.append("Current password is required.")
+
+        if not new_password1:
+            errors.append("New password is required.")
+
+        if not new_password2:
+            errors.append("Password confirmation is required.")
+
+        # Check if new passwords match
+        if new_password1 and new_password2 and new_password1 != new_password2:
+            errors.append("New passwords do not match.")
+
+        # Check password length and complexity
+        if new_password1 and len(new_password1) < 8:
+            errors.append("New password must be at least 8 characters long.")
+
+        # Check if new password is different from current
+        if current_password and new_password1 and current_password == new_password1:
+            errors.append("New password must be different from current password.")
+
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+            return render(request, 'parent_portal/change_password.html')
+
+        # Verify current password
+        user = authenticate(username=request.user.username, password=current_password)
+        if user is None:
+            messages.error(request, "Current password is incorrect.")
+            logger.warning(
+                f"Failed password change attempt for parent {request.user.username} - incorrect current password")
+            return render(request, 'parent_portal/change_password.html')
+
+        try:
+            # Change password
+            user.set_password(new_password1)
+            user.save()
+
+            # Keep user logged in after password change
+            update_session_auth_hash(request, user)
+
+            messages.success(request, "Your password has been successfully changed!")
+            logger.info(f"Password successfully changed for parent {request.user.username}")
+
+            # Redirect to parent dashboard
+            return redirect('parent_dashboard')
+
+        except Exception as e:
+            logger.exception(f"Error changing password for parent {request.user.username}: {str(e)}")
+            messages.error(request, "An error occurred while changing your password. Please try again.")
+            return render(request, 'parent_portal/change_password.html')
+
+    # GET request - show the form
+    return render(request, 'parent_portal/change_password.html')

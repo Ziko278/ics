@@ -115,7 +115,7 @@
                 <tbody>
                     {% for discount in discounts %}
                     <tr>
-                        <td>{{ discount.student.first_name }} {{ discount.student.last_name }}</td>
+                        <td>{{ discount.student|title }}</td>
                         <td>{{ discount.student.registration_number }}</td>
                         <td>
                             {{ discount.discount_application.discount.title }}<br>

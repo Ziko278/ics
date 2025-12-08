@@ -1,7 +1,7 @@
 # parent_portal/urls.py
 from django.urls import path
 from . import views
-
+from .views import parent_change_password_view
 
 urlpatterns = [
     # --- Auth & Ward Selection ---
@@ -27,4 +27,6 @@ urlpatterns = [
 
     # --- Cafeteria ---
     path('cafeteria/', views.CafeteriaHistoryView.as_view(), name='parent_cafeteria_history'),
+
+    path('change-password/', parent_change_password_view, name='parent_change_password'),
 ]
