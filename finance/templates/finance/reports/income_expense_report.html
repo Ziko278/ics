@@ -1,5 +1,6 @@
 {% extends 'admin_site/layout.html' %}
 {% load static %}
+{% load humanize %}
 
 {% block 'main' %}
 <div class="card">
@@ -92,12 +93,12 @@
                                 {% for fee in fee_breakdown %}
                                 <tr>
                                     <td class="ps-4">{{ fee.name }}</td>
-                                    <td class="text-end">{{ fee.amount|floatformat:2 }}</td>
+                                    <td class="text-end">{{ fee.amount|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endfor %}
                                 <tr class="fw-bold">
                                     <td class="text-end">Subtotal:</td>
-                                    <td class="text-end">{{ total_fee_payments|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_fee_payments|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 {% endif %}
@@ -110,18 +111,18 @@
                                 {% if cash_sales > 0 %}
                                 <tr>
                                     <td class="ps-4">Cash Sales</td>
-                                    <td class="text-end">{{ cash_sales|floatformat:2 }}</td>
+                                    <td class="text-end">{{ cash_sales|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 {% if pos_sales > 0 %}
                                 <tr>
                                     <td class="ps-4">POS Sales</td>
-                                    <td class="text-end">{{ pos_sales|floatformat:2 }}</td>
+                                    <td class="text-end">{{ pos_sales|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 <tr class="fw-bold">
                                     <td class="text-end">Subtotal:</td>
-                                    <td class="text-end">{{ total_sales_revenue|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_sales_revenue|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 {% endif %}
@@ -134,18 +135,18 @@
                                 {% if student_funding > 0 %}
                                 <tr>
                                     <td class="ps-4">Student Wallets</td>
-                                    <td class="text-end">{{ student_funding|floatformat:2 }}</td>
+                                    <td class="text-end">{{ student_funding|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 {% if staff_funding > 0 %}
                                 <tr>
                                     <td class="ps-4">Staff Wallets</td>
-                                    <td class="text-end">{{ staff_funding|floatformat:2 }}</td>
+                                    <td class="text-end">{{ staff_funding|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 <tr class="fw-bold">
                                     <td class="text-end">Subtotal:</td>
-                                    <td class="text-end">{{ total_wallet_funding|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_wallet_funding|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 {% endif %}
@@ -158,12 +159,12 @@
                                 {% for item in other_income_data %}
                                 <tr>
                                     <td class="ps-4">{{ item.category__name }}</td>
-                                    <td class="text-end">{{ item.total|floatformat:2 }}</td>
+                                    <td class="text-end">{{ item.total|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endfor %}
                                 <tr class="fw-bold">
                                     <td class="text-end">Subtotal:</td>
-                                    <td class="text-end">{{ total_other_income|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_other_income|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 {% endif %}
@@ -176,25 +177,25 @@
                                 {% if loan_repayments > 0 %}
                                 <tr>
                                     <td class="ps-4">Loan Repayments</td>
-                                    <td class="text-end">{{ loan_repayments|floatformat:2 }}</td>
+                                    <td class="text-end">{{ loan_repayments|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 {% if advance_repayments > 0 %}
                                 <tr>
                                     <td class="ps-4">Advance Repayments</td>
-                                    <td class="text-end">{{ advance_repayments|floatformat:2 }}</td>
+                                    <td class="text-end">{{ advance_repayments|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 <tr class="fw-bold">
                                     <td class="text-end">Subtotal:</td>
-                                    <td class="text-end">{{ total_debt_recoveries|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_debt_recoveries|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                             </tbody>
                             <tfoot class="table-success">
                                 <tr class="fw-bold fs-5">
                                     <td>TOTAL REVENUE</td>
-                                    <td class="text-end">₦{{ total_revenue|floatformat:2 }}</td>
+                                    <td class="text-end">₦{{ total_revenue|floatformat:2|intcomma }}</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -224,13 +225,13 @@
                                 </tr>
                                 <tr>
                                     <td class="ps-4">Items Sold (at cost)</td>
-                                    <td class="text-end">{{ cogs|floatformat:2 }}</td>
+                                    <td class="text-end">{{ cogs|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 
                                 <tr class="table-info fw-bold">
                                     <td>Gross Profit (Revenue - COGS)</td>
-                                    <td class="text-end">{{ gross_profit|floatformat:2 }}</td>
+                                    <td class="text-end">{{ gross_profit|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 
@@ -246,7 +247,7 @@
                                 </tr>
                                 <tr>
                                     <td class="ps-4">{{ staff_count }} Staff Member{{ staff_count|pluralize }}</td>
-                                    <td class="text-end">{{ total_salaries|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_salaries|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 {% endif %}
@@ -259,12 +260,12 @@
                                 {% for item in general_expenses_data %}
                                 <tr>
                                     <td class="ps-4">{{ item.category__name }}</td>
-                                    <td class="text-end">{{ item.total|floatformat:2 }}</td>
+                                    <td class="text-end">{{ item.total|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endfor %}
                                 <tr class="fw-bold">
                                     <td class="text-end">Subtotal:</td>
-                                    <td class="text-end">{{ total_general_expenses|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_general_expenses|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 {% endif %}
@@ -276,7 +277,7 @@
                                 </tr>
                                 <tr>
                                     <td class="ps-4">Total Supplier Payments</td>
-                                    <td class="text-end">{{ supplier_payments|floatformat:2 }}</td>
+                                    <td class="text-end">{{ supplier_payments|floatformat:2|intcomma }}</td>
                                 </tr>
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 {% endif %}
@@ -289,24 +290,24 @@
                                 {% if salary_advances > 0 %}
                                 <tr>
                                     <td class="ps-4">Salary Advances</td>
-                                    <td class="text-end">{{ salary_advances|floatformat:2 }}</td>
+                                    <td class="text-end">{{ salary_advances|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 {% if staff_loans > 0 %}
                                 <tr>
                                     <td class="ps-4">Staff Loans</td>
-                                    <td class="text-end">{{ staff_loans|floatformat:2 }}</td>
+                                    <td class="text-end">{{ staff_loans|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 {% if purchase_advances > 0 %}
                                 <tr>
                                     <td class="ps-4">Purchase Advances</td>
-                                    <td class="text-end">{{ purchase_advances|floatformat:2 }}</td>
+                                    <td class="text-end">{{ purchase_advances|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                                 <tr class="fw-bold">
                                     <td class="text-end">Subtotal:</td>
-                                    <td class="text-end">{{ total_advances|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_advances|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
 
@@ -314,14 +315,14 @@
                                 <tr><td colspan="2" class="p-1"></td></tr>
                                 <tr class="table-warning fw-bold">
                                     <td>Total Operating Expenses</td>
-                                    <td class="text-end">{{ total_operating_expenses|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_operating_expenses|floatformat:2|intcomma }}</td>
                                 </tr>
                                 {% endif %}
                             </tbody>
                             <tfoot class="table-danger">
                                 <tr class="fw-bold fs-5">
                                     <td>TOTAL EXPENSES</td>
-                                    <td class="text-end">₦{{ total_expenses|floatformat:2 }}</td>
+                                    <td class="text-end">₦{{ total_expenses|floatformat:2|intcomma }}</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -342,7 +343,7 @@
                                 <i class="fas fa-exclamation-triangle"></i> NET LOSS
                             {% endif %}
                         </h3>
-                        <h1 class="display-4 fw-bold">₦{{ net_income|floatformat:2 }}</h1>
+                        <h1 class="display-4 fw-bold">₦{{ net_income|floatformat:2|intcomma }}</h1>
                         <p class="mb-0 mt-3">
                             <small>
                                 <i class="fas fa-info-circle"></i> 
