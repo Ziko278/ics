@@ -312,6 +312,13 @@
                                                             {% if "view_feepaymentmodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Delete Invoice
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="delete_invoicemodel"
+                                                            {% if "delete_invoicemodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
                                                 </ul>
                                             </div>
                                         </div>

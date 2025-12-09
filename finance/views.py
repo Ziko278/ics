@@ -769,7 +769,7 @@ class InvoiceDetailView(LoginRequiredMixin, PermissionRequiredMixin, CreateView)
 
 class InvoiceItemDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = InvoiceItemModel
-    permission_required = 'finance.delete_invoiceitemmodel'
+    permission_required = 'finance.delete_invoicemodel'
     template_name = 'finance/invoice/delete_item.html'
 
     def get_success_url(self):
