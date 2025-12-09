@@ -401,6 +401,19 @@ class InvoiceModel(models.Model):
             return item_paid_total
 
     @property
+    def effective_amount_paid(self):
+        """Total amount paid including direct payments and parent-bound fees paid by siblings"""
+        # Get direct payments
+        payment_total = self.payments.filter(status='confirmed').aggregate(total=Sum('amount'))['total'] or Decimal(
+            '0.00')
+
+        # Add effective amounts from all items (includes parent-bound fees paid by siblings)
+        item_total = sum(item.effective_amount_paid for item in self.items.all())
+
+        # Return the greater of the two to avoid double counting
+        return max(payment_total, item_total)
+
+    @property
     def total_amount(self):
         """Total invoice amount before discounts"""
         return self.items.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
@@ -422,8 +435,8 @@ class InvoiceModel(models.Model):
 
     @property
     def balance(self):
-        """Balance after discounts and payments"""
-        return self.amount_after_discount - self.amount_paid
+        """Balance after discounts and payments (including parent-bound fees)"""
+        return self.amount_after_discount - self.effective_amount_paid
 
     def has_confirmed_payments(self):
         """Check if the invoice has any confirmed payments"""
@@ -454,9 +467,18 @@ class InvoiceItemModel(models.Model):
         return self.amount - self.total_discount
 
     @property
+    def effective_amount_paid(self):
+        """Amount paid including parent-bound fees paid by siblings"""
+        # If this is a parent-bound fee paid by a sibling, consider it fully paid
+        if self.paid_by_sibling and self.fee_master.fee.parent_bound:
+            return self.amount_after_discount
+        # Otherwise, return the actual amount paid
+        return self.amount_paid
+
+    @property
     def balance(self):
-        """Update to use discounted amount"""
-        return self.amount_after_discount - self.amount_paid
+        """Update to use discounted amount and account for parent-bound fees"""
+        return self.amount_after_discount - self.effective_amount_paid
 
     def __str__(self):
         return self.description
