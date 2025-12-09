@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load humanize %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -253,14 +254,14 @@
                     <tr>
                         <td class="date-col">{{ item.date|default:"" }}</td>
                         <td>{{ item.particular }}</td>
-                        <td class="amount-col">{{ item.amount }}</td>
+                        <td class="amount-col">{{ item.amount|intcomma }}</td>
                     </tr>
                     {% endfor %}
                 {% else %}
                     <tr>
                         <td class="date-col">{{ expense.expense_date|date:"d/m/Y" }}</td>
                         <td>{{ expense.category.name }} {% if expense.description %}- {{ expense.description }}{% endif %}</td>
-                        <td class="amount-col">{{ expense.amount }}</td>
+                        <td class="amount-col">{{ expense.amount|intcomma }}</td>
                     </tr>
                     <!-- Add empty rows for manual entry -->
                     {% for i in "123" %}
@@ -275,7 +276,7 @@
             <tfoot>
                 <tr class="total-row">
                     <td colspan="2" style="text-align: right; padding-right: 15px;"><strong>TOTAL</strong></td>
-                    <td class="amount-col"><strong>{{ expense.amount }}</strong></td>
+                    <td class="amount-col"><strong>{{ expense.amount|intcomma }}</strong></td>
                 </tr>
             </tfoot>
         </table>
