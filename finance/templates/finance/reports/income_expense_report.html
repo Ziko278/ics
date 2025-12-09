@@ -30,7 +30,7 @@
                         <option value="">All Sessions</option>
                         {% for session in sessions %}
                         <option value="{{ session.id }}" {% if session_filter == session.id|stringformat:"s" %}selected{% endif %}>
-                            {{ session.name }}
+                            {{ session }}
                         </option>
                         {% endfor %}
                     </select>

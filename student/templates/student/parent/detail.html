@@ -23,6 +23,18 @@
                         <a href="{% url 'parent_index' %}" class="btn btn-secondary btn-sm" title="Back to List"><i class="bi bi-arrow-left"></i></a>
                         <a href="{% url 'student_create' parent.pk %}" class="btn btn-success btn-sm" title="Register a new Ward"><i class="bi bi-person-plus"></i> Add Ward</a>
                         <a href="{% url 'parent_edit' parent.pk %}" class="btn btn-warning btn-sm" title="Edit Parent"><i class="bi bi-pencil-square"></i></a>
+
+                        <!-- Add this password reset button -->
+                        {% if parent.parent_profile %}
+                            <form method="post" action="{% url 'parent_password_reset' parent.pk %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-info btn-sm" title="Reset Password"
+                                        onclick="return confirm('Are you sure you want to reset this parent\'s password? A new password will be generated and sent to their email.')">
+                                    <i class="bi bi-key"></i> Reset Password
+                                </button>
+                            </form>
+                        {% endif %}
+
                         <a href="{% url 'parent_delete' parent.pk %}" class="btn btn-danger btn-sm" title="Delete Parent"><i class="bi bi-trash"></i></a>
                     </div>
                 </div>

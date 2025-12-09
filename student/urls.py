@@ -7,7 +7,7 @@ from student.views import StudentSettingDetailView, StudentSettingUpdateView, St
     ClassStudentSelectView, GetClassSectionsView, delete_fingerprint, test_scanner_connection, \
     parent_student_upload_view, import_batch_detail_view, download_parent_credentials, download_all_parent_credentials, \
     ajax_create_parent_view, paste_create_parents_view, paste_create_students_view, ajax_create_student_view, \
-    UtilityListView, UtilityUpdateView, UtilityCreateView, UtilityDeleteView
+    UtilityListView, UtilityUpdateView, UtilityCreateView, UtilityDeleteView, ParentPasswordResetView
 
 urlpatterns = [
 
@@ -24,6 +24,7 @@ urlpatterns = [
     # Parent URLs
     path('parents/', ParentListView.as_view(), name='parent_index'),
     path('parents/create/', ParentCreateView.as_view(), name='parent_create'),
+path('parent/<int:pk>/reset-password/', ParentPasswordResetView.as_view(), name='parent_password_reset'),
     path('parents/<int:pk>/', ParentDetailView.as_view(), name='parent_detail'),
     path('parents/<int:pk>/edit/', ParentUpdateView.as_view(), name='parent_edit'),
     path('parents/<int:pk>/delete/', ParentDeleteView.as_view(), name='parent_delete'),

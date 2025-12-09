@@ -20,6 +20,8 @@ import numpy as np
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 
 from admin_site.views import FlashFormErrorsMixin
 from .tasks import process_parent_student_upload, _send_parent_welcome_email
@@ -42,7 +44,7 @@ from django.views.generic import (
 )
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from admin_site.models import ClassesModel, ClassSectionModel, ClassSectionInfoModel
+from admin_site.models import ClassesModel, ClassSectionModel, ClassSectionInfoModel, SchoolInfoModel
 from .models import StudentModel, ParentModel, StudentSettingModel, FingerprintModel, ImportBatchModel, \
     ParentProfileModel, StudentWalletModel, UtilityModel
 from .forms import StudentForm, ParentForm, StudentSettingForm, ParentStudentUploadForm, UtilityForm
@@ -423,6 +425,135 @@ class ParentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
     def get_success_url(self):
         messages.success(self.request, "Parent details updated successfully.")
         return reverse('parent_detail', kwargs={'pk': self.object.pk})
+
+
+def _send_parent_password_reset_email(parent, username, password):
+    """
+    Helper function to render and send the password reset email.
+    """
+    if not parent.email:
+        print(f"Parent {parent.parent_id} has no email. Skipping password reset email.")
+        return False
+    try:
+        school_info = SchoolInfoModel.objects.first()
+        mail_subject = f"Password Reset for {school_info.name.upper()} Parent Portal"
+        login_url = settings.BASE_URL + reverse('login')
+
+        context = {
+            'parent': parent,
+            'username': username,
+            'password': password,
+            'school_info': school_info,
+            'login_url': login_url
+        }
+        html_content = render_to_string('student/emails/parent_password_reset_email.html', context)
+        text_content = (f"Hello {parent.first_name},\n\nYour password has been reset. "
+                        f"Please log in at {login_url} with the username: {username} and new password: {password}")
+
+        email_message = EmailMultiAlternatives(
+            subject=mail_subject,
+            body=text_content,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[parent.email]
+        )
+        email_message.attach_alternative(html_content, "text/html")
+        email_message.send()
+        print(f"Password reset email successfully sent to {parent.email}")
+        return True
+    except Exception as e:
+        print(f"ERROR sending password reset email to {parent.email}: {e}")
+        return False
+
+class ParentPasswordResetView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """
+    View to reset a parent's password and send the new password via email.
+    """
+    permission_required = 'student.change_parentmodel'
+
+    def get_object(self):
+        pk = self.kwargs.get('pk')
+        return get_object_or_404(ParentModel, pk=pk)
+
+    def has_permission(self):
+        """
+        Override permission logic:
+        - Allow if user has 'change_parentmodel' permission
+        - Allow if user is superuser
+        - Allow if staff is form teacher for any class containing a ward of this parent
+        """
+        user = self.request.user
+
+        # Superusers always allowed
+        if user.is_superuser:
+            return True
+
+        # Has global permission
+        if user.has_perm(self.permission_required):
+            return True
+
+        # Otherwise, check if this staff is a form teacher for any ward of this parent
+        try:
+            staff = user.staff_profile.staff
+        except Exception:
+            return False
+
+        parent = self.get_object()
+
+        # Get all class-section assignments for this staff
+        assigned_infos = ClassSectionInfoModel.objects.filter(form_teacher=staff)
+        assigned_class_ids = assigned_infos.values_list('student_class_id', flat=True)
+        assigned_section_ids = assigned_infos.values_list('section_id', flat=True)
+
+        # Check if any of this parent's wards belong to those classes or sections
+        has_access = StudentModel.objects.filter(
+            parent=parent
+        ).filter(
+            Q(student_class_id__in=assigned_class_ids) | Q(class_section_id__in=assigned_section_ids)
+        ).exists()
+
+        return has_access
+
+    def post(self, request, *args, **kwargs):
+        parent = self.get_object()
+
+        try:
+            # Check if parent has a user account
+            if not hasattr(parent, 'parent_profile') or not parent.parent_profile.user:
+                messages.error(request, "This parent does not have a portal account.")
+                return redirect('parent_detail', pk=parent.pk)
+
+            user = parent.parent_profile.user
+
+            # Generate a new random password
+            password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+
+            # Set the new password
+            user.set_password(password)
+            user.save()
+
+            # Update the default password in the parent profile
+            parent.parent_profile.default_password = password
+            parent.parent_profile.save()
+
+            # Send password reset email
+            email_sent = _send_parent_password_reset_email(parent, user.username, password)
+
+            if email_sent:
+                messages.success(request,
+                                 f"Password reset successfully. An email with the new password has been sent to {parent.email}.")
+            else:
+                if parent.email:
+                    messages.warning(request,
+                                     "Password was reset, but the notification email could not be sent. Please check the server logs.")
+                else:
+                    messages.warning(request,
+                                     "Password was reset, but no email address is available to send the new password.")
+
+        except Exception as e:
+            logger.error(f"Failed to reset password for Parent ID {parent.id}: {e}")
+            messages.error(request, "There was an error resetting the password. Please review the system logs.")
+
+        return redirect('parent_detail', pk=parent.pk)
 
 
 class ParentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):

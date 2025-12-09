@@ -22,7 +22,6 @@ from .utils import clean_email, clean_phone, normalize_gender, find_class_by_nam
 logger = logging.getLogger(__name__)
 
 
-
 def _send_parent_welcome_email(parent, username, password):
     """
     Helper function to render and send the welcome email with credentials.
