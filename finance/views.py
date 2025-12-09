@@ -4002,7 +4002,7 @@ class DiscountApplicationListView(LoginRequiredMixin, PermissionRequiredMixin, L
 
 class DiscountSelectStudentView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
     template_name = 'finance/discount/select_student.html'
-    permission_required = 'finance.add_feemodel'
+    permission_required = 'finance.add_feepaymentmodel'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -4030,7 +4030,7 @@ class DiscountSelectStudentView(LoginRequiredMixin, PermissionRequiredMixin, Suc
 class StudentDiscountAssignView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
     """Assign a discount application to a student for specific invoice items."""
 
-    permission_required = 'finance.add_studentdiscountmodel'
+    permission_required = 'finance.add_feepaymentmodel'
     template_name = 'finance/discount/assign_discount.html'
     form_class = StudentDiscountAssignForm
 
@@ -4142,7 +4142,7 @@ class StudentDiscountAssignView(LoginRequiredMixin, PermissionRequiredMixin, For
 class StudentDiscountIndexView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     """List all student discounts with filtering by session, term, and student name."""
 
-    permission_required = 'finance.view_studentdiscountmodel'
+    permission_required = 'finance.view_feepaymentmodel'
     template_name = 'finance/discount/discount_index.html'
     context_object_name = 'discounts'
     paginate_by = 50
@@ -4210,7 +4210,7 @@ class StudentDiscountDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Del
     """Delete a student discount with confirmation."""
     model = StudentDiscountModel
     template_name = 'finance/discount/delete_discount.html'
-    permission_required = 'finance.delete_studentdiscountmodel'
+    permission_required = 'finance.add_feepaymentmodel'
     context_object_name = 'discount'
 
     def get_success_url(self):
