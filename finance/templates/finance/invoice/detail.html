@@ -45,12 +45,13 @@
                     </li>
                      <li class="list-group-item d-flex justify-content-between">
                         <strong>Status:</strong>
-                        <span class="badge
-                            {% if invoice.status == 'paid' %}bg-success
-                            {% elif invoice.status == 'partially_paid' %}bg-warning text-dark
-                            {% else %}bg-danger{% endif %}">
-                            {{ invoice.get_status_display }}
-                        </span>
+                        {% if invoice.balance|floatformat:2 == 0.00 %}
+                            <span class="badge bg-success">Paid</span>
+                        {% elif invoice.amount_paid > 0 %}
+                            <span class="badge bg-warning text-dark">Partially Paid</span>
+                        {% else %}
+                            <span class="badge bg-danger">Not Paid</span>
+                        {% endif  %}
                     </li>
                 </ul>
             </div>
