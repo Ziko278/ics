@@ -90,7 +90,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        {% if invoice.balance|floatformat:2 == 0.00 %}
+                        {% if invoice.balance == 0 %}
                             <span class="badge bg-success">Paid</span>
                         {% elif invoice.amount_paid > 0 %}
                             <span class="badge bg-warning text-dark">Partially Paid</span>
