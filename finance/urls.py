@@ -71,7 +71,7 @@ urlpatterns = [
     path('discounts/', DiscountListView.as_view(), name='finance_discount_list'),
     path('discounts/create/', DiscountCreateView.as_view(), name='finance_discount_create'),
     path('discounts/<int:pk>/update/', DiscountUpdateView.as_view(), name='finance_discount_update'),
-    path('discounts/<int:pk>/delete/', DiscountDeleteView.as_view(), name='finance_discount_delete'),
+    path('discounts/<int:pk>/delete/', DiscountDeleteView.as_view(), name='finance_discount_setup_delete'),
 
     path('discount-rates/create/', DiscountApplicationCreateView.as_view(), name='finance_discount_application_create'),
     path('discount-rates/<int:application_pk>/update/', DiscountApplicationUpdateView.as_view(), name='finance_discount_application_update'),

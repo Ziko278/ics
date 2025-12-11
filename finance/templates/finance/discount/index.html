@@ -60,7 +60,7 @@
 
                     <td class="text-center">
                         <button title="Edit Blueprint" type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editDiscountModal{{ discount.pk }}"><i class="bi bi-pencil-square"></i></button>
-                        <a title="Delete Blueprint" href="{% url 'finance_discount_delete' discount.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
+                        <a title="Delete Blueprint" href="{% url 'finance_discount_setup_delete' discount.pk %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
                     </td>
                 </tr>
                 {% endfor %}
