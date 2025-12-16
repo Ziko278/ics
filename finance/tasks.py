@@ -21,8 +21,9 @@ def generate_invoices_task(job_id):
     This is the Celery background task that performs the heavy lifting
     of generating invoices for a large number of students.
     Now includes automatic discount generation based on student's previous discounts.
+    Updated to handle fee occurrence types: TERMLY, ANNUALLY, ONE_TIME
     """
-    VERSION_CHECK = "VERSION_2024_12_09_AUTO_DISCOUNT_V1"
+    VERSION_CHECK = "VERSION_2024_12_16_FEE_OCCURRENCE_V1"
     logger.info(f"Starting invoice generation task - {VERSION_CHECK}")
 
     job = None
@@ -91,6 +92,49 @@ def generate_invoices_task(job_id):
                     if amount <= 0:
                         continue
 
+                    # ==================== FEE OCCURRENCE LOGIC ====================
+                    fee_occurrence = fee_master.fee.occurrence
+
+                    # Handle ONE_TIME fees
+                    if fee_occurrence == 'one_time':
+                        # Check if this is the designated payment term
+                        if fee_master.fee.payment_term_id != job.term_id:
+                            logger.debug(f"Skipping ONE_TIME fee {fee_master.fee.name} - not the payment term")
+                            continue
+
+                        # Check if this fee has EVER been created for this student before
+                        one_time_exists = InvoiceItemModel.objects.filter(
+                            invoice__student=student,
+                            fee_master=fee_master
+                        ).exists()
+
+                        if one_time_exists:
+                            logger.debug(
+                                f"Skipping ONE_TIME fee {fee_master.fee.name} - already exists for student {student.id}")
+                            continue
+
+                    # Handle ANNUALLY fees
+                    elif fee_occurrence == 'annually':
+                        # Check if this is the designated payment term
+                        if fee_master.fee.payment_term_id != job.term_id:
+                            logger.debug(f"Skipping ANNUALLY fee {fee_master.fee.name} - not the payment term")
+                            continue
+
+                        # Check if this fee has been created in the CURRENT SESSION
+                        annually_exists = InvoiceItemModel.objects.filter(
+                            invoice__student=student,
+                            invoice__session=job.session,
+                            fee_master=fee_master
+                        ).exists()
+
+                        if annually_exists:
+                            logger.debug(
+                                f"Skipping ANNUALLY fee {fee_master.fee.name} - already exists for student {student.id} in session {job.session}")
+                            continue
+
+                    # TERMLY fees - always process (no special logic needed)
+                    # =============================================================
+
                     # Check if this fee item already exists on the invoice
                     existing_item = InvoiceItemModel.objects.filter(
                         invoice=invoice,
@@ -105,14 +149,16 @@ def generate_invoices_task(job_id):
                             description=f"{fee_master.fee.name} - {fee_master.group.name}",
                             amount=amount
                         )
+                        logger.info(
+                            f"Created {fee_occurrence} fee item: {fee_master.fee.name} for student {student.id}")
 
-                # ==================== NEW: AUTO DISCOUNT GENERATION ====================
+                # ==================== AUTO DISCOUNT GENERATION ====================
                 try:
                     _apply_student_discounts(student, invoice, job)
                 except Exception as e:
                     logger.error(f"Error applying discounts for student {student.id}: {str(e)}")
                     # Continue processing other students even if discount fails
-                # =======================================================================
+                # =================================================================
 
             # 5. Update the progress after each student is processed
             job.processed_students = students_processed
