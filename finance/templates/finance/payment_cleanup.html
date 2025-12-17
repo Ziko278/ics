@@ -1,0 +1,138 @@
+{% extends 'admin_site/layout.html' %}
+
+{% block 'main' %}
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Backfill Payment Item Breakdown by Class</h5>
+        <div class="alert alert-info">
+            <p class="mb-1">This tool will attempt to reconstruct `item_breakdown` for confirmed payments that lack it. It will not change invoice item `amount_paid` — only the payment JSON.</p>
+            <p class="mb-1"><strong>Current Session:</strong> {{ school_setting.session|default:"Not Set" }}</p>
+            <p class="mb-1"><strong>Current Term:</strong> {{ school_setting.term|default:"Not Set" }}</p>
+            <p class="mb-0"><strong>Total Payments to Process (approx):</strong> {{ total_payments }}</p>
+        </div>
+
+        {% if not school_setting or not school_setting.session or not school_setting.term %}
+            <div class="alert alert-danger">
+                <strong>Error:</strong> No active session/term found. Please set up the current session and term.
+            </div>
+        {% elif classes_with_payments|length == 0 %}
+            <div class="alert alert-warning">
+                <strong>No Payments Found:</strong> There are no confirmed payments missing breakdowns for the current session and term.
+            </div>
+        {% else %}
+            <div class="my-3">
+                <button id="start-cleanup-btn" class="btn btn-primary btn-lg">
+                    <i class="bi bi-wrench-adjustable-circle"></i> Start Payment Backfill
+                </button>
+            </div>
+
+            <ul class="list-group" id="cleanup-list">
+                {% for class_info in classes_with_payments %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center"
+                        id="class-{{ class_info.id }}"
+                        data-class-id="{{ class_info.id }}">
+
+                        <div class="d-flex flex-column">
+                            <span class="class-name fw-bold">{{ class_info.name }} ({{ class_info.count }} payments)</span>
+                            <small class="error-message text-danger"></small>
+                            <small class="details-message text-muted"></small>
+                        </div>
+
+                        <span class="status-badge badge bg-secondary">Pending</span>
+                    </li>
+                {% endfor %}
+            </ul>
+
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const startButton = document.getElementById('start-cleanup-btn');
+    if (!startButton) return;
+
+    const cleanupList = document.querySelectorAll('#cleanup-list li');
+    const cleanupUrl = "{% url 'payment_cleanup_process_class' %}";
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    startButton.addEventListener('click', async function() {
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+
+        for (const item of cleanupList) {
+            const statusBadge = item.querySelector('.status-badge');
+            const className = item.querySelector('.class-name');
+            const errorMessage = item.querySelector('.error-message');
+            const detailsMessage = item.querySelector('.details-message');
+            const classId = item.dataset.classId;
+
+            statusBadge.className = 'status-badge badge bg-primary';
+            statusBadge.textContent = 'Processing...';
+            errorMessage.textContent = '';
+            detailsMessage.textContent = '';
+
+            const formData = new FormData();
+            formData.append('class_id', classId);
+
+            try {
+                const response = await fetch(cleanupUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrftoken },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || `Server error: ${response.statusText}`);
+                }
+
+                if (data.status === 'success') {
+                    let resultText = `Completed`;
+                    let detailsText = `Processed: ${data.processed_payments}, Skipped: ${data.skipped_payments}, Scanned: ${data.total_scanned}`;
+
+                    if (data.processed_payments > 0) {
+                        statusBadge.className = 'status-badge badge bg-success';
+                    } else {
+                        statusBadge.className = 'status-badge badge bg-secondary';
+                        resultText = 'No Changes';
+                    }
+
+                    statusBadge.textContent = resultText;
+                    detailsMessage.textContent = detailsText;
+                    className.style.textDecoration = 'line-through';
+                } else {
+                    throw new Error(data.message || 'An unknown error occurred.');
+                }
+
+            } catch (error) {
+                console.error(`Failed to process class ${classId}:`, error);
+                statusBadge.className = 'status-badge badge bg-danger';
+                statusBadge.textContent = 'Failed';
+                errorMessage.textContent = error.message;
+            }
+        }
+
+        this.innerHTML = '<i class="bi bi-check-circle-fill"></i> Backfill Complete';
+        this.disabled = false;
+        this.className = 'btn btn-success btn-lg';
+    });
+});
+</script>
+{% endblock %}

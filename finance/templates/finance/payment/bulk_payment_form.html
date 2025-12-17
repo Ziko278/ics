@@ -19,9 +19,10 @@
     <div class="col-lg-7">
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title">Outstanding Invoices for {{ student.student_profile.user.get_full_name|title }}</h5>
+                <h5 class="card-title">Outstanding Invoices for {{ student|title }}</h5>
                 <div class="alert alert-info">
-                    <p class="mb-0">A bulk payment will be automatically applied to these outstanding invoices, starting with the oldest one first, until the payment amount is fully allocated.</p>
+                    <p class="mb-1">A bulk payment will be automatically applied to these outstanding invoices, starting with the oldest one first, until the payment amount is fully allocated.</p>
+                    <p class="mb-0"><strong>Total Outstanding Balance: ₦{{ total_balance|floatformat:2|intcomma }}</strong></p>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped">
@@ -45,6 +46,12 @@
                             </tr>
                             {% endfor %}
                         </tbody>
+                        <tfoot>
+                            <tr class="fw-bold">
+                                <td colspan="2" class="text-end">Total Balance:</td>
+                                <td class="text-end text-danger">₦{{ total_balance|floatformat:2|intcomma }}</td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
@@ -60,8 +67,16 @@
                     {% csrf_token %}
                     <div class="row g-3">
                         <div class="col-12">
-                            <label for="{{ form.amount.id_for_label }}" class="form-label">{{ form.amount.label }}</label>
+                            <label for="{{ form.amount.id_for_label }}" class="form-label">
+                                {{ form.amount.label }}
+                                {% if form.amount.help_text %}
+                                <small class="text-muted">({{ form.amount.help_text }})</small>
+                                {% endif %}
+                            </label>
                             {{ form.amount }}
+                            {% if form.amount.errors %}
+                                <div class="text-danger small mt-1">{{ form.amount.errors }}</div>
+                            {% endif %}
                         </div>
                         <div class="col-md-6">
                             <label for="{{ form.payment_mode.id_for_label }}" class="form-label">{{ form.payment_mode.label }}</label>
@@ -70,6 +85,14 @@
                         <div class="col-md-6">
                             <label for="{{ form.date.id_for_label }}" class="form-label">{{ form.date.label }}</label>
                             {{ form.date }}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.currency.id_for_label }}" class="form-label">{{ form.currency.label }}</label>
+                            {{ form.currency }}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.bank_account.id_for_label }}" class="form-label">{{ form.bank_account.label }}</label>
+                            {{ form.bank_account }}
                         </div>
                         <div class="col-12">
                             <label for="{{ form.reference.id_for_label }}" class="form-label">{{ form.reference.label }}</label>
@@ -88,5 +111,3 @@
     </div>
 </div>
 {% endblock %}
-
-

@@ -29,7 +29,8 @@ from finance.views import (
     DiscountApplicationDeleteView, DiscountApplicationListView, DiscountSelectStudentView, StudentDiscountAssignView,
     StudentDiscountIndexView, ExpensePrintVoucherView, deposit_revert_view, staff_deposit_revert_view,
     income_expense_report, get_invoice_items_json, payment_review_view, FeePendingPaymentListView,
-    StudentDiscountDeleteView, InvoiceDeleteView, InvoiceItemDeleteView, GetDiscountsAjaxView,
+    StudentDiscountDeleteView, InvoiceDeleteView, InvoiceItemDeleteView, GetDiscountsAjaxView, payment_cleanup_view,
+    process_payment_cleanup_for_class,
 )
 
 urlpatterns = [
@@ -227,5 +228,9 @@ urlpatterns = [
     path('dashboard/', finance_dashboard, name='finance_dashboard'),
 
     path('reports/income-expense/', income_expense_report, name='income_expense_report'),
+
+    path('payment-cleanup/', payment_cleanup_view, name='payment_cleanup_view'),
+    path('payment-cleanup/process-class/', process_payment_cleanup_for_class, name='payment_cleanup_process_class'),
+
 
 ]

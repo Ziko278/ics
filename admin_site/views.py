@@ -532,3 +532,4 @@ def change_password_view(request):
 
     # GET request - show the form
     return render(request, 'admin_site/user/change_password.html')
+

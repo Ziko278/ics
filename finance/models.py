@@ -513,6 +513,11 @@ class FeePaymentModel(models.Model):
     reference = models.CharField(max_length=100, blank=True, default='')
     description = models.TextField(blank=True, null=True, default='')
     status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
+    item_breakdown = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Stores breakdown of payment across invoice items'
+    )
     notes = models.TextField(blank=True, null=True)
     confirmed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

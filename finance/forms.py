@@ -284,7 +284,12 @@ class BulkPaymentForm(forms.Form):
     )
     currency = forms.ChoiceField(
         choices=FeePaymentModel.Currency.choices,
-        widget=forms.Select(attrs={'class': 'form-select', 'value':'naira'})
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    bank_account = forms.ModelChoiceField(
+        queryset=SchoolBankDetail.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label="Bank Account"
     )
     date = forms.DateField(
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
@@ -293,13 +298,51 @@ class BulkPaymentForm(forms.Form):
         required=False,
         widget=forms.TextInput(attrs={'class': 'form-control'})
     )
-
     description = forms.CharField(
         required=False,
         widget=forms.TextInput(attrs={'class': 'form-control'})
     )
 
+    def __init__(self, *args, **kwargs):
+        # Get student to calculate max amount
+        self.student = kwargs.pop('student', None)
+        super().__init__(*args, **kwargs)
 
+        # Set the queryset dynamically when form is instantiated
+        self.fields['bank_account'].queryset = SchoolBankDetail.objects.all()
+
+        # Set default currency to 'naira' if not bound
+        if not self.is_bound:
+            self.fields['currency'].initial = 'naira'
+
+        # Update amount field help text with max amount
+        if self.student:
+            total_balance = sum(
+                invoice.balance
+                for invoice in self.student.invoices.exclude(status=InvoiceModel.Status.PAID)
+            )
+            self.fields['amount'].help_text = f"Maximum: ₦{total_balance:,.2f}"
+            self.fields['amount'].widget.attrs['max'] = str(total_balance)
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get('amount')
+
+        if self.student:
+            # Calculate total outstanding balance
+            total_balance = sum(
+                invoice.balance
+                for invoice in self.student.invoices.exclude(status=InvoiceModel.Status.PAID)
+            )
+
+            if amount > total_balance:
+                raise forms.ValidationError(
+                    f"Payment amount (₦{amount:,.2f}) exceeds total outstanding balance (₦{total_balance:,.2f}). "
+                    f"Please enter a maximum of ₦{total_balance:,.2f}."
+                )
+
+        return amount
+    
+    
 # -------------------- EXPENSE CATEGORY FORM --------------------
 
 class ExpenseCategoryForm(forms.ModelForm):

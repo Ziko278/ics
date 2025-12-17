@@ -24,6 +24,9 @@
                 </p>
             </div>
             <div>
+                <a href="{% url 'finance_bulk_payment_create' student.pk %}" class="btn btn-primary">
+                    Bulk Payment
+                </a>
                 <a href="{% url 'finance_discount_assign' student.pk %}" class="btn btn-success">
                     <i class="bi bi-percent"></i> Apply Discount
                 </a>

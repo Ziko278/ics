@@ -1,4 +1,5 @@
 import json
+import traceback
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -21,7 +22,7 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.utils import timezone
 from django.utils.timezone import now
 from django.views import View
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import TemplateView, CreateView, UpdateView, ListView, DetailView, DeleteView, FormView
 from openpyxl.styles import Font
 
@@ -942,7 +943,6 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
         invoice = get_object_or_404(InvoiceModel, pk=invoice_id)
 
         # 1. Instantiate the form that holds the payment details (mode, date, bank)
-        # We pass the `invoice` so its clean methods (like max amount) work
         payment_form = FeePaymentForm(request.POST)
 
         # 2. Loop through item payments to calculate total and prep data
@@ -975,9 +975,6 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
             return redirect('finance_student_dashboard', pk=student.pk)
 
         if payment_form.is_valid():
-            # --- This is the fix ---
-            # We have valid payment details from the form
-            # and a valid total from our item loop.
             try:
                 with transaction.atomic():
                     # First, apply the payments to the individual items
@@ -1005,27 +1002,31 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
                                 except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
                                     continue
 
-                        # Now, create the single FeePaymentModel using the *cleaned form data*
+                    # Build item_breakdown for JSON storage
+                    # Format: {"item_id": "amount", "item_id": "amount"}
+                    item_breakdown = {
+                        str(item.pk): str(amount)
+                        for item, amount in item_payment_data.items()
+                    }
+
+                    # Now, create the single FeePaymentModel with item_breakdown
                     FeePaymentModel.objects.create(
                         invoice=invoice,
                         amount=total_paid_in_transaction,
-
-                        # Use cleaned_data, not request.POST
                         payment_mode=payment_form.cleaned_data['payment_mode'],
                         description=payment_form.cleaned_data['description'],
                         currency=payment_form.cleaned_data['currency'],
-                        date=payment_form.cleaned_data['date'],  # This is now a clean date object
+                        date=payment_form.cleaned_data['date'],
                         bank_account=payment_form.cleaned_data['bank_account'],
-                        # This is now a SchoolBankDetail instance
                         reference=payment_form.cleaned_data['reference'],
                         notes=payment_form.cleaned_data['notes'],
-
                         status=FeePaymentModel.PaymentStatus.CONFIRMED,
-                        confirmed_by=request.user
+                        confirmed_by=request.user,
+                        item_breakdown=item_breakdown  # NEW: Save the breakdown
                     )
 
                     # Finally, update the parent invoice's status
-                    invoice.refresh_from_db()  # Get fresh balance calculations
+                    invoice.refresh_from_db()
                     if invoice.balance <= Decimal('0.01'):
                         invoice.status = InvoiceModel.Status.PAID
                     else:
@@ -1033,16 +1034,13 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
                     invoice.save(update_fields=['status'])
 
                     messages.success(request,
-                                     f"Payment of SAR {total_paid_in_transaction:,.2f} was applied successfully.")
+                                     f"Payment of ₦{total_paid_in_transaction:,.2f} was applied successfully.")
 
             except Exception as e:
-                # This will catch any unexpected errors during the transaction
                 messages.error(request, f"An error occurred while saving the payment: {e}")
 
         else:
-            # The payment details (e.g., no date, no bank) were invalid.
             messages.error(request, "Payment failed: The payment details (mode, date, or bank) were invalid.")
-            # Add the specific form errors
             for field, errors in payment_form.errors.items():
                 for error in errors:
                     messages.error(request, f"{field.title()}: {error}")
@@ -1186,12 +1184,22 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
     permission_required = 'finance.add_feemodel'
     template_name = 'finance/payment/bulk_payment_form.html'
 
+    def get_form_kwargs(self):
+        """Pass student to form for validation"""
+        kwargs = super().get_form_kwargs()
+        kwargs['student'] = get_object_or_404(StudentModel, pk=self.kwargs['pk'])
+        return kwargs
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         self.student = get_object_or_404(StudentModel, pk=self.kwargs['pk'])
         context['student'] = self.student
         context['outstanding_invoices'] = self.student.invoices.exclude(status=InvoiceModel.Status.PAID).order_by(
             'issue_date')
+
+        # Add total balance to context
+        context['total_balance'] = sum(invoice.balance for invoice in context['outstanding_invoices'])
+
         return context
 
     def form_valid(self, form):
@@ -1210,21 +1218,28 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
                 payment_for_this_invoice = min(invoice.balance, amount_to_allocate)
 
                 if payment_for_this_invoice > 0:
-                    FeePaymentModel.objects.create(
-                        invoice=invoice,
-                        amount=payment_for_this_invoice,
-                        payment_mode=form.cleaned_data['payment_mode'],
-                        date=form.cleaned_data['date'],
-                        description=form.cleaned_data['description'],
-                        currency=form.cleaned_data['currency'],
-                        reference=form.cleaned_data.get('reference') or f"bulk-pmt-{invoice.invoice_number}",
-                        status=FeePaymentModel.PaymentStatus.CONFIRMED,
-                        confirmed_by=self.request.user
-                    )
+                    # Track how much is allocated to each item in this invoice
+                    item_breakdown = {}
+                    remaining_for_invoice = payment_for_this_invoice
 
-                    # Handle parent-bound fees for this invoice
-                    for item in invoice.items.all():
-                        if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount:
+                    items_with_balance = [item for item in invoice.items.order_by('id') if item.balance > 0]
+
+
+                    # Distribute payment across items in this invoice
+                    for item in items_with_balance:
+                        if remaining_for_invoice <= 0:
+                            break
+
+                        payable = min(item.balance, remaining_for_invoice)
+                        item.amount_paid += payable
+                        item.save(update_fields=['amount_paid'])
+
+                        # Track this allocation
+                        item_breakdown[str(item.pk)] = str(payable)
+                        remaining_for_invoice -= payable
+
+                        # Handle parent-bound fees
+                        if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
                             siblings = student.parent.wards.exclude(pk=student.pk)
                             for sibling in siblings:
                                 try:
@@ -1238,10 +1253,25 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
                                         fee_master=item.fee_master
                                     )
                                     sibling_item.paid_by_sibling = student
-                                    sibling_item.amount_paid = sibling_item.amount
+                                    sibling_item.amount_paid = sibling_item.amount_after_discount
                                     sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
                                 except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
                                     continue
+
+                    # Create payment record with item breakdown
+                    FeePaymentModel.objects.create(
+                        invoice=invoice,
+                        amount=payment_for_this_invoice,
+                        payment_mode=form.cleaned_data['payment_mode'],
+                        date=form.cleaned_data['date'],
+                        description=form.cleaned_data.get('description', ''),
+                        currency=form.cleaned_data['currency'],
+                        bank_account=form.cleaned_data['bank_account'],
+                        reference=form.cleaned_data.get('reference') or f"bulk-pmt-{invoice.invoice_number}",
+                        status=FeePaymentModel.PaymentStatus.CONFIRMED,
+                        confirmed_by=self.request.user,
+                        item_breakdown=item_breakdown
+                    )
 
                     # Refresh invoice from DB before checking balance again
                     invoice.refresh_from_db()
@@ -1254,7 +1284,7 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
                     amount_to_allocate -= payment_for_this_invoice
 
         messages.success(self.request,
-                         f"Bulk payment of ₦{total_amount_paid} allocated successfully across outstanding invoices.")
+                         f"Bulk payment of ₦{total_amount_paid:,.2f} allocated successfully across outstanding invoices.")
         return redirect('finance_student_dashboard', pk=student.pk)
 
 
@@ -1276,6 +1306,9 @@ def confirm_fee_payment_view(request, payment_id):
     override_allocation = request.POST.get('override_allocation') == 'true'
 
     with transaction.atomic():
+        # Track the actual allocations made
+        item_breakdown = {}
+
         # Confirm the payment
         payment.status = FeePaymentModel.PaymentStatus.CONFIRMED
         payment.confirmed_by = request.user
@@ -1319,6 +1352,9 @@ def confirm_fee_payment_view(request, payment_id):
                     item.save(update_fields=['amount_paid'])
                     amount_to_allocate -= payable
 
+                    # Track this allocation
+                    item_breakdown[str(item.pk)] = str(payable)
+
                     # Handle parent-bound fees
                     if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
                         student = invoice.student
@@ -1354,6 +1390,10 @@ def confirm_fee_payment_view(request, payment_id):
                     item.save(update_fields=['amount_paid'])
                     amount_to_allocate -= payable
 
+                    # Track this allocation (add to existing or create new)
+                    current = Decimal(item_breakdown.get(str(item.pk), '0'))
+                    item_breakdown[str(item.pk)] = str(current + payable)
+
         else:
             # Auto-distribute payment across items (original behavior or staff override)
             for item in invoice.items.filter(amount_paid__lt=F('amount_after_discount')).order_by('id'):
@@ -1364,6 +1404,9 @@ def confirm_fee_payment_view(request, payment_id):
                 item.amount_paid += payable
                 item.save(update_fields=['amount_paid'])
                 amount_to_allocate -= payable
+
+                # Track this allocation
+                item_breakdown[str(item.pk)] = str(payable)
 
                 # Handle parent-bound fees
                 if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
@@ -1383,9 +1426,13 @@ def confirm_fee_payment_view(request, payment_id):
                                 )
                                 sibling_item.paid_by_sibling = student
                                 sibling_item.amount_paid = sibling_item.amount_after_discount
-                                sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
+                                sibling_item.save(update_flags=['paid_by_sibling', 'amount_paid'])
                             except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
                                 continue
+
+        # Save the actual breakdown to the payment record
+        payment.item_breakdown = item_breakdown
+        payment.save(update_fields=['item_breakdown'])
 
         # Update invoice status
         invoice.refresh_from_db()
@@ -1396,7 +1443,7 @@ def confirm_fee_payment_view(request, payment_id):
         invoice.save(update_fields=['status'])
 
     allocation_method = "auto-distributed" if (
-                not parent_allocations or override_allocation) else "parent's specified items"
+            not parent_allocations or override_allocation) else "parent's specified items"
     messages.success(request, f"Payment of ₦{payment.amount:,.2f} confirmed successfully ({allocation_method}).")
     return redirect('pending_fee_payment_list')
 
@@ -1425,21 +1472,89 @@ class FeePaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def post(self, request, *args, **kwargs):
         payment = get_object_or_404(FeePaymentModel, pk=self.kwargs['pk'])
         invoice = payment.invoice
+        student = invoice.student
+
+        # Only revert confirmed payments
+        if payment.status != FeePaymentModel.PaymentStatus.CONFIRMED:
+            messages.warning(request, "Only confirmed payments can be reverted.")
+            return redirect('finance_student_dashboard', pk=student.pk)
 
         with transaction.atomic():
-            payment.status = FeePaymentModel.PaymentStatus.REVERTED  # Or use a more complex logic
-            payment.save()
+            # Check if payment has item_breakdown
+            if payment.item_breakdown:
+                # Use the saved breakdown to reverse allocations
+                for item_id_str, amount_str in payment.item_breakdown.items():
+                    try:
+                        item_id = int(item_id_str)
+                        amount = Decimal(amount_str)
 
-            # After reverting, re-evaluate and update the invoice status.
+                        item = InvoiceItemModel.objects.get(pk=item_id, invoice=invoice)
+
+                        # Reverse the payment
+                        item.amount_paid -= amount
+                        # Ensure amount_paid doesn't go negative
+                        if item.amount_paid < 0:
+                            item.amount_paid = Decimal('0.00')
+                        item.save(update_fields=['amount_paid'])
+
+                        # Handle parent-bound fees - reverse sibling payments
+                        if item.fee_master.fee.parent_bound:
+                            # If this item was fully paid and triggered sibling payments, reverse them
+                            if student.parent:
+                                siblings = student.parent.wards.exclude(pk=student.pk)
+                                for sibling in siblings:
+                                    try:
+                                        sibling_invoice = InvoiceModel.objects.get(
+                                            student=sibling,
+                                            session=invoice.session,
+                                            term=invoice.term
+                                        )
+                                        sibling_item = InvoiceItemModel.objects.get(
+                                            invoice=sibling_invoice,
+                                            fee_master=item.fee_master
+                                        )
+
+                                        # Only reverse if this student paid for the sibling
+                                        if sibling_item.paid_by_sibling == student:
+                                            sibling_item.paid_by_sibling = None
+                                            sibling_item.amount_paid = Decimal('0.00')
+                                            sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
+
+                                    except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
+                                        continue
+
+                    except (ValueError, InvoiceItemModel.DoesNotExist) as e:
+                        # Log the error but continue reverting other items
+                        messages.warning(request, f"Could not reverse item {item_id_str}: {str(e)}")
+                        continue
+            else:
+                # Fallback: No breakdown saved (old payment records)
+                # We can't accurately reverse, so just warn the user
+                messages.error(
+                    request,
+                    f"This payment (Reference: {payment.reference}) was created before the item tracking feature. "
+                    f"Manual adjustment may be required. Please review the invoice items carefully."
+                )
+                return redirect('finance_student_dashboard', pk=student.pk)
+
+                # Still mark as reverted but don't touch item amounts
+
+            # Mark payment as reverted
+            payment.status = FeePaymentModel.PaymentStatus.REVERTED
+            payment.save(update_fields=['status'])
+
+            # Update invoice status based on new balance
             invoice.refresh_from_db()
             if invoice.amount_paid <= 0:
                 invoice.status = InvoiceModel.Status.UNPAID
+            elif invoice.balance <= Decimal('0.01'):
+                invoice.status = InvoiceModel.Status.PAID
             else:
                 invoice.status = InvoiceModel.Status.PARTIALLY_PAID
-            invoice.save()
+            invoice.save(update_fields=['status'])
 
-        messages.warning(request, f"Payment {payment.reference} has been reverted.")
-        return redirect('finance_student_dashboard', pk=invoice.student.pk)
+        messages.warning(request, f"Payment {payment.reference or payment.pk} has been reverted successfully.")
+        return redirect('finance_student_dashboard', pk=student.pk)
 
 
 class FeePaymentReceiptView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
@@ -3845,9 +3960,10 @@ class DiscountListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
         return context
 
+
 class DiscountCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
     model = DiscountModel
-    permission_required = 'finance.add_discountmodel'
+    permission_required = 'finance.add_feepaymentmodel'
     form_class = DiscountForm
 
     def get_success_url(self):
@@ -3864,9 +3980,10 @@ class DiscountCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
             return redirect(self.get_success_url())
         return super().dispatch(request, *args, **kwargs)
 
+
 class DiscountUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = DiscountModel
-    permission_required = 'finance.change_discountmodel'
+    permission_required = 'finance.add_feepaymentmodel'
     form_class = DiscountForm
 
     def get_success_url(self):
@@ -3886,7 +4003,7 @@ class DiscountUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormE
 
 class DiscountDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = DiscountModel
-    permission_required = 'finance.delete_discountmodel'
+    permission_required = 'finance.add_feepaymentmodel'
     template_name = 'finance/discount/delete.html'
     success_url = reverse_lazy('finance_discount_list')
     context_object_name = 'discount'
@@ -3907,7 +4024,7 @@ class DiscountDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView
 
 class DiscountApplicationCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
     model = DiscountApplicationModel
-    permission_required = 'finance.add_discountapplicationmodel'
+    permission_required = 'finance.add_feepaymentmodel'
     form_class = DiscountApplicationForm
 
     def get_success_url(self):
@@ -3928,7 +4045,7 @@ class DiscountApplicationCreateView(LoginRequiredMixin, PermissionRequiredMixin,
 
 class DiscountApplicationUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = DiscountApplicationModel
-    permission_required = 'finance.change_discountapplicationmodel'
+    permission_required = 'finance.add_feepaymentmodel'
     form_class = DiscountApplicationForm
     pk_url_kwarg = 'application_pk' # Use a distinct keyword argument to prevent clashes
 
@@ -3950,7 +4067,7 @@ class DiscountApplicationUpdateView(LoginRequiredMixin, PermissionRequiredMixin,
 
 class DiscountApplicationDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = DiscountApplicationModel
-    permission_required = 'finance.delete_discountapplicationmodel'
+    permission_required = 'finance.add_feepaymentmodel'
     template_name = 'finance/discount/application_delete.html'
     success_url = reverse_lazy('finance_discount_application_list')
     context_object_name = 'application'
@@ -3973,7 +4090,7 @@ class DiscountApplicationDeleteView(LoginRequiredMixin, PermissionRequiredMixin,
 
 class DiscountApplicationListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = DiscountApplicationModel
-    permission_required = 'finance.view_discountapplicationmodel'
+    permission_required = 'finance.view_feepaymentmodel'
     template_name = 'finance/discount/application_list.html'
     context_object_name = 'applications'
 
@@ -4187,7 +4304,7 @@ class GetDiscountsAjaxView(LoginRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
-        
+
 class StudentDiscountIndexView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     """List all student discounts with filtering by session, term, and student name."""
 
@@ -4934,3 +5051,172 @@ def get_invoice_items_json(request, invoice_id):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
+@login_required
+@permission_required("finance.change_feepaymentmodel", raise_exception=True)
+def payment_cleanup_view(request):
+    """
+    Renders a page showing classes that have students with confirmed payments
+    that are missing item_breakdown. The frontend will POST each class id to
+    process them gradually via AJAX.
+    """
+    # Get current session and term info (follow your project's pattern)
+    school_setting = SchoolSettingModel.objects.first()
+
+    classes_with_payments = []
+
+    if school_setting and school_setting.session and school_setting.term:
+        # Query classes that have confirmed payments missing breakdown.
+        # Note: JSONField lookups for empty dict vary by DB backend; this is a pragmatic approach:
+        # find students who have at least one confirmed payment whose item_breakdown is null or empty.
+        payments_qs = FeePaymentModel.objects.filter(
+            status=FeePaymentModel.PaymentStatus.CONFIRMED
+        ).filter(
+            Q(item_breakdown__isnull=True) | Q(item_breakdown={})
+        ).select_related('invoice__student', 'invoice')
+
+        # Build a mapping of class_id -> counts
+        class_counts = {}
+        student_to_class = {}
+
+        for p in payments_qs:
+            invoice = getattr(p, 'invoice', None)
+            if not invoice or not getattr(invoice, 'student', None):
+                continue
+            student = invoice.student
+            student_class = getattr(student, 'student_class', None)
+            if not student_class:
+                continue
+            cid = student_class.pk
+            cname = getattr(student_class, 'name', str(cid))
+            class_counts.setdefault((cid, cname), 0)
+            class_counts[(cid, cname)] += 1
+
+        # Convert to list suitable for template
+        for (cid, cname), count in class_counts.items():
+            classes_with_payments.append({
+                'id': cid,
+                'name': cname,
+                'count': count
+            })
+
+        classes_with_payments.sort(key=lambda x: x['name'])
+
+    context = {
+        'school_setting': school_setting,
+        'classes_with_payments': classes_with_payments,
+        'total_payments': sum(c['count'] for c in classes_with_payments),
+    }
+    return render(request, 'finance/payment_cleanup.html', context)
+
+
+@require_POST
+@login_required
+@permission_required("finance.change_feepaymentmodel", raise_exception=True)
+def process_payment_cleanup_for_class(request):
+    """
+    AJAX endpoint. Processes one class at a time: finds confirmed payments
+    without item_breakdown for invoices in the current session/term and writes
+    a JSON mapping of {item_id: amount_allocated} to payment.item_breakdown.
+    """
+    class_id = request.POST.get('class_id')
+
+    try:
+        school_setting = SchoolSettingModel.objects.first()
+        if not school_setting or not school_setting.session or not school_setting.term:
+            return JsonResponse({'status': 'error', 'message': 'No active session/term'}, status=400)
+
+        if not class_id:
+            return JsonResponse({'status': 'error', 'message': 'class_id is required'}, status=400)
+
+        # Students in the class
+        students = StudentModel.objects.filter(student_class_id=class_id)
+
+        cleaned_payments = 0
+        skipped_payments = 0
+        total_payments_scanned = 0
+
+        # We'll process per student to avoid giant transactions; but group in a single transaction per class
+        with transaction.atomic():
+            for student in students:
+                # Get invoices for this student in the active session/term
+                invoices = InvoiceModel.objects.filter(
+                    student=student,
+                    session=school_setting.session,
+                    term=school_setting.term
+                )
+
+                for invoice in invoices:
+                    # Get confirmed payments for this invoice that lack breakdown
+                    payments = FeePaymentModel.objects.filter(
+                        invoice=invoice,
+                        status=FeePaymentModel.PaymentStatus.CONFIRMED
+                    ).filter(
+                        Q(item_breakdown__isnull=True) | Q(item_breakdown={})
+                    ).order_by('created_at', 'date')  # process oldest first
+
+                    for payment in payments:
+                        total_payments_scanned += 1
+
+                        # Defensive: if payment already has non-empty breakdown, skip
+                        if payment.item_breakdown and isinstance(payment.item_breakdown, dict) and len(payment.item_breakdown) > 0:
+                            skipped_payments += 1
+                            continue
+
+                        remaining_payment_amount = Decimal(payment.amount or 0)
+                        breakdown = {}
+
+                        # Iterate invoice items in a deterministic order (pk)
+                        invoice_items = InvoiceItemModel.objects.filter(invoice=invoice).order_by('pk').select_related('fee_master', 'fee_master__fee')
+
+                        for item in invoice_items:
+                            if remaining_payment_amount <= Decimal('0.00'):
+                                break
+
+                            # remaining on item = amount - amount_paid (don't go negative)
+                            item_amount = Decimal(item.amount or 0)
+                            item_paid = Decimal(item.amount_paid or 0)
+                            remaining_item = item_amount - item_paid
+                            if remaining_item <= Decimal('0.00'):
+                                # nothing to allocate to this item
+                                continue
+
+                            alloc = min(remaining_item, remaining_payment_amount)
+                            if alloc > Decimal('0.00'):
+                                breakdown[str(item.pk)] = str(alloc.quantize(Decimal('0.01')))
+                                remaining_payment_amount -= alloc
+
+                                # NOTE: we're NOT mutating item.amount_paid here. We only save payment.item_breakdown.
+                                # If you want to also update item.amount_paid or sibling flags, tell me and
+                                # I'll extend this to safely replay/pay them.
+
+                        # If we allocated nothing, but the payment has an amount, try a fallback:
+                        if not breakdown and Decimal(payment.amount or 0) > Decimal('0.00'):
+                            # Edge-case: invoice items all show fully paid (maybe data drift).
+                            # Fallback: attach payment fully to the first invoice item (as last resort).
+                            first_item = invoice_items.first()
+                            if first_item:
+                                breakdown[str(first_item.pk)] = str(Decimal(payment.amount).quantize(Decimal('0.01')))
+
+                        # Save breakdown if we produced one
+                        if breakdown:
+                            payment.item_breakdown = breakdown
+                            payment.save(update_fields=['item_breakdown'])
+                            cleaned_payments += 1
+                        else:
+                            skipped_payments += 1
+
+        return JsonResponse({
+            'status': 'success',
+            'class_id': class_id,
+            'processed_payments': cleaned_payments,
+            'skipped_payments': skipped_payments,
+            'total_scanned': total_payments_scanned
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Unexpected error: {str(e)}'
+        }, status=500)
