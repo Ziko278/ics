@@ -4,7 +4,7 @@
 <div class="card">
     <div class="card-body">
         <h5 class="card-title">Assign Discount to Student</h5>
-        
+
         <div class="row mb-4">
             <div class="col-md-12">
                 <div class="alert alert-info">
@@ -13,22 +13,49 @@
                 </div>
             </div>
         </div>
-        
-        <form method="post">
+
+        <form method="post" id="discountForm">
             {% csrf_token %}
-            
+
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="form-floating mb-3">
+                        {{ form.session }}
+                        <label>{{ form.session.label }}</label>
+                        {% if form.session.errors %}
+                            <div class="text-danger">{{ form.session.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="form-floating mb-3">
+                        {{ form.term }}
+                        <label>{{ form.term.label }}</label>
+                        {% if form.term.errors %}
+                            <div class="text-danger">{{ form.term.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="form-floating mb-3 position-relative">
                         {{ form.discount_application }}
                         <label>{{ form.discount_application.label }}</label>
                         {% if form.discount_application.errors %}
                             <div class="text-danger">{{ form.discount_application.errors }}</div>
                         {% endif %}
+
+                        <!-- Loading spinner -->
+                        <div id="discountLoader" class="position-absolute top-50 end-0 translate-middle-y me-5" style="display: none;">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-            
+
             <div class="row">
                 <div class="col-md-12">
                     <button type="submit" class="btn btn-primary">Apply Discount</button>
@@ -38,5 +65,86 @@
         </form>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sessionField = document.getElementById('id_session');
+    const termField = document.getElementById('id_term');
+    const discountField = document.getElementById('id_discount_application');
+    const discountLoader = document.getElementById('discountLoader');
+    const studentPk = {{ student.pk }};
+
+    // Function to fetch and update discounts
+    function fetchDiscounts() {
+        const sessionId = sessionField.value;
+        const termId = termField.value;
+
+        if (!sessionId || !termId) {
+            // Clear discount field if session or term is not selected
+            discountField.innerHTML = '<option value="">---------</option>';
+            return;
+        }
+
+        // Show loader
+        discountLoader.style.display = 'block';
+        discountField.disabled = true;
+
+        // Build URL
+        const url = new URL('{% url "finance_discount_get_ajax" %}', window.location.origin);
+        url.searchParams.append('session_id', sessionId);
+        url.searchParams.append('term_id', termId);
+        url.searchParams.append('student_pk', studentPk);
+
+        // Fetch discounts
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Clear existing options
+                discountField.innerHTML = '<option value="">---------</option>';
+
+                // Populate with new options
+                if (data.discounts && data.discounts.length > 0) {
+                    data.discounts.forEach(discount => {
+                        const option = document.createElement('option');
+                        option.value = discount.id;
+                        option.textContent = discount.label;
+                        discountField.appendChild(option);
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No discounts available for this session/term';
+                    discountField.appendChild(option);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching discounts:', error);
+                discountField.innerHTML = '<option value="">Error loading discounts</option>';
+            })
+            .finally(() => {
+                // Hide loader
+                discountLoader.style.display = 'none';
+                discountField.disabled = false;
+            });
+    }
+
+    // Event listener for session change
+    sessionField.addEventListener('change', function() {
+        // Clear term and discount when session changes
+        termField.value = '';
+        discountField.innerHTML = '<option value="">---------</option>';
+    });
+
+    // Event listener for term change
+    termField.addEventListener('change', function() {
+        fetchDiscounts();
+    });
+});
+</script>
 
 {% endblock %}

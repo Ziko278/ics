@@ -1001,33 +1001,77 @@ class DiscountApplicationForm(forms.ModelForm):
 
 
 class StudentDiscountAssignForm(forms.Form):
+    session = forms.ModelChoiceField(
+        queryset=SessionModel.objects.all().order_by('-start_year'),
+        label="Session",
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_session'})
+    )
+
+    term = forms.ModelChoiceField(
+        queryset=TermModel.objects.all().order_by('order'),
+        label="Term",
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_term'})
+    )
+
     discount_application = forms.ModelChoiceField(
         queryset=DiscountApplicationModel.objects.none(),
         label="Select Discount",
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_discount_application'})
     )
 
     def __init__(self, *args, **kwargs):
         student = kwargs.pop('student', None)
         super().__init__(*args, **kwargs)
 
-        # Show available discount applications
+        # Get current session and term from school settings
         school_setting = SchoolSettingModel.objects.first()
 
-        queryset = DiscountApplicationModel.objects.filter(
-            Q(session=school_setting.session, term=school_setting.term) |
-            Q(session__isnull=True, term__isnull=True)
-        ).select_related('discount')
+        # Set default values for session and term
+        if school_setting:
+            if school_setting.session:
+                self.fields['session'].initial = school_setting.session
+            if school_setting.term:
+                self.fields['term'].initial = school_setting.term
 
-        # Filter to show only discounts applicable to student's class (if student provided)
-        if student and student.student_class:
-            # Show discounts that either have no class restriction OR include student's class
-            queryset = queryset.filter(
-                Q(discount__applicable_classes__isnull=True) |
-                Q(discount__applicable_classes=student.student_class)
-            ).distinct()
+        # If form is bound (POST request), filter discounts based on submitted session/term
+        if self.is_bound and self.data.get('session') and self.data.get('term'):
+            try:
+                session_id = int(self.data.get('session'))
+                term_id = int(self.data.get('term'))
 
-        self.fields['discount_application'].queryset = queryset
+                queryset = DiscountApplicationModel.objects.filter(
+                    Q(session_id=session_id, term_id=term_id) |
+                    Q(session__isnull=True, term__isnull=True)  # Global discounts
+                ).select_related('discount')
 
+                # Filter by student's class
+                if student and student.student_class:
+                    queryset = queryset.filter(
+                        Q(discount__applicable_classes__isnull=True) |
+                        Q(discount__applicable_classes=student.student_class)
+                    ).distinct()
+
+                self.fields['discount_application'].queryset = queryset
+
+            except (ValueError, TypeError):
+                pass
+
+        # If not bound, set initial discount queryset for current session/term
+        elif school_setting and school_setting.session and school_setting.term:
+            queryset = DiscountApplicationModel.objects.filter(
+                Q(session=school_setting.session, term=school_setting.term) |
+                Q(session__isnull=True, term__isnull=True)
+            ).select_related('discount')
+
+            # Filter by student's class
+            if student and student.student_class:
+                queryset = queryset.filter(
+                    Q(discount__applicable_classes__isnull=True) |
+                    Q(discount__applicable_classes=student.student_class)
+                ).distinct()
+
+            self.fields['discount_application'].queryset = queryset
+
+        # Custom label for discount dropdown
         self.fields['discount_application'].label_from_instance = lambda obj: \
             f"{obj.discount.title} - {obj.discount_amount}{'%' if obj.discount_type == 'percentage' else ' (Fixed)'}"

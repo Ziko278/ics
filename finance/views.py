@@ -4047,12 +4047,10 @@ class StudentDiscountAssignView(LoginRequiredMixin, PermissionRequiredMixin, For
         student = self.get_student()
         context['student'] = student
 
-        # Get available discount applications for current/specified term
+        # Get current school settings for display purposes
         school_setting = SchoolSettingModel.objects.first()
-        context['available_discounts'] = DiscountApplicationModel.objects.filter(
-            Q(session=school_setting.session, term=school_setting.term) |
-            Q(session__isnull=True, term__isnull=True)  # Global discounts
-        ).select_related('discount')
+        context['current_session'] = school_setting.session if school_setting else None
+        context['current_term'] = school_setting.term if school_setting else None
 
         return context
 
@@ -4060,6 +4058,10 @@ class StudentDiscountAssignView(LoginRequiredMixin, PermissionRequiredMixin, For
         student = self.get_student()
         discount_application = form.cleaned_data['discount_application']
         discount = discount_application.discount
+
+        # Get selected session and term from form
+        selected_session = form.cleaned_data['session']
+        selected_term = form.cleaned_data['term']
 
         # 1. Check if student's class is eligible
         if discount.applicable_classes.exists() and student.student_class not in discount.applicable_classes.all():
@@ -4072,16 +4074,17 @@ class StudentDiscountAssignView(LoginRequiredMixin, PermissionRequiredMixin, For
             messages.error(self.request, "This discount has no fees defined. Please configure the discount first.")
             return self.form_invalid(form)
 
-        # 3. Get student's invoice for the discount's session/term
+        # 3. Get student's invoice for the SELECTED session/term (not discount_application's)
         try:
             invoice = InvoiceModel.objects.get(
                 student=student,
-                session=discount_application.session,
-                term=discount_application.term
+                session=selected_session,
+                term=selected_term
             )
         except InvoiceModel.DoesNotExist:
             messages.error(self.request,
-                           f"No invoice found for {discount_application.session}/{discount_application.term.name}.")
+                           f"No invoice found for {selected_session}/{selected_term.name}. "
+                           f"Please generate an invoice for this session/term first.")
             return self.form_invalid(form)
 
         # 4. Find applicable invoice items
@@ -4134,11 +4137,57 @@ class StudentDiscountAssignView(LoginRequiredMixin, PermissionRequiredMixin, For
                 messages.warning(self.request, "This discount has already been applied to all eligible fees.")
             else:
                 messages.success(self.request,
-                                 f"Discount applied successfully! ₦{total_discounted:,.2f} discounted across {items_processed} fee(s).")
+                                 f"Discount applied successfully! ₦{total_discounted:,.2f} discounted across {items_processed} fee(s) "
+                                 f"for {selected_session}/{selected_term.name}.")
 
         return redirect('finance_student_dashboard', pk=student.pk)
 
 
+class GetDiscountsAjaxView(LoginRequiredMixin, View):
+    """AJAX endpoint to fetch discounts based on session, term, and student class."""
+
+    def get(self, request, *args, **kwargs):
+        session_id = request.GET.get('session_id')
+        term_id = request.GET.get('term_id')
+        student_pk = request.GET.get('student_pk')
+
+        # Validate required parameters
+        if not all([session_id, term_id, student_pk]):
+            return JsonResponse({'error': 'Missing required parameters'}, status=400)
+
+        try:
+            student = get_object_or_404(StudentModel, pk=student_pk)
+
+            # Build discount queryset
+            queryset = DiscountApplicationModel.objects.filter(
+                Q(session_id=session_id, term_id=term_id) |
+                Q(session__isnull=True, term__isnull=True)  # Global discounts
+            ).select_related('discount')
+
+            # Filter by student's class
+            if student.student_class:
+                queryset = queryset.filter(
+                    Q(discount__applicable_classes__isnull=True) |
+                    Q(discount__applicable_classes=student.student_class)
+                ).distinct()
+
+            # Format response
+            discounts = []
+            for app in queryset:
+                label = f"{app.discount.title} - {app.discount_amount}"
+                label += '%' if app.discount_type == 'percentage' else ' (Fixed)'
+
+                discounts.append({
+                    'id': app.id,
+                    'label': label
+                })
+
+            return JsonResponse({'discounts': discounts})
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+        
 class StudentDiscountIndexView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     """List all student discounts with filtering by session, term, and student name."""
 

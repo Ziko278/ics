@@ -29,7 +29,7 @@ from finance.views import (
     DiscountApplicationDeleteView, DiscountApplicationListView, DiscountSelectStudentView, StudentDiscountAssignView,
     StudentDiscountIndexView, ExpensePrintVoucherView, deposit_revert_view, staff_deposit_revert_view,
     income_expense_report, get_invoice_items_json, payment_review_view, FeePendingPaymentListView,
-    StudentDiscountDeleteView, InvoiceDeleteView, InvoiceItemDeleteView,
+    StudentDiscountDeleteView, InvoiceDeleteView, InvoiceItemDeleteView, GetDiscountsAjaxView,
 )
 
 urlpatterns = [
@@ -82,6 +82,8 @@ urlpatterns = [
     path('discount/student/<int:student_pk>/assign/', StudentDiscountAssignView.as_view(), name='finance_discount_assign'),
     path('discounts/index/', StudentDiscountIndexView.as_view(), name='finance_discount_index'),
     path('discounts/delete/<int:pk>/', StudentDiscountDeleteView.as_view(), name='finance_discount_delete'),
+
+    path('discount/api/get-discounts/', GetDiscountsAjaxView.as_view(), name='finance_discount_get_ajax'),
 
     path('fee-structures/', FeeMasterListView.as_view(), name='finance_fee_master_list'),
     path('fee-structures/create/', FeeMasterCreateView.as_view(), name='finance_fee_master_create'),
