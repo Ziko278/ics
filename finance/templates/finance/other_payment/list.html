@@ -1,0 +1,150 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="pagetitle">
+    <h1>Other Payments & Debts</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'finance_student_payment_search' %}">Finance</a></li>
+            <li class="breadcrumb-item active">Other Payments</li>
+        </ol>
+    </nav>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">All Other Payments & Debts</h5>
+
+                <!-- Summary Alert -->
+                <div class="alert alert-info">
+                    <strong>Total Outstanding Balance:</strong> ₦{{ total_outstanding|floatformat:2|intcomma }}
+                </div>
+
+                <!-- Filter Form -->
+                <form method="get" class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="">All Statuses</option>
+                            <option value="unpaid" {% if request.GET.status == 'unpaid' %}selected{% endif %}>Unpaid</option>
+                            <option value="partially_paid" {% if request.GET.status == 'partially_paid' %}selected{% endif %}>Partially Paid</option>
+                            <option value="paid" {% if request.GET.status == 'paid' %}selected{% endif %}>Paid</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select name="session" class="form-select form-select-sm">
+                            <option value="">All Sessions</option>
+                            {% for session in sessions %}
+                            <option value="{{ session.pk }}" {% if request.GET.session == session.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ session }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select name="category" class="form-select form-select-sm">
+                            <option value="">All Categories</option>
+                            <option value="historical" {% if request.GET.category == 'historical' %}selected{% endif %}>Historical Debt</option>
+                            <option value="fine" {% if request.GET.category == 'fine' %}selected{% endif %}>Fine/Penalty</option>
+                            <option value="damage" {% if request.GET.category == 'damage' %}selected{% endif %}>Damage Fee</option>
+                            <option value="other" {% if request.GET.category == 'other' %}selected{% endif %}>Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                        <a href="{% url 'finance_other_payment_list' %}" class="btn btn-secondary btn-sm">Clear</a>
+                    </div>
+                </form>
+
+                <!-- Table -->
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Description</th>
+                                <th>Session/Term</th>
+                                <th>Category</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Paid</th>
+                                <th class="text-end">Balance</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in other_payments %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'finance_student_other_payment_index' payment.student.pk %}">
+                                        {{ payment.student.first_name }} {{ payment.student.last_name }}
+                                    </a>
+                                </td>
+                                <td>{{ payment.description }}</td>
+                                <td>
+                                    {% if payment.session and payment.term %}
+                                        {{ payment.session }} / {{ payment.term.name }}
+                                    {% else %}
+                                        <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="badge bg-secondary">{{ payment.get_category_display }}</span></td>
+                                <td class="text-end">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-info">₦{{ payment.amount_paid|floatformat:2|intcomma }}</td>
+                                <td class="text-end {% if payment.balance > 0 %}text-danger{% else %}text-success{% endif %}">
+                                    ₦{{ payment.balance|floatformat:2|intcomma }}
+                                </td>
+                                <td>
+                                    <span class="badge
+                                        {% if payment.status == 'paid' %}bg-success
+                                        {% elif payment.status == 'partially_paid' %}bg-warning text-dark
+                                        {% else %}bg-danger{% endif %}">
+                                        {{ payment.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'finance_student_other_payment_index' payment.student.pk %}"
+                                       class="btn btn-sm btn-outline-info" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="9" class="text-center">No other payments found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                {% if is_paginated %}
+                <nav>
+                    <ul class="pagination pagination-sm justify-content-center">
+                        {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                        </li>
+                        {% endif %}
+
+                        <li class="page-item active">
+                            <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                        </li>
+
+                        {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

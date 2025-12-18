@@ -37,13 +37,13 @@ from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePa
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryRecord, SalaryAdvance, \
     SalaryStructure, StudentFundingModel, InvoiceItemModel, AdvanceSettlementModel, \
     SchoolBankDetail, StaffLoan, StaffLoanRepayment, StaffFundingModel, DiscountModel, DiscountApplicationModel, \
-    StudentDiscountModel
+    StudentDiscountModel, OtherPaymentClearanceModel, OtherPaymentModel
 from .forms import FinanceSettingForm, SupplierPaymentForm, PurchaseAdvancePaymentForm, FeeForm, FeeGroupForm, \
     InvoiceGenerationForm, FeePaymentForm, ExpenseCategoryForm, ExpenseForm, IncomeCategoryForm, \
     IncomeForm, TermlyFeeAmountFormSet, FeeMasterCreateForm, BulkPaymentForm, StaffBankDetailForm, PaysheetRowForm, \
     SalaryAdvanceForm, SalaryStructureForm, StudentFundingForm, SchoolBankDetailForm, \
     StaffLoanForm, StaffLoanRepaymentForm, StaffFundingForm, DiscountForm, DiscountApplicationForm, \
-    StudentDiscountAssignForm
+    StudentDiscountAssignForm, OtherPaymentClearanceForm, OtherPaymentCreateForm
 from finance.tasks import generate_invoices_task
 from pytz import timezone as pytz_timezone
 
@@ -5220,3 +5220,259 @@ def process_payment_cleanup_for_class(request):
             'status': 'error',
             'message': f'Unexpected error: {str(e)}'
         }, status=500)
+
+
+# ============================================================================
+# GENERAL OTHER PAYMENT VIEWS (All students)
+# ============================================================================
+
+class OtherPaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """View all other payments across all students"""
+    model = OtherPaymentModel
+    permission_required = 'finance.view_feemodel'
+    template_name = 'finance/other_payment/list.html'
+    context_object_name = 'other_payments'
+    paginate_by = 50
+
+    def get_queryset(self):
+        queryset = OtherPaymentModel.objects.select_related(
+            'student', 'session', 'term', 'created_by'
+        ).order_by('-created_at')
+
+        # Filter by status
+        status = self.request.GET.get('status')
+        if status:
+            queryset = queryset.filter(status=status)
+
+        # Filter by session
+        session_id = self.request.GET.get('session')
+        if session_id:
+            queryset = queryset.filter(session_id=session_id)
+
+        # Filter by category
+        category = self.request.GET.get('category')
+        if category:
+            queryset = queryset.filter(category=category)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['sessions'] = SessionModel.objects.all().order_by('-start_year')
+        context['total_outstanding'] = sum(op.balance for op in self.get_queryset())
+        return context
+
+
+# ============================================================================
+# STUDENT-SPECIFIC OTHER PAYMENT VIEWS
+# ============================================================================
+
+class StudentOtherPaymentIndexView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """View all other payments for a specific student"""
+    model = OtherPaymentModel
+    permission_required = 'finance.view_feemodel'
+    template_name = 'finance/other_payment/student_index.html'
+    context_object_name = 'other_payments'
+
+    def get_student(self):
+        return get_object_or_404(StudentModel, pk=self.kwargs['student_pk'])
+
+    def get_queryset(self):
+        student = self.get_student()
+        return OtherPaymentModel.objects.filter(student=student).select_related(
+            'session', 'term', 'created_by'
+        ).order_by('-created_at')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        student = self.get_student()
+        context['student'] = student
+
+        # Calculate totals
+        other_payments = self.get_queryset()
+        context['total_amount'] = sum(op.amount for op in other_payments)
+        context['total_paid'] = sum(op.amount_paid for op in other_payments)
+        context['total_balance'] = sum(op.balance for op in other_payments)
+
+        return context
+
+
+class StudentOtherPaymentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
+    """Create a new other payment/debt for a student"""
+    model = OtherPaymentModel
+    form_class = OtherPaymentCreateForm
+    permission_required = 'finance.add_feemodel'
+    template_name = 'finance/other_payment/create.html'
+
+    def get_student(self):
+        return get_object_or_404(StudentModel, pk=self.kwargs['student_pk'])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['student'] = self.get_student()
+        return context
+
+    def form_valid(self, form):
+        student = self.get_student()
+        form.instance.student = student
+        form.instance.created_by = self.request.user
+
+        # Set initial status to unpaid
+        form.instance.amount_paid = Decimal('0.00')
+        form.instance.status = OtherPaymentModel.Status.UNPAID
+
+        messages.success(
+            self.request,
+            f"Other payment/debt of {form.instance.amount:,.2f} "
+            f"created successfully for {student.first_name} {student.last_name}."
+        )
+
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('finance_student_other_payment_index', kwargs={'student_pk': self.kwargs['student_pk']})
+
+    @property
+    def currency_symbol(self):
+        return '₦' if self.object.currency == 'naira' else '$'
+
+
+class StudentOtherPaymentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
+    """Update an existing other payment/debt"""
+    model = OtherPaymentModel
+    form_class = OtherPaymentCreateForm
+    permission_required = 'finance.change_feemodel'
+    template_name = 'finance/other_payment/update.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['student'] = self.object.student
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, "Other payment/debt updated successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('finance_student_other_payment_index', kwargs={'student_pk': self.object.student.pk})
+
+
+class StudentOtherPaymentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    """Delete an other payment/debt (only if no payments made)"""
+    model = OtherPaymentModel
+    permission_required = 'finance.delete_feemodel'
+    template_name = 'finance/other_payment/delete.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['student'] = self.object.student
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+
+        # Check if any payments have been made
+        if self.object.clearances.exists():
+            messages.error(
+                request,
+                "Cannot delete this debt because payments have been made against it. "
+                "Please revert all payments first."
+            )
+            return redirect('finance_student_other_payment_index', student_pk=self.object.student.pk)
+
+        messages.warning(request, f"Other payment/debt deleted successfully.")
+        return super().post(request, *args, **kwargs)
+
+    def get_success_url(self):
+        return reverse('finance_student_other_payment_index', kwargs={'student_pk': self.object.student.pk})
+
+
+# ============================================================================
+# PAYMENT CLEARANCE VIEWS
+# ============================================================================
+
+class OtherPaymentClearanceCreateView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
+    """Make a payment against an other payment debt"""
+    form_class = OtherPaymentClearanceForm
+    permission_required = 'finance.add_feemodel'
+    template_name = 'finance/other_payment/pay.html'
+
+    def get_other_payment(self):
+        return get_object_or_404(OtherPaymentModel, pk=self.kwargs['other_payment_pk'])
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['other_payment'] = self.get_other_payment()
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        other_payment = self.get_other_payment()
+        context['other_payment'] = other_payment
+        context['student'] = other_payment.student
+        return context
+
+    def form_valid(self, form):
+        other_payment = self.get_other_payment()
+
+        with transaction.atomic():
+            # Create the clearance record
+            clearance = form.save(commit=False)
+            clearance.other_payment = other_payment
+            clearance.status = OtherPaymentClearanceModel.PaymentStatus.CONFIRMED
+            clearance.confirmed_by = self.request.user
+            clearance.save()
+
+            # Update the other payment's amount_paid
+            other_payment.amount_paid += clearance.amount
+            other_payment.save()  # This will auto-update status
+
+        messages.success(
+            self.request,
+            f"Payment of {clearance.currency_symbol}{clearance.amount:,.2f} recorded successfully. "
+            f"Remaining balance: {other_payment.balance:,.2f}"
+        )
+
+        return redirect('finance_student_other_payment_index', student_pk=other_payment.student.pk)
+
+
+class OtherPaymentClearanceRevertView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    """Revert a payment clearance"""
+    model = OtherPaymentClearanceModel
+    permission_required = 'finance.delete_feemodel'
+    template_name = 'finance/other_payment/revert.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['other_payment'] = self.object.other_payment
+        context['student'] = self.object.other_payment.student
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        clearance = self.object
+        other_payment = clearance.other_payment
+
+        # Check if already reverted
+        if clearance.status == OtherPaymentClearanceModel.PaymentStatus.REVERTED:
+            messages.warning(request, "This payment has already been reverted.")
+            return redirect('finance_student_other_payment_index', student_pk=other_payment.student.pk)
+
+        with transaction.atomic():
+            # Mark clearance as reverted
+            clearance.status = OtherPaymentClearanceModel.PaymentStatus.REVERTED
+            clearance.save()
+
+            # Reduce the other payment's amount_paid
+            other_payment.amount_paid -= clearance.amount
+            if other_payment.amount_paid < 0:
+                other_payment.amount_paid = Decimal('0.00')
+            other_payment.save()  # This will auto-update status
+
+        messages.warning(
+            request,
+            f"Payment of {clearance.currency_symbol}{clearance.amount:,.2f} has been reverted. "
+            f"New balance: {other_payment.balance:,.2f}"
+        )
+
+        return redirect('finance_student_other_payment_index', student_pk=other_payment.student.pk)

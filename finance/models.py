@@ -1393,3 +1393,117 @@ class StudentDiscountModel(models.Model):
         if not self.discount_application.student_discounts.exists():
             self.discount_application.is_protected = False
             self.discount_application.save(update_fields=['is_protected'])
+
+
+class OtherPaymentModel(models.Model):
+    """
+    Tracks non-invoice debts: historical balances, fines, penalties, etc.
+    Completely separate from the invoice system.
+    """
+
+    class PaymentCategory(models.TextChoices):
+        HISTORICAL = 'historical', 'Historical Debt'
+        FINE = 'fine', 'Fine/Penalty'
+        DAMAGE = 'damage', 'Damage Fee'
+        OTHER = 'other', 'Other'
+
+    class Status(models.TextChoices):
+        UNPAID = 'unpaid', 'Unpaid'
+        PARTIALLY_PAID = 'partially_paid', 'Partially Paid'
+        PAID = 'paid', 'Paid'
+
+    class Currency(models.TextChoices):
+        NAIRA = 'naira', 'Naira (₦)'
+        DOLLAR = 'dollar', 'Dollar ($)'
+
+    student = models.ForeignKey(StudentModel, on_delete=models.PROTECT, related_name='other_debts')
+
+    # Session/term for categorization (can be historical or current)
+    session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL, null=True, blank=True)
+    term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True)
+
+    description = models.CharField(max_length=500, help_text="Brief description of the debt/charge")
+    category = models.CharField(max_length=20, choices=PaymentCategory.choices, default=PaymentCategory.HISTORICAL)
+
+    amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Total amount owed")
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Total amount paid so far")
+
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.UNPAID)
+    currency = models.CharField(max_length=20, choices=Currency.choices, default=Currency.NAIRA)
+
+    notes = models.TextField(blank=True, null=True, help_text="Additional notes or context")
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_other_payments')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Other Payment/Debt"
+        verbose_name_plural = "Other Payments/Debts"
+
+    def __str__(self):
+        session_str = f" ({self.session}/{self.term.name})" if self.session and self.term else ""
+        return f"{self.student} - {self.description}{session_str}"
+
+    @property
+    def balance(self):
+        """Remaining balance to be paid"""
+        return self.amount - self.amount_paid
+
+    def save(self, *args, **kwargs):
+        # Auto-update status based on amount_paid
+        if self.amount_paid >= self.amount:
+            self.status = self.Status.PAID
+        elif self.amount_paid > 0:
+            self.status = self.Status.PARTIALLY_PAID
+        else:
+            self.status = self.Status.UNPAID
+        super().save(*args, **kwargs)
+
+
+class OtherPaymentClearanceModel(models.Model):
+    """
+    Records a payment made against an OtherPayment debt.
+    Tracks payment history and allows reversals.
+    """
+
+    class PaymentStatus(models.TextChoices):
+        CONFIRMED = 'confirmed', 'Confirmed'
+        REVERTED = 'reverted', 'Reverted'
+
+    other_payment = models.ForeignKey(OtherPaymentModel, on_delete=models.PROTECT, related_name='clearances')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    payment_mode = models.CharField(max_length=20, choices=[
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('bank_teller', 'Bank Teller'),
+        ('dollar_pay', 'Dollar Pay'),
+        ('others', 'Others')
+    ])
+    currency = models.CharField(max_length=20, choices=OtherPaymentModel.Currency.choices, default='naira')
+    bank_account = models.ForeignKey(SchoolBankDetail, on_delete=models.PROTECT)
+
+    date = models.DateField(default=timezone.now)
+    reference = models.CharField(max_length=100, blank=True, default='')
+    description = models.TextField(blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+
+    status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.CONFIRMED)
+
+    confirmed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                     related_name='confirmed_other_clearances')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+        verbose_name = "Other Payment Clearance"
+        verbose_name_plural = "Other Payment Clearances"
+
+    def __str__(self):
+        return f"Payment of {self.currency_symbol}{self.amount} for {self.other_payment.description}"
+
+    @property
+    def currency_symbol(self):
+        return '₦' if self.currency == 'naira' else '$'

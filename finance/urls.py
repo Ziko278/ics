@@ -30,7 +30,9 @@ from finance.views import (
     StudentDiscountIndexView, ExpensePrintVoucherView, deposit_revert_view, staff_deposit_revert_view,
     income_expense_report, get_invoice_items_json, payment_review_view, FeePendingPaymentListView,
     StudentDiscountDeleteView, InvoiceDeleteView, InvoiceItemDeleteView, GetDiscountsAjaxView, payment_cleanup_view,
-    process_payment_cleanup_for_class,
+    process_payment_cleanup_for_class, OtherPaymentListView, StudentOtherPaymentIndexView,
+    StudentOtherPaymentCreateView, StudentOtherPaymentUpdateView, StudentOtherPaymentDeleteView,
+    OtherPaymentClearanceRevertView, OtherPaymentClearanceCreateView,
 )
 
 urlpatterns = [
@@ -232,5 +234,23 @@ urlpatterns = [
     path('payment-cleanup/', payment_cleanup_view, name='payment_cleanup_view'),
     path('payment-cleanup/process-class/', process_payment_cleanup_for_class, name='payment_cleanup_process_class'),
 
+    # ============================================================================
+    # GENERAL OTHER PAYMENT URLS (All students)
+    # ============================================================================
+    path('other-payments/', OtherPaymentListView.as_view(), name='finance_other_payment_list'),
+
+    # ============================================================================
+    # STUDENT-SPECIFIC OTHER PAYMENT URLS
+    # ============================================================================
+    path('student/<int:student_pk>/other-payments/', StudentOtherPaymentIndexView.as_view(), name='finance_student_other_payment_index'),
+    path('student/<int:student_pk>/other-payments/create/', StudentOtherPaymentCreateView.as_view(), name='finance_student_other_payment_create'),
+    path('other-payments/<int:pk>/update/', StudentOtherPaymentUpdateView.as_view(), name='finance_other_payment_update'),
+    path('other-payments/<int:pk>/delete/', StudentOtherPaymentDeleteView.as_view(), name='finance_other_payment_delete'),
+
+    # ============================================================================
+    # PAYMENT CLEARANCE URLS
+    # ============================================================================
+    path('other-payments/<int:other_payment_pk>/pay/', OtherPaymentClearanceCreateView.as_view(), name='finance_other_payment_pay'),
+    path('other-payment-clearance/<int:pk>/revert/', OtherPaymentClearanceRevertView.as_view(), name='finance_other_payment_clearance_revert'),
 
 ]

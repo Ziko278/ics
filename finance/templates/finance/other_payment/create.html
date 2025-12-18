@@ -1,0 +1,172 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+
+<div class="pagetitle">
+  <h1>Add New Other Payment/Debt</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'finance_student_dashboard' student.pk %}">Student Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'finance_student_other_payment_index' student.pk %}">Other Payments</a></li>
+      <li class="breadcrumb-item active">Add New</li>
+    </ol>
+  </nav>
+</div>
+
+<!-- Student Info Card -->
+<div class="col-lg-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title pb-0 mb-1">{{ student.first_name }} {{ student.last_name }}</h5>
+            <p class="mb-0">
+                <span class="me-3"><strong>Reg No:</strong> {{ student.registration_number|upper }}</span>
+                <span><strong>Class:</strong> {{ student.student_class|title }} {{ student.class_section|title }}</span>
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Form Card -->
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Debt/Payment Details</h5>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="row g-3">
+                        <!-- Description -->
+                        <div class="col-12">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">
+                                {{ form.description.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.description }}
+                            {% if form.description.help_text %}
+                                <small class="form-text text-muted">{{ form.description.help_text }}</small>
+                            {% endif %}
+                            {% if form.description.errors %}
+                                <div class="text-danger small mt-1">{{ form.description.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Session and Term -->
+                        <div class="col-md-6">
+                            <label for="{{ form.session.id_for_label }}" class="form-label">
+                                {{ form.session.label }}
+                            </label>
+                            {{ form.session }}
+                            {% if form.session.help_text %}
+                                <small class="form-text text-muted">{{ form.session.help_text }}</small>
+                            {% endif %}
+                            {% if form.session.errors %}
+                                <div class="text-danger small mt-1">{{ form.session.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="{{ form.term.id_for_label }}" class="form-label">
+                                {{ form.term.label }}
+                            </label>
+                            {{ form.term }}
+                            {% if form.term.help_text %}
+                                <small class="form-text text-muted">{{ form.term.help_text }}</small>
+                            {% endif %}
+                            {% if form.term.errors %}
+                                <div class="text-danger small mt-1">{{ form.term.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Category -->
+                        <div class="col-md-6">
+                            <label for="{{ form.category.id_for_label }}" class="form-label">
+                                {{ form.category.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.category }}
+                            {% if form.category.errors %}
+                                <div class="text-danger small mt-1">{{ form.category.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Amount -->
+                        <div class="col-md-6">
+                            <label for="{{ form.amount.id_for_label }}" class="form-label">
+                                {{ form.amount.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.amount }}
+                            {% if form.amount.help_text %}
+                                <small class="form-text text-muted">{{ form.amount.help_text }}</small>
+                            {% endif %}
+                            {% if form.amount.errors %}
+                                <div class="text-danger small mt-1">{{ form.amount.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Currency -->
+                        <div class="col-md-6">
+                            <label for="{{ form.currency.id_for_label }}" class="form-label">
+                                {{ form.currency.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.currency }}
+                            {% if form.currency.errors %}
+                                <div class="text-danger small mt-1">{{ form.currency.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Notes -->
+                        <div class="col-12">
+                            <label for="{{ form.notes.id_for_label }}" class="form-label">
+                                {{ form.notes.label }}
+                            </label>
+                            {{ form.notes }}
+                            {% if form.notes.help_text %}
+                                <small class="form-text text-muted">{{ form.notes.help_text }}</small>
+                            {% endif %}
+                            {% if form.notes.errors %}
+                                <div class="text-danger small mt-1">{{ form.notes.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Buttons -->
+                        <div class="col-12 mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save"></i> Save Debt/Payment
+                            </button>
+                            <a href="{% url 'finance_student_other_payment_index' student.pk %}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Info Card -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Information</h5>
+                <div class="alert alert-info">
+                    <h6 class="alert-heading"><i class="bi bi-info-circle"></i> What is this for?</h6>
+                    <p class="small mb-2">Use this form to record:</p>
+                    <ul class="small mb-0">
+                        <li><strong>Historical Debts:</strong> Outstanding balances from before the system was implemented</li>
+                        <li><strong>Fines & Penalties:</strong> Library fines, late payment fees, etc.</li>
+                        <li><strong>Damage Fees:</strong> Cost of damaged school property</li>
+                        <li><strong>Other Charges:</strong> Any non-standard fees not in the regular invoice system</li>
+                    </ul>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Note</h6>
+                    <p class="small mb-0">This is separate from the regular invoice system. Use this only for charges that don't fit the standard fee structure.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

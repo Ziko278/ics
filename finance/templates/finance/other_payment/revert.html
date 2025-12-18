@@ -1,0 +1,159 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+
+<div class="pagetitle">
+  <h1>Revert Payment</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'finance_student_dashboard' student.pk %}">Student Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'finance_student_other_payment_index' student.pk %}">Other Payments</a></li>
+      <li class="breadcrumb-item active">Revert Payment</li>
+    </ol>
+  </nav>
+</div>
+
+<!-- Student Info Card -->
+<div class="col-lg-12">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title pb-0 mb-1">{{ student.first_name }} {{ student.last_name }}</h5>
+            <p class="mb-0">
+                <span class="me-3"><strong>Reg No:</strong> {{ student.registration_number|upper }}</span>
+                <span><strong>Class:</strong> {{ student.student_class|title }} {{ student.class_section|title }}</span>
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Revert Confirmation Card -->
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <h5 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Confirm Payment Reversal</h5>
+                    <p class="mb-0">Are you sure you want to revert this payment? This will restore the debt balance.</p>
+                </div>
+                
+                <!-- Debt Details -->
+                <div class="card bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-3 text-muted">Debt Information</h6>
+                        <p class="mb-1"><strong>Description:</strong> {{ other_payment.description }}</p>
+                        {% if other_payment.session and other_payment.term %}
+                        <p class="mb-1"><strong>Session/Term:</strong> {{ other_payment.session }} / {{ other_payment.term.name }}</p>
+                        {% endif %}
+                        <p class="mb-0"><strong>Category:</strong> {{ other_payment.get_category_display }}</p>
+                    </div>
+                </div>
+                
+                <!-- Payment Details -->
+                <div class="card bg-light mb-4">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-3 text-muted">Payment Details</h6>
+                        <table class="table table-borderless table-sm mb-0">
+                            <tr>
+                                <td><strong>Payment Amount:</strong></td>
+                                <td class="text-end text-danger fw-bold">₦{{ object.amount|floatformat:2|intcomma }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Payment Date:</strong></td>
+                                <td class="text-end">{{ object.date|date:"d M, Y" }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Payment Mode:</strong></td>
+                                <td class="text-end">{{ object.get_payment_mode_display }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Bank Account:</strong></td>
+                                <td class="text-end">{{ object.bank_account }}</td>
+                            </tr>
+                            {% if object.reference %}
+                            <tr>
+                                <td><strong>Reference:</strong></td>
+                                <td class="text-end">{{ object.reference }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if object.description %}
+                            <tr>
+                                <td><strong>Description:</strong></td>
+                                <td class="text-end">{{ object.description }}</td>
+                            </tr>
+                            {% endif %}
+                            <tr>
+                                <td><strong>Confirmed By:</strong></td>
+                                <td class="text-end">{{ object.confirmed_by.get_full_name|default:object.confirmed_by.username }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Status:</strong></td>
+                                <td class="text-end">
+                                    {% if object.status == 'confirmed' %}
+                                        <span class="badge bg-success">Confirmed</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Reverted</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Impact Information -->
+                <div class="card border-warning mb-4">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-3 text-warning"><i class="bi bi-info-circle"></i> What Will Happen</h6>
+                        <table class="table table-sm mb-0">
+                            <tr>
+                                <td><strong>Current Debt Balance:</strong></td>
+                                <td class="text-end">₦{{ other_payment.balance|floatformat:2|intcomma }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Payment Being Reverted:</strong></td>
+                                <td class="text-end text-danger">+ ₦{{ object.amount|floatformat:2|intcomma }}</td>
+                            </tr>
+                            <tr class="border-top">
+                                <td><strong>New Debt Balance:</strong></td>
+                                <td class="text-end text-danger fw-bold">₦{{ other_payment.balance|add:object.amount|floatformat:2|intcomma }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Check if already reverted -->
+                {% if object.status == 'reverted' %}
+                <div class="alert alert-info">
+                    <h6 class="alert-heading"><i class="bi bi-info-circle"></i> Already Reverted</h6>
+                    <p class="mb-0">This payment has already been reverted and cannot be reverted again.</p>
+                </div>
+                
+                <div class="text-center">
+                    <a href="{% url 'finance_student_other_payment_index' student.pk %}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Go Back
+                    </a>
+                </div>
+                {% else %}
+                <!-- Revert Form -->
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="alert alert-danger">
+                        <p class="mb-0"><i class="bi bi-exclamation-triangle"></i> <strong>Warning:</strong> This action cannot be undone. The payment will be marked as reverted and the debt balance will be restored.</p>
+                    </div>
+                    
+                    <div class="d-flex justify-content-center gap-2">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="bi bi-arrow-counterclockwise"></i> Yes, Revert This Payment
+                        </button>
+                        <a href="{% url 'finance_student_other_payment_index' student.pk %}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> No, Cancel
+                        </a>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

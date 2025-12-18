@@ -14,7 +14,8 @@ from finance.models import FinanceSettingModel, SupplierPaymentModel, PurchaseAd
     FeeGroupModel, FeeMasterModel, InvoiceGenerationJob, FeePaymentModel, ExpenseCategoryModel, ExpenseModel, \
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryStructure, SalaryAdvance, \
     SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan, StaffFundingModel, \
-    DiscountModel, DiscountApplicationModel, StudentDiscountModel, InvoiceModel
+    DiscountModel, DiscountApplicationModel, StudentDiscountModel, InvoiceModel, OtherPaymentClearanceModel, \
+    OtherPaymentModel
 from human_resource.models import StaffModel
 from inventory.models import PurchaseOrderModel
 from student.models import StudentModel
@@ -342,7 +343,7 @@ class BulkPaymentForm(forms.Form):
 
         return amount
     
-    
+
 # -------------------- EXPENSE CATEGORY FORM --------------------
 
 class ExpenseCategoryForm(forms.ModelForm):
@@ -1118,3 +1119,102 @@ class StudentDiscountAssignForm(forms.Form):
         # Custom label for discount dropdown
         self.fields['discount_application'].label_from_instance = lambda obj: \
             f"{obj.discount.title} - {obj.discount_amount}{'%' if obj.discount_type == 'percentage' else ' (Fixed)'}"
+
+
+class OtherPaymentCreateForm(forms.ModelForm):
+    """Form for creating a new other payment/debt for a student"""
+
+    class Meta:
+        model = OtherPaymentModel
+        fields = ['session', 'term', 'description', 'category', 'amount', 'currency', 'notes']
+
+        widgets = {
+            'session': forms.Select(attrs={'class': 'form-select'}),
+            'term': forms.Select(attrs={'class': 'form-select'}),
+            'description': forms.TextInput(
+                attrs={'class': 'form-control', 'placeholder': 'e.g., 2022/Term 1 Outstanding Balance'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'currency': forms.Select(attrs={'class': 'form-select'}),
+            'notes': forms.Textarea(
+                attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Optional additional notes'}),
+        }
+
+        help_texts = {
+            'session': 'Select the session this debt is associated with (optional)',
+            'term': 'Select the term (optional)',
+            'description': 'Brief description of the debt or charge',
+            'amount': 'Total amount owed',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make session and term not required
+        self.fields['session'].required = False
+        self.fields['term'].required = False
+        self.fields['notes'].required = False
+
+        # Set default currency to naira
+        if not self.is_bound:
+            self.fields['currency'].initial = 'naira'
+
+
+class OtherPaymentClearanceForm(forms.ModelForm):
+    """Form for making a payment against an other payment debt"""
+
+    class Meta:
+        model = OtherPaymentClearanceModel
+        fields = ['amount', 'payment_mode', 'currency', 'bank_account', 'date', 'reference', 'description', 'notes']
+
+        widgets = {
+            'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
+            'payment_mode': forms.Select(attrs={'class': 'form-select'}),
+            'currency': forms.Select(attrs={'class': 'form-select'}),
+            'bank_account': forms.Select(attrs={'class': 'form-select'}),
+            'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'reference': forms.TextInput(
+                attrs={'class': 'form-control', 'placeholder': 'Payment reference/receipt number'}),
+            'description': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Optional description'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Optional notes'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.other_payment = kwargs.pop('other_payment', None)
+        super().__init__(*args, **kwargs)
+
+        # Set dynamic queryset for bank_account
+        self.fields['bank_account'].queryset = SchoolBankDetail.objects.all()
+
+        # Make optional fields not required
+        self.fields['reference'].required = False
+        self.fields['description'].required = False
+        self.fields['notes'].required = False
+
+        # Set default currency to match the other payment
+        if not self.is_bound and self.other_payment:
+            self.fields['currency'].initial = self.other_payment.currency
+
+            # Set max amount to the remaining balance
+            self.fields['amount'].widget.attrs['max'] = str(self.other_payment.balance)
+            self.fields[
+                'amount'].help_text = f"Maximum: {self.other_payment.balance:,.2f}"
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get('amount')
+
+        if self.other_payment and amount > self.other_payment.balance:
+            raise forms.ValidationError(
+                f"Payment amount ({self.other_payment.currency_symbol}{amount:,.2f}) exceeds the remaining balance "
+                f"({self.other_payment.currency_symbol}{self.other_payment.balance:,.2f})."
+            )
+
+        if amount <= 0:
+            raise forms.ValidationError("Payment amount must be greater than zero.")
+
+        return amount
+
+    @property
+    def currency_symbol(self):
+        if self.other_payment:
+            return '₦' if self.other_payment.currency == 'naira' else '$'
+        return '₦'
