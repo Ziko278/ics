@@ -1,39 +1,5 @@
 from django.urls import path
-from finance.views import (
-    FinanceSettingDetailView, FinanceSettingCreateView, FinanceSettingUpdateView,
-    SupplierAccountsListView, SupplierAccountDetailView, SupplierPaymentRevertView, AllSupplierPaymentsListView,
-    SupplierPaymentReceiptView, PurchaseAdvanceAccountsListView, PurchaseAdvancePaymentDetailView,
-    FeeListView, FeeCreateView, FeeUpdateView, FeeDeleteView, FeeGroupListView, FeeGroupCreateView, FeeGroupUpdateView,
-    FeeGroupDeleteView, FeeMasterListView, FeeMasterCreateView, FeeMasterUpdateView, FeeMasterDeleteView,
-    InvoiceListView, InvoiceGenerationView, InvoiceJobStatusView, invoice_job_status_api, InvoiceDetailView,
-    ExpenseCategoryListView, ExpenseCategoryCreateView, ExpenseCategoryUpdateView, ExpenseCategoryDeleteView,
-    ExpenseListView, ExpenseCreateView, ExpenseUpdateView, ExpenseDetailView, IncomeCategoryListView,
-    IncomeCategoryCreateView, FeeMasterDetailView, IncomeCategoryUpdateView, IncomeCategoryDeleteView, IncomeListView,
-    IncomeCreateView, IncomeUpdateView, IncomeDetailView, StudentFeeSearchView, get_students_by_class_ajax,
-    get_students_by_reg_no_ajax, StudentFinancialDashboardView, BulkFeePaymentView, FeePaymentRevertView,
-    FeePaymentReceiptView, StaffBankDetailListView, StaffBankDetailUpdateView, StaffBankDetailCreateView,
-    SalaryStructureListView, StaffBankDetailDeleteView, SalaryStructureCreateView, SalaryStructureDetailView,
-    SalaryStructureUpdateView, SalaryStructureDeleteView, SalaryAdvanceListView, SalaryAdvanceCreateView,
-    SalaryAdvanceDetailView, SalaryAdvanceActionView, process_payroll_view, payroll_dashboard_view,
-    export_payroll_to_excel,
-    DepositPaymentSelectStudentView, deposit_get_class_students, deposit_get_class_students_by_reg_number,
-    deposit_payment_list_view, pending_deposit_payment_list_view, deposit_create_view, confirm_payment_view,
-    decline_payment_view, deposit_detail_view, InvoiceReceiptView, FeePaymentListView, finance_dashboard, fee_dashboard,
-    SchoolBankDetailListView, SchoolBankDetailUpdateView, SchoolBankDetailCreateView, SchoolBankDetailDeleteView,
-    StaffLoanListView, StaffLoanCreateView, StaffLoanDetailView, StaffLoanActionView, StaffLoanDebtorsListView,
-    StaffLoanDebtDetailView, record_staff_loan_repayment, my_salary_profile_view, DepositPaymentSelectStaffView,
-    staff_deposit_payment_list_view, staff_deposit_detail_view, staff_deposit_create_view,
-    staff_pending_deposit_payment_list_view, staff_confirm_payment_view, staff_decline_payment_view,
-    StaffUploadDepositView, StaffDepositHistoryView, confirm_fee_payment_view, DiscountListView, DiscountCreateView,
-    DiscountUpdateView, DiscountApplicationCreateView, DiscountDeleteView, DiscountApplicationUpdateView,
-    DiscountApplicationDeleteView, DiscountApplicationListView, DiscountSelectStudentView, StudentDiscountAssignView,
-    StudentDiscountIndexView, ExpensePrintVoucherView, deposit_revert_view, staff_deposit_revert_view,
-    income_expense_report, get_invoice_items_json, payment_review_view, FeePendingPaymentListView,
-    StudentDiscountDeleteView, InvoiceDeleteView, InvoiceItemDeleteView, GetDiscountsAjaxView, payment_cleanup_view,
-    process_payment_cleanup_for_class, OtherPaymentListView, StudentOtherPaymentIndexView,
-    StudentOtherPaymentCreateView, StudentOtherPaymentUpdateView, StudentOtherPaymentDeleteView,
-    OtherPaymentClearanceRevertView, OtherPaymentClearanceCreateView,
-)
+from finance.views import *
 
 urlpatterns = [
     # Finance Settings URLs (Singleton Pattern)
@@ -162,17 +128,6 @@ urlpatterns = [
     path('finance/school-bank/<int:pk>/update/', SchoolBankDetailUpdateView.as_view(), name='finance_school_bank_detail_update'),
     path('finance/school-bank/<int:pk>/delete/', SchoolBankDetailDeleteView.as_view(), name='finance_school_bank_detail_delete'),
 
-    # --- Salary Structure URLs (Multi-page Interface) ---
-    path('finance/salary-structures/', SalaryStructureListView.as_view(), name='finance_salary_structure_list'),
-    path('finance/salary-structures/create/', SalaryStructureCreateView.as_view(),
-         name='finance_salary_structure_create'),
-    path('finance/salary-structures/<int:pk>/', SalaryStructureDetailView.as_view(),
-         name='finance_salary_structure_detail'),
-    path('finance/salary-structures/<int:pk>/update/', SalaryStructureUpdateView.as_view(),
-         name='finance_salary_structure_update'),
-    path('finance/salary-structures/<int:pk>/delete/', SalaryStructureDeleteView.as_view(),
-         name='finance_salary_structure_delete'),
-
     # --- Salary Advance URLs (Multi-page Interface) ---
     path('finance/salary-advances/', SalaryAdvanceListView.as_view(), name='finance_salary_advance_list'),
     path('finance/salary-advances/create/', SalaryAdvanceCreateView.as_view(), name='finance_salary_advance_create'),
@@ -190,12 +145,7 @@ urlpatterns = [
     path('staff-loans/staff/<int:staff_pk>/', StaffLoanDebtDetailView.as_view(), name='finance_staff_loan_debt_detail'),
     path('staff-loans/staff/<int:staff_pk>/repay/', record_staff_loan_repayment, name='finance_record_loan_repayment'),
 
-    # --- Salary Record (Paysheet) URLs ---
-    path('finance/payroll/process/', process_payroll_view, name='finance_process_payroll'),
-    path('finance/payroll/dashboard/', payroll_dashboard_view, name='finance_payroll_dashboard'),
-    path('finance/payroll/export/<int:year>/<int:month>/', export_payroll_to_excel, name='finance_export_payroll'),
 
-    path('my-profile/salary/', my_salary_profile_view, name='staff_salary_profile'),
 
     path('deposit/select-student', DepositPaymentSelectStudentView.as_view(), name='deposit_select_student'),
     path('deposit/get-class-student', deposit_get_class_students, name='deposit_get_class_students'),
@@ -253,4 +203,26 @@ urlpatterns = [
     path('other-payments/<int:other_payment_pk>/pay/', OtherPaymentClearanceCreateView.as_view(), name='finance_other_payment_pay'),
     path('other-payment-clearance/<int:pk>/revert/', OtherPaymentClearanceRevertView.as_view(), name='finance_other_payment_clearance_revert'),
 
+    path('finance/salary-settings/', salary_setting_list_view, name='finance_salary_setting_list'),
+    path('finance/salary-settings/create/', salary_setting_create_view, name='finance_salary_setting_create'),
+    path('finance/salary-settings/<int:pk>/', salary_setting_detail_view, name='finance_salary_setting_detail'),
+    path('finance/salary-settings/<int:pk>/update/', salary_setting_update_view,
+         name='finance_salary_setting_update'),
+
+    # Salary Structure URLs
+    path('finance/salary-structures/', salary_structure_list_view, name='finance_salary_structure_list'),
+    path('finance/salary-structures/create/', salary_structure_create_view,
+         name='finance_salary_structure_create'),
+    path('finance/salary-structures/<int:pk>/', salary_structure_detail_view,
+         name='finance_salary_structure_detail'),
+    path('finance/salary-structures/<int:pk>/update/', salary_structure_update_view,
+         name='finance_salary_structure_update'),
+
+    path('payroll/dashboard/', payroll_dashboard_view, name='finance_payroll_dashboard'),
+
+    path('payroll/', payroll_view, name='finance_payroll'),
+    path('payroll/process/<int:structure_id>/', process_payroll_view, name='finance_process_payroll'),
+    path('payroll/record/<int:pk>/', salary_record_detail_view, name='finance_salary_record_detail'),
+    path('payroll/record/<int:pk>/pdf/', download_payslip_pdf, name='finance_download_payslip_pdf'),
+    path('payroll/mark-paid/<int:pk>/', mark_as_paid_view, name='finance_mark_as_paid'),
 ]

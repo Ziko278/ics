@@ -1,0 +1,486 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">
+                {% if action == 'Create' %}Add{% else %}Edit{% endif %} Salary Setting
+                <a title="Go Back" onclick="window.history.back()" style="float:right" class="btn btn-sm btn-danger" aria-label="Go back">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+            </h4>
+            <p class="card-description">Configure your organization's salary calculation rules</p>
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="post" id="salarySettingForm" novalidate>
+                {% csrf_token %}
+
+                <!-- Basic Information -->
+                <div class="card border-light mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Basic Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="form-floating col-md-6 mb-3">
+                                {{ form.name }}
+                                <label for="id_name">Setting Name<span class="text-danger">*</span></label>
+                                {% if form.name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.name.errors.0 }}
+                                </div>
+                                {% endif %}
+                                <small class="text-muted">e.g., "2025 Nigeria Tax Rules"</small>
+                            </div>
+
+                            <div class="form-floating col-md-3 mb-3">
+                                {{ form.effective_from }}
+                                <label for="id_effective_from">Effective From<span class="text-danger">*</span></label>
+                                {% if form.effective_from.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.effective_from.errors.0 }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="form-floating col-md-3 mb-3">
+                                {{ form.effective_to }}
+                                <label for="id_effective_to">Effective To</label>
+                                {% if form.effective_to.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.effective_to.errors.0 }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="form-floating mb-3">
+                            {{ form.description }}
+                            <label for="id_description">Description</label>
+                            {% if form.description.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.description.errors.0 }}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="row">
+                            <div class="form-floating col-md-6 mb-3">
+                                {{ form.leave_allowance_percentage }}
+                                <label for="id_leave_allowance_percentage">Leave Allowance %<span class="text-danger">*</span></label>
+                                {% if form.leave_allowance_percentage.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.leave_allowance_percentage.errors.0 }}
+                                </div>
+                                {% endif %}
+                                <small class="text-muted">Percentage of annual basic salary</small>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check mt-4">
+                                    {{ form.include_leave_in_gross }}
+                                    <label class="form-check-label" for="id_include_leave_in_gross">
+                                        Include Leave Allowance in Gross Income
+                                    </label>
+                                    <div class="form-text">Controls whether leave allowance is included in gross income calculation</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Basic Salary Components -->
+                <div class="card border-light mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-cash-stack"></i> Basic Salary Components (Must Total 100%)
+                            <button type="button" class="btn btn-sm btn-outline-light float-end" data-bs-toggle="tooltip" title="These percentages split the monthly salary into components. Total must equal 100%.">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-info-circle"></i>
+                                These percentages split the monthly salary into components.
+                            </div>
+                            <div>
+                                Current Total: <span id="totalPercentage" class="fw-bold">0</span>%
+                                <span id="percentageStatus" class="ms-2"></span>
+                            </div>
+                        </div>
+
+                        <div id="basicComponentsContainer" class="container-empty" data-empty-message="No components added yet. Click 'Add Component' to begin."></div>
+
+                        <button type="button" class="btn btn-success btn-sm" id="addBasicComponentBtn">
+                            <i class="bi bi-plus"></i> Add Component
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Allowances -->
+                <div class="card border-light mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-gift"></i> Allowances
+                            <button type="button" class="btn btn-sm btn-outline-light float-end" data-bs-toggle="tooltip" title="Additional income items that can be fixed amounts or percentages of other components.">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Additional income items that can be fixed amounts or percentages of other components.</p>
+
+                        <div id="allowancesContainer" class="container-empty" data-empty-message="No allowances added yet. Click 'Add Allowance' to begin."></div>
+
+                        <button type="button" class="btn btn-info btn-sm" id="addAllowanceBtn">
+                            <i class="bi bi-plus"></i> Add Allowance
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tax Reliefs & Exemptions -->
+                <div class="card border-light mb-4">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">
+                            <i class="bi bi-shield-check"></i> Tax Reliefs & Exemptions
+                            <button type="button" class="btn btn-sm btn-outline-dark float-end" data-bs-toggle="tooltip" title="Deductions from gross income before calculating tax.">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Deductions from gross income before calculating tax.</p>
+
+                        <div id="reliefsContainer" class="container-empty" data-empty-message="No reliefs or exemptions added yet. Click 'Add Relief/Exemption' to begin."></div>
+
+                        <button type="button" class="btn btn-warning btn-sm" id="addReliefBtn">
+                            <i class="bi bi-plus"></i> Add Relief/Exemption
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tax Brackets -->
+                <div class="card border-light mb-4">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-percent"></i> Tax Brackets (PAYE)
+                            <button type="button" class="btn btn-sm btn-outline-light float-end" data-bs-toggle="tooltip" title="Progressive tax rates applied to taxable income.">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Progressive tax rates applied to taxable income.</p>
+
+                        <div id="taxBracketsContainer" class="container-empty" data-empty-message="No tax brackets added yet. Click 'Add Tax Bracket' to begin."></div>
+
+                        <button type="button" class="btn btn-danger btn-sm" id="addTaxBracketBtn">
+                            <i class="bi bi-plus"></i> Add Tax Bracket
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Statutory Deductions -->
+                <div class="card border-light mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-bank"></i> Statutory Deductions
+                            <button type="button" class="btn btn-sm btn-outline-light float-end" data-bs-toggle="tooltip" title="Mandatory deductions like Pension, NHF, etc.">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Mandatory deductions like Pension, NHF, etc.</p>
+
+                        <div id="statutoryDeductionsContainer" class="container-empty" data-empty-message="No statutory deductions added yet. Click 'Add Statutory Deduction' to begin."></div>
+
+                        <button type="button" class="btn btn-secondary btn-sm" id="addStatutoryDeductionBtn">
+                            <i class="bi bi-plus"></i> Add Statutory Deduction
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Other Deductions Config -->
+                <div class="card border-light mb-4">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-dash-circle"></i> Other Deductions Configuration
+                            <button type="button" class="btn btn-sm btn-outline-light float-end" data-bs-toggle="tooltip" title="Configure how other deductions (loans, advances, welfare) appear on payslips.">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Configure how other deductions (loans, advances, welfare) appear on payslips.</p>
+
+                        <div id="otherDeductionsContainer" class="container-empty" data-empty-message="No deduction configurations added yet. Click 'Add Deduction Config' to begin."></div>
+
+                        <button type="button" class="btn btn-dark btn-sm" id="addOtherDeductionBtn">
+                            <i class="bi bi-plus"></i> Add Deduction Config
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Income Items Config -->
+                <div class="card border-light mb-4">
+                    <div class="card-header" style="background-color: #17a2b8; color: white;">
+                        <h5 class="mb-0">
+                            <i class="bi bi-plus-circle"></i> Additional Income Items
+                            <button type="button" class="btn btn-sm btn-outline-light float-end" data-bs-toggle="tooltip" title="Additional income items to show on payslips (Reimbursables, Other Payables, etc.)">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Additional income items to show on payslips (Reimbursables, Other Payables, etc.)</p>
+
+                        <div id="incomeItemsContainer" class="container-empty" data-empty-message="No income items added yet. Click 'Add Income Item' to begin."></div>
+
+                        <button type="button" class="btn btn-sm" style="background-color: #17a2b8; color: white;" id="addIncomeItemBtn">
+                            <i class="bi bi-plus"></i> Add Income Item
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Hidden JSON Fields -->
+                <input type="hidden" id="id_basic_components_json" name="basic_components_json" value="{{ form.basic_components_json.value|default:'{}' }}">
+                <input type="hidden" id="id_allowances_json" name="allowances_json" value="{{ form.allowances_json.value|default:'[]' }}">
+                <input type="hidden" id="id_reliefs_exemptions_json" name="reliefs_exemptions_json" value="{{ form.reliefs_exemptions_json.value|default:'[]' }}">
+                <input type="hidden" id="id_tax_brackets_json" name="tax_brackets_json" value="{{ form.tax_brackets_json.value|default:'[]' }}">
+                <input type="hidden" id="id_income_items_json" name="income_items_json" value="{{ form.income_items_json.value|default:'[]' }}">
+                <input type="hidden" id="id_statutory_deductions_json" name="statutory_deductions_json" value="{{ form.statutory_deductions_json.value|default:'[]' }}">
+                <input type="hidden" id="id_other_deductions_config_json" name="other_deductions_config_json" value="{{ form.other_deductions_config_json.value|default:'[]' }}">
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary me-2" id="saveButton">
+                        <i class="bi bi-save"></i> Save Setting
+                    </button>
+<!--                    <button type="button" class="btn btn-secondary me-2" id="previewButton">-->
+<!--                        <i class="bi bi-eye"></i> Preview-->
+<!--                    </button>-->
+                    <a href="{% url 'finance_salary_setting_list' %}" class="btn btn-danger">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Error Modal -->
+<div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="errorModalLabel">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Validation Error
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="errorModalMessage" class="mb-0"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="previewModalLabel">
+                    <i class="bi bi-eye me-2"></i>Salary Setting Preview
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="previewContent">
+                    <!-- Preview content will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.component-item {
+    position: relative;
+    transition: all 0.3s ease;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.component-item:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.remove-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.container-empty::before {
+    content: attr(data-empty-message);
+    color: #6c757d;
+    font-style: italic;
+    display: block;
+    padding: 20px;
+    text-align: center;
+    border: 2px dashed #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.has-items::before {
+    display: none !important;
+}
+
+#totalPercentage {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.percentage-valid {
+    color: #28a745;
+}
+
+.percentage-invalid {
+    color: #dc3545;
+}
+
+/* Form validation styles */
+.form-control.is-invalid {
+    border-color: #dc3545;
+}
+
+.invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+    color: #dc3545;
+}
+
+/* Loading spinner */
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .component-item {
+        padding: 10px;
+    }
+
+    .remove-btn {
+        width: 30px;
+        height: 30px;
+    }
+}
+</style>
+
+<script src="{% static 'admin_site/scripts/salary_setting_form.js' %}"></script>
+<script>
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+
+    // Add form validation feedback
+    const form = document.getElementById('salarySettingForm');
+    form.addEventListener('submit', function(event) {
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        form.classList.add('was-validated');
+    }, false);
+
+    // Preview button functionality
+    document.getElementById('previewButton').addEventListener('click', function() {
+        // Collect form data
+        const formData = collectFormData();
+
+        // Show loading state
+        const button = this;
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...';
+        button.disabled = true;
+
+        // Generate preview
+        generatePreview(formData).then(function(previewHtml) {
+            document.getElementById('previewContent').innerHTML = previewHtml;
+            const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+            modal.show();
+
+            // Reset button state
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        }).catch(function(error) {
+            // Show error
+            document.getElementById('errorModalMessage').textContent = error.message;
+            const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+            errorModal.show();
+
+            // Reset button state
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+    });
+});
+
+// Function to collect form data
+function collectFormData() {
+    // This function should collect all form data and return it as an object
+    // Implementation depends on your specific form structure
+    return {
+        name: document.getElementById('id_name').value,
+        // ... other fields
+    };
+}
+
+// Function to generate preview
+function generatePreview(formData) {
+    return new Promise(function(resolve, reject) {
+        // This function should generate a preview of the salary setting
+        // You can make an AJAX call to a preview endpoint or generate it client-side
+        try {
+            // For now, just return a simple preview
+            let previewHtml = '<h5>' + formData.name + '</h5>';
+            previewHtml += '<p>Effective from: ' + formData.effective_from + '</p>';
+            // Add more preview content as needed
+            resolve(previewHtml);
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+</script>
+
+{% endblock %}

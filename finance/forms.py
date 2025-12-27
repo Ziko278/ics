@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import date
 from decimal import Decimal
@@ -15,7 +16,7 @@ from finance.models import FinanceSettingModel, SupplierPaymentModel, PurchaseAd
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryStructure, SalaryAdvance, \
     SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan, StaffFundingModel, \
     DiscountModel, DiscountApplicationModel, StudentDiscountModel, InvoiceModel, OtherPaymentClearanceModel, \
-    OtherPaymentModel
+    OtherPaymentModel, SalarySetting
 from human_resource.models import StaffModel
 from inventory.models import PurchaseOrderModel
 from student.models import StudentModel
@@ -719,41 +720,6 @@ class SchoolBankDetailForm(forms.ModelForm):
         return account_number
 
 
-# ===================================================================
-# Salary Structure Form
-# ===================================================================
-class SalaryStructureForm(forms.ModelForm):
-    """Form for defining a staff member's salary structure."""
-
-    class Meta:
-        model = SalaryStructure
-        fields = [
-            'staff', 'basic_salary', 'housing_allowance', 'transport_allowance',
-            'medical_allowance', 'other_allowances', 'tax_rate', 'pension_rate',
-            'effective_from', 'is_active'
-        ]
-        widgets = {
-            'staff': forms.Select(attrs={'class': 'form-select'}),
-            'basic_salary': forms.NumberInput(attrs={'class': 'form-control'}),
-            'housing_allowance': forms.NumberInput(attrs={'class': 'form-control'}),
-            'transport_allowance': forms.NumberInput(attrs={'class': 'form-control'}),
-            'medical_allowance': forms.NumberInput(attrs={'class': 'form-control'}),
-            'other_allowances': forms.NumberInput(attrs={'class': 'form-control'}),
-            'tax_rate': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'e.g., 7.5'}),
-            'pension_rate': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'e.g., 8.0'}),
-            'effective_from': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Only allow selecting active staff who don't already have a salary structure
-        if not self.instance.pk:
-            self.fields['staff'].queryset = StaffModel.objects.filter(salary_structure__isnull=True)
-        else:
-            self.fields['staff'].queryset = StaffModel.objects.filter(pk=self.instance.staff.pk)
-            self.fields['staff'].disabled = True
-
 
 # ===================================================================
 # Salary Advance Form (New)
@@ -884,6 +850,9 @@ class StaffLoanRepaymentForm(forms.ModelForm):
 # ===================================================================
 # Paysheet Row Form (For interactive paysheet)
 # ===================================================================
+# ===================================================================
+# Paysheet Row Form (For interactive paysheet)
+# ===================================================================
 class PaysheetRowForm(forms.ModelForm):
     """
     Represents a single editable row in the interactive paysheet.
@@ -891,11 +860,10 @@ class PaysheetRowForm(forms.ModelForm):
 
     class Meta:
         model = SalaryRecord
-        fields = ['bonus', 'other_deductions', 'salary_advance_deduction', 'notes', 'amount_paid']
+        fields = ['bonus', 'other_taxes', 'notes', 'amount_paid']
         widgets = {
-            'salary_advance_deduction': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
             'bonus': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
-            'other_deductions': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
+            'other_taxes': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
             'notes': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
             'amount_paid': forms.NumberInput(attrs={'class': 'form-control form-control-sm editable-field'}),
         }
@@ -903,12 +871,28 @@ class PaysheetRowForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # THIS IS THE CRITICAL LOGIC THAT SETS THE DEFAULT 'Amount Paid'
-        # It checks if the database value is 0, and if so,
-        # it pre-fills the form field with the net_salary.
+        # Set default 'Amount Paid' to net_salary if currently 0
         if self.instance and self.instance.pk:
             if self.instance.amount_paid == Decimal('0.00'):
                 self.initial['amount_paid'] = self.instance.net_salary
+
+            # Add dynamic fields for editable other deductions
+            for ded_config in self.instance.salary_setting.other_deductions_config:
+                if not ded_config.get('linked_to'):  # Only manual deductions
+                    field_name = f"ded_{ded_config['name'].lower().replace(' ', '_')}"
+                    current_value = self.instance.other_deductions.get(
+                        ded_config['name'], {}
+                    ).get('amount', 0)
+
+                    self.fields[field_name] = forms.DecimalField(
+                        required=False,
+                        initial=current_value,
+                        widget=forms.NumberInput(attrs={
+                            'class': 'form-control form-control-sm editable-field',
+                            'step': '0.01'
+                        }),
+                        label=ded_config['name']
+                    )
 
 
 class StudentFundingForm(forms.ModelForm):
@@ -1218,3 +1202,420 @@ class OtherPaymentClearanceForm(forms.ModelForm):
         if self.other_payment:
             return '₦' if self.other_payment.currency == 'naira' else '$'
         return '₦'
+
+
+class SalarySettingForm(forms.ModelForm):
+    """Form for creating/editing salary settings"""
+
+    # Basic Components as JSON (will be handled with custom widget)
+    basic_components_json = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 10, 'class': 'form-control font-monospace'}),
+        required=False,
+        help_text='JSON format for basic salary components'
+    )
+
+    # Allowances as JSON
+    allowances_json = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 10, 'class': 'form-control font-monospace'}),
+        required=False,
+        help_text='JSON format for allowances'
+    )
+
+    # Reliefs/Exemptions as JSON
+    reliefs_exemptions_json = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 10, 'class': 'form-control font-monospace'}),
+        required=False,
+        help_text='JSON format for reliefs and exemptions'
+    )
+
+    # Tax Brackets as JSON
+    tax_brackets_json = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 8, 'class': 'form-control font-monospace'}),
+        required=False,
+        help_text='JSON format for tax brackets'
+    )
+
+    # Income Items as JSON
+    income_items_json = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 6, 'class': 'form-control font-monospace'}),
+        required=False,
+        help_text='JSON format for additional income items'
+    )
+
+    # Statutory Deductions as JSON
+    statutory_deductions_json = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 8, 'class': 'form-control font-monospace'}),
+        required=False,
+        help_text='JSON format for statutory deductions'
+    )
+
+    # Other Deductions Config as JSON
+    other_deductions_config_json = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 8, 'class': 'form-control font-monospace'}),
+        required=False,
+        help_text='JSON format for other deductions configuration'
+    )
+
+    class Meta:
+        model = SalarySetting
+        fields = [
+            'name', 'description', 'effective_from', 'effective_to',
+            'leave_allowance_percentage', 'include_leave_in_gross'
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'effective_from': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'effective_to': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'leave_allowance_percentage': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'include_leave_in_gross': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # If editing an existing instance, ensure JSON fields are populated
+        if self.instance and self.instance.pk:
+            # Store the JSON data as attributes on the form for template access
+            self.basic_components_data = json.dumps(
+                self.instance.basic_components or {}, indent=2
+            )
+            self.allowances_data = json.dumps(
+                self.instance.allowances or [], indent=2
+            )
+            self.reliefs_exemptions_data = json.dumps(
+                self.instance.reliefs_exemptions or [], indent=2
+            )
+            self.tax_brackets_data = json.dumps(
+                self.instance.tax_brackets or [], indent=2
+            )
+            self.income_items_data = json.dumps(
+                self.instance.income_items or [], indent=2
+            )
+            self.statutory_deductions_data = json.dumps(
+                self.instance.statutory_deductions or [], indent=2
+            )
+            self.other_deductions_config_data = json.dumps(
+                self.instance.other_deductions_config or [], indent=2
+            )
+
+            # Also set the form field initial values
+            self.fields['basic_components_json'].initial = self.basic_components_data
+            self.fields['allowances_json'].initial = self.allowances_data
+            self.fields['reliefs_exemptions_json'].initial = self.reliefs_exemptions_data
+            self.fields['tax_brackets_json'].initial = self.tax_brackets_data
+            self.fields['income_items_json'].initial = self.income_items_data
+            self.fields['statutory_deductions_json'].initial = self.statutory_deductions_data
+            self.fields['other_deductions_config_json'].initial = self.other_deductions_config_data
+
+    def clean_basic_components_json(self):
+        """Validate and parse basic components JSON"""
+        data = self.cleaned_data.get('basic_components_json', '{}')
+        try:
+            parsed = json.loads(data)
+
+            # Validate structure
+            if not isinstance(parsed, dict):
+                raise ValidationError('Basic components must be a JSON object')
+
+            # Validate total percentage
+            total_percentage = sum(
+                float(comp.get('percentage', 0))
+                for comp in parsed.values()
+            )
+
+            if abs(total_percentage - 100) > 0.01:
+                raise ValidationError(
+                    f'Basic components must total 100%. Current total: {total_percentage}%'
+                )
+
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
+
+    def clean_allowances_json(self):
+        """Validate and parse allowances JSON"""
+        data = self.cleaned_data.get('allowances_json', '[]')
+        try:
+            parsed = json.loads(data)
+            if not isinstance(parsed, list):
+                raise ValidationError('Allowances must be a JSON array')
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
+
+    def clean_reliefs_exemptions_json(self):
+        """Validate and parse reliefs/exemptions JSON"""
+        data = self.cleaned_data.get('reliefs_exemptions_json', '[]')
+        try:
+            parsed = json.loads(data)
+            if not isinstance(parsed, list):
+                raise ValidationError('Reliefs/Exemptions must be a JSON array')
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
+
+    def clean_tax_brackets_json(self):
+        """Validate and parse tax brackets JSON"""
+        data = self.cleaned_data.get('tax_brackets_json', '[]')
+        try:
+            parsed = json.loads(data)
+            if not isinstance(parsed, list):
+                raise ValidationError('Tax brackets must be a JSON array')
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
+
+    def clean_income_items_json(self):
+        """Validate and parse income items JSON"""
+        data = self.cleaned_data.get('income_items_json', '[]')
+        try:
+            parsed = json.loads(data)
+            if not isinstance(parsed, list):
+                raise ValidationError('Income items must be a JSON array')
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
+
+    def clean_statutory_deductions_json(self):
+        """Validate and parse statutory deductions JSON"""
+        data = self.cleaned_data.get('statutory_deductions_json', '[]')
+        try:
+            parsed = json.loads(data)
+            if not isinstance(parsed, list):
+                raise ValidationError('Statutory deductions must be a JSON array')
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
+
+    def clean_other_deductions_config_json(self):
+        """Validate and parse other deductions config JSON"""
+        data = self.cleaned_data.get('other_deductions_config_json', '[]')
+        try:
+            parsed = json.loads(data)
+            if not isinstance(parsed, list):
+                raise ValidationError('Other deductions config must be a JSON array')
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        # Assign parsed JSON data to model fields
+        instance.basic_components = self.cleaned_data['basic_components_json']
+        instance.allowances = self.cleaned_data['allowances_json']
+        instance.reliefs_exemptions = self.cleaned_data['reliefs_exemptions_json']
+        instance.tax_brackets = self.cleaned_data['tax_brackets_json']
+        instance.income_items = self.cleaned_data['income_items_json']
+        instance.statutory_deductions = self.cleaned_data['statutory_deductions_json']
+        instance.other_deductions_config = self.cleaned_data['other_deductions_config_json']
+
+        if commit:
+            instance.save()
+
+        return instance
+
+
+class SalaryStructureForm(forms.ModelForm):
+    """Form for creating/editing salary structures"""
+
+    class Meta:
+        model = SalaryStructure
+        fields = [
+            'staff', 'salary_setting', 'monthly_salary',
+            'bank_name', 'account_number', 'account_name',
+            'effective_from', 'effective_to', 'is_active'
+        ]
+        widgets = {
+            'staff': forms.Select(attrs={'class': 'form-select'}),
+            'salary_setting': forms.Select(attrs={'class': 'form-select'}),
+            'monthly_salary': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'bank_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'account_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'account_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'effective_from': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'effective_to': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Filter to only active salary settings
+        self.fields['salary_setting'].queryset = SalarySetting.objects.filter(is_active=True)
+
+        # Set help texts
+        self.fields[
+            'monthly_salary'].help_text = 'Enter total monthly salary. Components will be calculated automatically.'
+        self.fields['bank_name'].required = False
+        self.fields['account_number'].required = False
+        self.fields['account_name'].required = False
+
+
+class SalaryRecordForm(forms.ModelForm):
+    """Form for editing individual salary records"""
+
+    class Meta:
+        model = SalaryRecord
+        fields = [
+            'bonus', 'other_taxes', 'notes'
+        ]
+        widgets = {
+            'bonus': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'other_taxes': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    # Dynamic fields for additional income
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.instance and self.instance.pk:
+            # Add fields for income items
+            for item_config in self.instance.salary_setting.income_items:
+                field_name = f"income_{item_config['name'].lower().replace(' ', '_')}"
+                self.fields[field_name] = forms.DecimalField(
+                    required=False,
+                    initial=self.instance.additional_income.get(item_config['name'], 0),
+                    widget=forms.NumberInput(attrs={
+                        'class': 'form-control',
+                        'step': '0.01',
+                        'min': '0',
+                        'placeholder': item_config['name']
+                    }),
+                    label=item_config['name']
+                )
+
+            # Add fields for other deductions
+            for ded_config in self.instance.salary_setting.other_deductions_config:
+                if not ded_config.get('linked_to'):  # Only manual deductions
+                    field_name = f"deduction_{ded_config['name'].lower().replace(' ', '_')}"
+                    self.fields[field_name] = forms.DecimalField(
+                        required=False,
+                        initial=self.instance.other_deductions.get(ded_config['name'], {}).get('amount', 0),
+                        widget=forms.NumberInput(attrs={
+                            'class': 'form-control',
+                            'step': '0.01',
+                            'min': '0',
+                            'placeholder': ded_config['name']
+                        }),
+                        label=ded_config['name']
+                    )
+
+
+class BulkProcessForm(forms.Form):
+    """Form for bulk salary processing"""
+
+    year = forms.ChoiceField(
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        choices=[]  # Will be populated in __init__
+    )
+    month = forms.ChoiceField(
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        choices=[(i, i) for i in range(1, 13)]
+    )
+    mark_as_paid = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Mark as paid immediately'
+    )
+    selected_staff = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        label='Select staff to process',
+        choices=[]  # Will be populated in __init__
+    )
+
+    def __init__(self, *args, **kwargs):
+        from datetime import datetime
+        current_year = datetime.now().year
+
+        super().__init__(*args, **kwargs)
+
+        # Set year choices
+        self.fields['year'].choices = [
+            (y, y) for y in range(current_year - 1, current_year + 2)
+        ]
+
+class PayrollGridRowForm(forms.ModelForm):
+    """Form for single row in payroll grid"""
+
+    class Meta:
+        model = SalaryRecord
+        fields = ['bonus', 'other_taxes', 'amount_paid', 'notes']
+        widgets = {
+            'bonus': forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm',
+                'step': '0.01'
+            }),
+            'other_taxes': forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm',
+                'step': '0.01'
+            }),
+            'amount_paid': forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm',
+                'step': '0.01'
+            }),
+            'notes': forms.TextInput(attrs={
+                'class': 'form-control form-control-sm'
+            }),
+        }
+
+    # Add dynamic deduction fields
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.instance and self.instance.pk:
+            # Add fields for editable deductions
+            for ded_config in self.instance.salary_setting.other_deductions_config:
+                if not ded_config.get('linked_to'):  # Only manual deductions
+                    field_name = f"ded_{ded_config['name'].lower().replace(' ', '_')}"
+                    current_value = self.instance.other_deductions.get(
+                        ded_config['name'], {}
+                    ).get('amount', 0)
+
+                    self.fields[field_name] = forms.DecimalField(
+                        required=False,
+                        initial=current_value,
+                        widget=forms.NumberInput(attrs={
+                            'class': 'form-control form-control-sm',
+                            'step': '0.01'
+                        })
+                    )
+
+
+class MonthYearFilterForm(forms.Form):
+    """Simple form for month/year filtering"""
+
+    year = forms.ChoiceField(
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        choices=[]  # Will be populated in __init__
+    )
+    month = forms.ChoiceField(
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        choices=[(i, i) for i in range(1, 13)]
+    )
+
+    def __init__(self, *args, **kwargs):
+        from datetime import datetime
+        current_year = datetime.now().year
+
+        super().__init__(*args, **kwargs)
+
+        self.fields['year'].choices = [
+            (y, y) for y in range(2020, current_year + 2)
+        ]

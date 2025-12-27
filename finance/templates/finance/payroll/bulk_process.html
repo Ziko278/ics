@@ -1,0 +1,167 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">{{ page_title }}</h2>
+        <a href="{% url 'finance_payroll_dashboard' %}?year={{ year }}&month={{ month }}" 
+           class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Month/Year Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">Year</label>
+                    <select name="year" class="form-select">
+                        {% for y in years %}
+                        <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Month</label>
+                    <select name="month" class="form-select">
+                        {% for num, name in months %}
+                        <option value="{{ num }}" {% if num == month %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-funnel"></i> Load
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if staff_to_process %}
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Staff to Process for {{ month_name }} {{ year }}</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="select-all">
+                        <label class="form-check-label fw-bold" for="select-all">
+                            Select All ({{ staff_to_process.count }} staff)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="list-group mb-3" style="max-height: 500px; overflow-y: auto;">
+                    {% for staff in staff_to_process %}
+                    <label class="list-group-item">
+                        <div class="d-flex align-items-center">
+                            <input class="form-check-input me-3 staff-checkbox" 
+                                   type="checkbox" 
+                                   name="selected_staff" 
+                                   value="{{ staff.id }}"
+                                   id="staff-{{ staff.id }}">
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ staff }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ staff.staff_id }}</small>
+                                    </div>
+                                    <div class="text-end">
+                                        {% with structure=staff.salary_structures.first %}
+                                        <strong>₦{{ structure.monthly_salary|floatformat:2|intcomma }}</strong>
+                                        <br>
+                                        <small class="text-muted">Monthly Salary</small>
+                                        {% endwith %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Note:</strong> Only staff without deductions or bonuses should be processed in bulk.
+                    Staff with loans, advances, or bonuses should be processed individually.
+                </div>
+
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mark_as_paid" id="mark-paid">
+                        <label class="form-check-label" for="mark-paid">
+                            Mark as paid immediately (records will be created and marked as paid)
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2">
+            <a href="{% url 'finance_payroll_dashboard' %}?year={{ year }}&month={{ month }}" 
+               class="btn btn-secondary">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-success" id="process-btn" disabled>
+                <i class="bi bi-check-circle"></i> Process Selected Staff
+            </button>
+        </div>
+    </form>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        <strong>No staff to process.</strong> All staff with active salary structures have already been processed for {{ month_name }} {{ year }}.
+    </div>
+    <a href="{% url 'finance_payroll_dashboard' %}?year={{ year }}&month={{ month }}" 
+       class="btn btn-primary">
+        <i class="bi bi-arrow-left"></i> Back to Dashboard
+    </a>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAllCheckbox = document.getElementById('select-all');
+    const staffCheckboxes = document.querySelectorAll('.staff-checkbox');
+    const processBtn = document.getElementById('process-btn');
+    
+    // Select/Deselect all
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            staffCheckboxes.forEach(cb => {
+                cb.checked = selectAllCheckbox.checked;
+            });
+            updateProcessButton();
+        });
+    }
+    
+    // Update process button state
+    staffCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateProcessButton);
+    });
+    
+    function updateProcessButton() {
+        const anyChecked = Array.from(staffCheckboxes).some(cb => cb.checked);
+        processBtn.disabled = !anyChecked;
+        
+        // Update select all checkbox state
+        const allChecked = Array.from(staffCheckboxes).every(cb => cb.checked);
+        const someChecked = Array.from(staffCheckboxes).some(cb => cb.checked);
+        if (selectAllCheckbox) {
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = someChecked && !allChecked;
+        }
+    }
+    
+    updateProcessButton();
+});
+</script>
+{% endblock %}

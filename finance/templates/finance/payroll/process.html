@@ -1,0 +1,698 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+{% load finance_filters %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="card-title">Process Payroll - {{ structure.staff }}</h4>
+        <a href="{% url 'finance_payroll_dashboard' %}?year={{ current_year }}&month={{ current_month }}"
+           class="btn btn-secondary">
+          <i class="bi bi-arrow-left"></i> Back
+        </a>
+      </div>
+
+      <form method="post" id="payrollForm">
+        {% csrf_token %}
+
+        <!-- Basic Information -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h6>Staff Information</h6>
+              </div>
+              <div class="card-body">
+                <p><strong>Name:</strong> {{ structure.staff }}</p>
+                <p><strong>Department:</strong> {{ structure.staff.department|default:"N/A" }}</p>
+                <p><strong>Period:</strong> {{ month_name }} {{ current_year }}</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h6>Basic Salary</h6>
+              </div>
+              <div class="card-body">
+                <p><strong>Monthly Salary:</strong> ₦{{ structure.monthly_salary|floatformat:2|intcomma }}</p>
+                <div class="mb-3">
+                  <label for="bonus" class="form-label">Bonus</label>
+                  <input type="number" class="form-control" id="bonus" name="bonus"
+                         value="{{ existing_record.bonus|default:0 }}" step="0.01" min="0">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Basic Components Breakdown -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h6>Basic Salary Components</h6>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Component</th>
+                    <th>Percentage</th>
+                    <th>Amount (₦)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for code, component in structure.salary_setting.basic_components.items %}
+                  <tr>
+                    <td>{{ component.name }}</td>
+                    <td>{{ component.percentage }}%</td>
+                    <td class="text-end">{{ structure.monthly_salary|mul:component.percentage|div:100|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Allowances -->
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h6>Additional Allowances</h6>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="addAllowanceBtn">
+              <i class="bi bi-plus"></i> Add Allowance
+            </button>
+          </div>
+          <div class="card-body">
+            <!-- Allowance Selection (Hidden by default) -->
+            <div id="allowanceSelection" class="mb-3" style="display: none;">
+              <div class="row">
+                <div class="col-md-6">
+                  <select class="form-select" id="allowanceSelect">
+                    <option value="">Select an allowance...</option>
+                    {% for allowance in structure.salary_setting.income_items %}
+                    <option value="{{ allowance.name }}">{{ allowance.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <input type="number" class="form-control" id="allowanceAmount"
+                         placeholder="Amount" step="0.01" min="0">
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-success" id="confirmAllowanceBtn">
+                    <i class="bi bi-check"></i> Add
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" id="cancelAllowanceBtn">
+                    <i class="bi bi-x"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Allowances Table -->
+            <div class="table-responsive">
+              <table class="table table-sm" id="allowancesTable">
+                <thead>
+                  <tr>
+                    <th>Allowance</th>
+                    <th>Amount (₦)</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Existing allowances will be populated here -->
+                  {% for name, amount in additional_income.items %}
+                  {% if amount|floatformat != '0' %}
+                  <tr data-allowance="{{ name }}">
+                    <td>{{ name }}</td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm allowance-input"
+                             name="allowance_{{ name }}"
+                             value="{{ amount|floatformat:2 }}"
+                             step="0.01" min="0" data-allowance="{{ name }}">
+                    </td>
+                    <td>
+                      <button type="button" class="btn btn-sm btn-outline-danger remove-allowance">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  {% endif %}
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% if not additional_income %}
+              <p class="text-muted text-center py-3">No allowances added yet. Click "Add Allowance" to add one.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Deductions -->
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h6>Other Deductions</h6>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="addDeductionBtn">
+              <i class="bi bi-plus"></i> Add Deduction
+            </button>
+          </div>
+          <div class="card-body">
+            <!-- Deduction Selection (Hidden by default) -->
+            <div id="deductionSelection" class="mb-3" style="display: none;">
+              <div class="row">
+                <div class="col-md-6">
+                  <select class="form-select" id="deductionSelect">
+                    <option value="">Select a deduction...</option>
+                    {% for deduction in structure.salary_setting.other_deductions_config %}
+                    {% if not deduction.linked_to %}
+                    <option value="{{ deduction.name }}">{{ deduction.name }}</option>
+                    {% endif %}
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <input type="number" class="form-control" id="deductionAmount"
+                         placeholder="Amount" step="0.01" min="0">
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-success" id="confirmDeductionBtn">
+                    <i class="bi bi-check"></i> Add
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" id="cancelDeductionBtn">
+                    <i class="bi bi-x"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Deductions Table -->
+            <div class="table-responsive">
+              <table class="table table-sm" id="deductionsTable">
+                <thead>
+                  <tr>
+                    <th>Deduction</th>
+                    <th>Amount (₦)</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Existing deductions will be populated here -->
+                  {% for name, amount in other_deductions.items %}
+                  {% if amount|floatformat != '0' %}
+                  <tr data-deduction="{{ name }}">
+                    <td>{{ name }}</td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm deduction-input"
+                             name="deduction_{{ name }}"
+                             value="{{ amount|floatformat:2 }}"
+                             step="0.01" min="0" data-deduction="{{ name }}">
+                    </td>
+                    <td>
+                      <button type="button" class="btn btn-sm btn-outline-danger remove-deduction">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  {% endif %}
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% if not other_deductions %}
+              <p class="text-muted text-center py-3">No deductions added yet. Click "Add Deduction" to add one.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h6>Payroll Summary</h6>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="table-responsive">
+                  <table class="table table-sm">
+                    <tr>
+                      <td>Basic Salary</td>
+                      <td class="text-end" id="basicSalary">₦{{ structure.monthly_salary|floatformat:2|intcomma }}</td>
+                    </tr>
+                    <tr>
+                      <td>Bonus</td>
+                      <td class="text-end" id="bonusAmount">₦0.00</td>
+                    </tr>
+                    <tr>
+                      <td>Additional Allowances</td>
+                      <td class="text-end" id="allowancesTotal">₦0.00</td>
+                    </tr>
+                    <tr class="table-primary">
+                      <td><strong>Gross Income</strong></td>
+                      <td class="text-end"><strong id="grossIncome">₦{{ structure.monthly_salary|floatformat:2|intcomma }}</strong></td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="table-responsive">
+                  <table class="table table-sm">
+                    <tr>
+                      <td>Statutory Deductions</td>
+                      <td class="text-end" id="statutoryDeductions">₦0.00</td>
+                    </tr>
+                    <tr>
+                      <td>PAYE Tax</td>
+                      <td class="text-end" id="payeTax">₦0.00</td>
+                    </tr>
+                    <tr>
+                      <td>Other Deductions</td>
+                      <td class="text-end" id="otherDeductions">₦0.00</td>
+                    </tr>
+                    <tr class="table-success">
+                      <td><strong>Take Home Pay</strong></td>
+                      <td class="text-end"><strong id="takeHomePay">₦{{ structure.monthly_salary|floatformat:2|intcomma }}</strong></td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="mb-4">
+          <label for="notes" class="form-label">Notes</label>
+          <textarea class="form-control" id="notes" name="notes" rows="3">{{ existing_record.notes|default:"" }}</textarea>
+        </div>
+
+        <!-- Actions -->
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'finance_payroll_dashboard' %}?year={{ current_year }}&month={{ current_month }}"
+             class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save"></i> Save Payroll
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Salary Setting Data for JavaScript -->
+<script id="salarySettingData" type="application/json">{{ salary_setting_data|safe }}</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const basicSalary = {{ structure.monthly_salary }};
+  const bonusInput = document.getElementById('bonus');
+
+  // Parse salary setting data
+  let salarySettingData = null;
+  try {
+    const el = document.getElementById('salarySettingData');
+    if (el && el.textContent) {
+      salarySettingData = JSON.parse(el.textContent);
+    }
+  } catch (e) {
+    console.error('Failed to parse salary setting data:', e);
+  }
+
+  // Elements for allowance management
+  const addAllowanceBtn = document.getElementById('addAllowanceBtn');
+  const allowanceSelection = document.getElementById('allowanceSelection');
+  const allowanceSelect = document.getElementById('allowanceSelect');
+  const allowanceAmount = document.getElementById('allowanceAmount');
+  const confirmAllowanceBtn = document.getElementById('confirmAllowanceBtn');
+  const cancelAllowanceBtn = document.getElementById('cancelAllowanceBtn');
+  const allowancesTable = document.getElementById('allowancesTable').querySelector('tbody');
+
+  // Elements for deduction management
+  const addDeductionBtn = document.getElementById('addDeductionBtn');
+  const deductionSelection = document.getElementById('deductionSelection');
+  const deductionSelect = document.getElementById('deductionSelect');
+  const deductionAmount = document.getElementById('deductionAmount');
+  const confirmDeductionBtn = document.getElementById('confirmDeductionBtn');
+  const cancelDeductionBtn = document.getElementById('cancelDeductionBtn');
+  const deductionsTable = document.getElementById('deductionsTable').querySelector('tbody');
+
+  // Helper function to calculate amount based on component codes
+  function calculateAmountBasedOnComponents(basedOn) {
+    if (!basedOn) return 0;
+
+    // Handle special cases
+    if (basedOn.toUpperCase() === 'TOTAL') {
+      return basicSalary;
+    }
+
+    // Handle component codes (case-insensitive)
+    const codes = basedOn.split('+').map(code => code.trim().toUpperCase());
+    let totalAmount = 0;
+
+    codes.forEach(code => {
+      // Find component by code
+      {% for code, component in structure.salary_setting.basic_components.items %}
+      if (code === '{{ component.code|upper }}') {
+        totalAmount += basicSalary * ({{ component.percentage }} / 100);
+      }
+      {% endfor %}
+    });
+
+    return totalAmount;
+  }
+
+  // Calculate initial values
+  updateCalculations();
+
+  // Add event listeners
+  bonusInput.addEventListener('input', updateCalculations);
+
+  // Allowance management
+  addAllowanceBtn.addEventListener('click', function() {
+    allowanceSelection.style.display = 'block';
+    allowanceSelect.focus();
+  });
+
+  cancelAllowanceBtn.addEventListener('click', function() {
+    allowanceSelection.style.display = 'none';
+    allowanceSelect.value = '';
+    allowanceAmount.value = '';
+  });
+
+  confirmAllowanceBtn.addEventListener('click', function() {
+    const allowanceName = allowanceSelect.value;
+    const amount = parseFloat(allowanceAmount.value) || 0;
+
+    if (!allowanceName) {
+      alert('Please select an allowance');
+      return;
+    }
+
+    if (amount <= 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+
+    // Check if allowance already exists
+    if (document.querySelector(`[data-allowance="${allowanceName}"]`)) {
+      alert('This allowance has already been added');
+      return;
+    }
+
+    // Add allowance to table
+    const row = document.createElement('tr');
+    row.setAttribute('data-allowance', allowanceName);
+    row.innerHTML = `
+      <td>${allowanceName}</td>
+      <td>
+        <input type="number" class="form-control form-control-sm allowance-input"
+               name="allowance_${allowanceName}"
+               value="${amount.toFixed(2)}"
+               step="0.01" min="0" data-allowance="${allowanceName}">
+      </td>
+      <td>
+        <button type="button" class="btn btn-sm btn-outline-danger remove-allowance">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    `;
+
+    allowancesTable.appendChild(row);
+
+    // Add event listener to the new input
+    const newInput = row.querySelector('.allowance-input');
+    newInput.addEventListener('input', updateCalculations);
+
+    // Add event listener to the remove button
+    const removeBtn = row.querySelector('.remove-allowance');
+    removeBtn.addEventListener('click', function() {
+      row.remove();
+      updateCalculations();
+      checkEmptyTable('allowancesTable', 'No allowances added yet. Click "Add Allowance" to add one.');
+    });
+
+    // Reset selection form
+    allowanceSelection.style.display = 'none';
+    allowanceSelect.value = '';
+    allowanceAmount.value = '';
+
+    // Hide empty message if shown
+    const emptyMessage = allowancesTable.parentElement.querySelector('.text-muted');
+    if (emptyMessage) {
+      emptyMessage.style.display = 'none';
+    }
+
+    // Update calculations
+    updateCalculations();
+  });
+
+  // Deduction management
+  addDeductionBtn.addEventListener('click', function() {
+    deductionSelection.style.display = 'block';
+    deductionSelect.focus();
+  });
+
+  cancelDeductionBtn.addEventListener('click', function() {
+    deductionSelection.style.display = 'none';
+    deductionSelect.value = '';
+    deductionAmount.value = '';
+  });
+
+  confirmDeductionBtn.addEventListener('click', function() {
+    const deductionName = deductionSelect.value;
+    const amount = parseFloat(deductionAmount.value) || 0;
+
+    if (!deductionName) {
+      alert('Please select a deduction');
+      return;
+    }
+
+    if (amount <= 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+
+    // Check if deduction already exists
+    if (document.querySelector(`[data-deduction="${deductionName}"]`)) {
+      alert('This deduction has already been added');
+      return;
+    }
+
+    // Add deduction to table
+    const row = document.createElement('tr');
+    row.setAttribute('data-deduction', deductionName);
+    row.innerHTML = `
+      <td>${deductionName}</td>
+      <td>
+        <input type="number" class="form-control form-control-sm deduction-input"
+               name="deduction_${deductionName}"
+               value="${amount.toFixed(2)}"
+               step="0.01" min="0" data-deduction="${deductionName}">
+      </td>
+      <td>
+        <button type="button" class="btn btn-sm btn-outline-danger remove-deduction">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    `;
+
+    deductionsTable.appendChild(row);
+
+    // Add event listener to the new input
+    const newInput = row.querySelector('.deduction-input');
+    newInput.addEventListener('input', updateCalculations);
+
+    // Add event listener to the remove button
+    const removeBtn = row.querySelector('.remove-deduction');
+    removeBtn.addEventListener('click', function() {
+      row.remove();
+      updateCalculations();
+      checkEmptyTable('deductionsTable', 'No deductions added yet. Click "Add Deduction" to add one.');
+    });
+
+    // Reset selection form
+    deductionSelection.style.display = 'none';
+    deductionSelect.value = '';
+    deductionAmount.value = '';
+
+    // Hide empty message if shown
+    const emptyMessage = deductionsTable.parentElement.querySelector('.text-muted');
+    if (emptyMessage) {
+      emptyMessage.style.display = 'none';
+    }
+
+    // Update calculations
+    updateCalculations();
+  });
+
+  // Add event listeners to existing inputs
+  document.querySelectorAll('.allowance-input').forEach(input => {
+    input.addEventListener('input', updateCalculations);
+  });
+
+  document.querySelectorAll('.deduction-input').forEach(input => {
+    input.addEventListener('input', updateCalculations);
+  });
+
+  // Add event listeners to existing remove buttons
+  document.querySelectorAll('.remove-allowance').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const row = btn.closest('tr');
+      row.remove();
+      updateCalculations();
+      checkEmptyTable('allowancesTable', 'No allowances added yet. Click "Add Allowance" to add one.');
+    });
+  });
+
+  document.querySelectorAll('.remove-deduction').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const row = btn.closest('tr');
+      row.remove();
+      updateCalculations();
+      checkEmptyTable('deductionsTable', 'No deductions added yet. Click "Add Deduction" to add one.');
+    });
+  });
+
+  function updateCalculations() {
+    const bonus = parseFloat(bonusInput.value) || 0;
+
+    // Calculate allowances total
+    let allowancesTotal = 0;
+    document.querySelectorAll('.allowance-input').forEach(input => {
+      allowancesTotal += parseFloat(input.value) || 0;
+    });
+
+    // Calculate deductions total
+    let deductionsTotal = 0;
+    document.querySelectorAll('.deduction-input').forEach(input => {
+      deductionsTotal += parseFloat(input.value) || 0;
+    });
+
+    // Calculate gross income for display (includes allowances)
+    const grossIncome = basicSalary + bonus + allowancesTotal;
+
+    // Calculate statutory deductions using salary setting data
+    let statutoryDeductions = 0;
+    if (salarySettingData && salarySettingData.statutory_deductions) {
+      salarySettingData.statutory_deductions.forEach(deduction => {
+        if (deduction.is_active !== false) {
+          const percentage = parseFloat(deduction.percentage) || 0;
+          const baseAmount = calculateAmountBasedOnComponents(deduction.based_on);
+          statutoryDeductions += (baseAmount * percentage / 100);
+        }
+      });
+    }
+
+    // Calculate total reliefs
+    let totalReliefs = 0;
+    if (salarySettingData && salarySettingData.reliefs_exemptions) {
+      salarySettingData.reliefs_exemptions.forEach(relief => {
+        let amount = 0;
+
+        // First determine the base amount based on 'based_on' property
+        let baseAmount = 0;
+        if (relief.based_on) {
+          if (relief.based_on.toUpperCase() === 'GROSS_INCOME') {
+            baseAmount = (basicSalary + bonus) * 12; // ONLY BASIC + BONUS - NO ALLOWANCES
+          } else {
+            // Handle component codes
+            baseAmount = calculateAmountBasedOnComponents(relief.based_on) * 12;
+          }
+        } else {
+          // If no based_on specified, use basic salary + bonus
+          baseAmount = (basicSalary + bonus) * 12; // ONLY BASIC + BONUS - NO ALLOWANCES
+        }
+
+        // Now calculate the relief amount based on the base amount
+        if (relief.formula_type === 'percentage_plus_fixed') {
+          // Handle percentage + fixed amount
+          if (relief.percentage) {
+            amount += (baseAmount * parseFloat(relief.percentage) / 100);
+          }
+          if (relief.fixed_amount) {
+            amount += parseFloat(relief.fixed_amount) || 0;
+          }
+        } else {
+          // Handle standard percentage or fixed
+          if (relief.percentage) {
+            amount += (baseAmount * parseFloat(relief.percentage) / 100);
+          }
+          if (relief.fixed_amount) {
+            amount += parseFloat(relief.fixed_amount) || 0;
+          }
+        }
+
+        totalReliefs += amount;
+      });
+    }
+
+    // Add statutory deductions to total reliefs
+    totalReliefs += statutoryDeductions * 12; // Convert to annual
+
+    // Calculate taxable income (annual) - ONLY BASIC + BONUS
+    const annualGrossIncome = (basicSalary + bonus) * 12; // NO ALLOWANCES
+    const taxableIncome = Math.max(0, annualGrossIncome - totalReliefs);
+
+    // Calculate PAYE tax using tax brackets from salary setting
+    let annualTax = 0;
+    if (salarySettingData && salarySettingData.tax_brackets) {
+      let remainingIncome = taxableIncome;
+
+      salarySettingData.tax_brackets.forEach(bracket => {
+        if (remainingIncome > 0) {
+          const bracketLimit = bracket.limit !== null && bracket.limit !== undefined
+            ? parseFloat(bracket.limit)
+            : remainingIncome; // null limit means "all remaining"
+
+          const taxableAmount = Math.min(remainingIncome, bracketLimit);
+          const taxRate = parseFloat(bracket.rate) || 0;
+          const taxAmount = taxableAmount * taxRate / 100;
+
+          annualTax += taxAmount;
+          remainingIncome -= taxableAmount;
+        }
+      });
+    }
+
+    // Convert to monthly
+    const monthlyTax = annualTax / 12;
+
+    // Calculate take home pay
+    const takeHomePay = grossIncome - statutoryDeductions - monthlyTax - deductionsTotal;
+
+    // Update display
+    document.getElementById('bonusAmount').textContent = formatCurrency(bonus);
+    document.getElementById('allowancesTotal').textContent = formatCurrency(allowancesTotal);
+    document.getElementById('grossIncome').textContent = formatCurrency(grossIncome);
+    document.getElementById('statutoryDeductions').textContent = formatCurrency(statutoryDeductions);
+    document.getElementById('payeTax').textContent = formatCurrency(monthlyTax);
+    document.getElementById('otherDeductions').textContent = formatCurrency(deductionsTotal);
+    document.getElementById('takeHomePay').textContent = formatCurrency(takeHomePay);
+  }
+
+  function formatCurrency(amount) {
+    return '₦' + amount.toLocaleString('en-NG', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function checkEmptyTable(tableId, message) {
+    const table = document.getElementById(tableId);
+    const tbody = table.querySelector('tbody');
+
+    if (tbody.children.length === 0) {
+      const emptyMessage = document.createElement('p');
+      emptyMessage.className = 'text-muted text-center py-3';
+      emptyMessage.textContent = message;
+      table.parentElement.appendChild(emptyMessage);
+    }
+  }
+});
+</script>
+{% endblock %}

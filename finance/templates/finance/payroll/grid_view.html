@@ -1,0 +1,264 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+{% load finance_filters %}
+
+{% block 'main' %}
+<style>
+.grid-table { 
+    font-size: 0.85rem; 
+}
+.grid-table input[type="number"], 
+.grid-table input[type="text"] { 
+    padding: 0.25rem; 
+    font-size: 0.8rem;
+    width: 100%;
+    min-width: 80px;
+}
+.grid-table th { 
+    position: sticky; 
+    top: 0; 
+    background: white; 
+    z-index: 10;
+    font-size: 0.75rem;
+}
+.paid-row { 
+    background-color: #e9ecef; 
+    opacity: 0.7; 
+}
+.table-container {
+    max-height: 600px;
+    overflow: auto;
+}
+.net-salary-col {
+    background-color: #fff3cd;
+    font-weight: bold;
+}
+</style>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">{{ page_title }}</h2>
+        <div class="btn-group">
+            <a href="{% url 'finance_payroll_dashboard' %}?year={{ year }}&month={{ month }}" 
+               class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Dashboard
+            </a>
+            <a href="{% url 'finance_payroll_export' year=year month=month %}" 
+               class="btn btn-success">
+                <i class="bi bi-file-earmark-excel"></i> Export
+            </a>
+        </div>
+    </div>
+
+    <!-- Month/Year Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">Year</label>
+                    <select name="year" class="form-select">
+                        {% for y in years %}
+                        <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Month</label>
+                    <select name="month" class="form-select">
+                        {% for num, name in months %}
+                        <option value="{{ num }}" {% if num == month %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-funnel"></i> Load
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if records %}
+    <form method="post" id="grid-form">
+        {% csrf_token %}
+        
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ month_name }} {{ year }} Payroll - {{ records.count }} Staff</h5>
+                    <div>
+                        <input type="checkbox" class="form-check-input" id="select-all">
+                        <label class="form-check-label ms-2" for="select-all">Select All</label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-container">
+                    <table class="table table-sm table-bordered grid-table mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 30px;">
+                                    <input type="checkbox" id="select-all-header" class="form-check-input">
+                                </th>
+                                <th style="min-width: 150px;">Staff</th>
+                                <th style="min-width: 120px;">Monthly Salary</th>
+
+                                <!-- Dynamic deduction columns -->
+                                {% if records.first %}
+                                    {% for ded_config in records.first.salary_setting.other_deductions_config %}
+                                        {% if not ded_config.linked_to %}
+                                        <th style="min-width: 100px;">{{ ded_config.name }}</th>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                                
+
+                                <th style="min-width: 120px;" class="net-salary-col">Net Salary</th>
+                                <th style="min-width: 120px;">Amount Paid</th>
+                                <th style="min-width: 150px;">Notes</th>
+                                <th style="min-width: 100px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in records %}
+                            <tr class="{% if record.payment_status == 'paid' %}paid-row{% endif %}">
+                                <td>
+                                    <input type="checkbox" 
+                                           name="mark_as_paid" 
+                                           value="{{ record.id }}"
+                                           class="form-check-input pay-checkbox"
+                                           {% if record.payment_status == 'paid' %}disabled{% endif %}>
+                                </td>
+                                <td>
+                                    <strong>{{ record.staff }}</strong><br>
+                                    <small class="text-muted">{{ record.staff.staff_id }}</small>
+                                </td>
+                                <td class="text-end">
+                                    ₦{{ record.monthly_salary|floatformat:2|intcomma }}
+                                </td>
+
+                                <!-- Dynamic deduction inputs -->
+                                {% for ded_config in record.salary_setting.other_deductions_config %}
+                                    {% if not ded_config.linked_to %}
+                                    <td>
+                                        <input type="number" 
+                                               name="ded_{{ ded_config.name|lower|cut:' ' }}_{{ record.id }}" 
+                                               value="{{ record.other_deductions|get_item:ded_config.name|get_item:'amount'|default:0 }}"
+                                               step="0.01" 
+                                               min="0"
+                                               class="form-control form-control-sm"
+                                               {% if record.payment_status == 'paid' %}readonly{% endif %}>
+                                    </td>
+                                    {% endif %}
+                                {% endfor %}
+
+                                <td class="text-end net-salary-col">
+                                    <strong>₦{{ record.net_salary|floatformat:2|intcomma }}</strong>
+                                </td>
+                                <td>
+                                    <input type="number" 
+                                           name="amount_paid_{{ record.id }}" 
+                                           value="{{ record.amount_paid }}"
+                                           step="0.01" 
+                                           min="0"
+                                           class="form-control form-control-sm"
+                                           {% if record.payment_status == 'paid' %}readonly{% endif %}>
+                                </td>
+                                <td>
+                                    <input type="text" 
+                                           name="notes_{{ record.id }}" 
+                                           value="{{ record.notes|default:'' }}"
+                                           class="form-control form-control-sm"
+                                           {% if record.payment_status == 'paid' %}readonly{% endif %}>
+                                </td>
+                                <td>
+                                    {% if record.payment_status == 'paid' %}
+                                        <span class="badge bg-success">Paid</span>
+                                    {% elif record.payment_status == 'partially_paid' %}
+                                        <span class="badge bg-warning">Partial</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Pending</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <div class="text-muted">
+                <i class="bi bi-info-circle"></i> 
+                Select records and click "Mark as Paid" to process payments
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-save"></i> Save All Changes
+                </button>
+                <button type="submit" class="btn btn-success" 
+                        onclick="return confirm('Mark selected records as PAID?')">
+                    <i class="bi bi-cash-coin"></i> Mark Selected as Paid
+                </button>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        <strong>No records found.</strong> Process payroll for {{ month_name }} {{ year }} first.
+    </div>
+    <a href="{% url 'finance_payroll_bulk_process' %}?year={{ year }}&month={{ month }}" 
+       class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Process Payroll
+    </a>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Select all functionality
+    const selectAllCheckbox = document.getElementById('select-all');
+    const selectAllHeader = document.getElementById('select-all-header');
+    const payCheckboxes = document.querySelectorAll('.pay-checkbox:not(:disabled)');
+    
+    function syncSelectAll() {
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                payCheckboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+                if (selectAllHeader) selectAllHeader.checked = selectAllCheckbox.checked;
+            });
+        }
+        
+        if (selectAllHeader) {
+            selectAllHeader.addEventListener('change', function() {
+                payCheckboxes.forEach(cb => cb.checked = selectAllHeader.checked);
+                if (selectAllCheckbox) selectAllCheckbox.checked = selectAllHeader.checked;
+            });
+        }
+    }
+    
+    syncSelectAll();
+    
+    // Warn before leaving if there are unsaved changes
+    let formChanged = false;
+    const form = document.getElementById('grid-form');
+    const inputs = form.querySelectorAll('input[type="number"], input[type="text"]');
+    
+    inputs.forEach(input => {
+        input.addEventListener('change', () => formChanged = true);
+    });
+    
+    window.addEventListener('beforeunload', function(e) {
+        if (formChanged) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+    
+    form.addEventListener('submit', () => formChanged = false);
+});
+</script>
+{% endblock %}

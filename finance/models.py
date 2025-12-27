@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import FileExtensionValidator, MinValueValidator
+from django.core.validators import FileExtensionValidator, MinValueValidator, MaxValueValidator
 from django.db import models
 from django.apps import apps
 from django.db import OperationalError
@@ -491,6 +491,7 @@ class FeePaymentModel(models.Model):
         CASH = 'cash', 'Cash'
         BANK_TRANSFER = 'bank_transfer', 'Bank Transfer'
         BANK_TELLER = 'bank_teller', 'Bank Teller'
+        POS = 'pos', 'POS'
         DOLLAR_PAY = 'dollar_pay', 'Dollar Pay'
         OTHERS = 'others', 'OTHERS'
 
@@ -881,51 +882,6 @@ class SchoolBankDetail(models.Model):
         return f"{self.bank_name} - {self.account_number}"
 
 
-class SalaryStructure(models.Model):
-    """Defines the salary components for a single staff member."""
-    staff = models.OneToOneField(StaffModel, related_name='salary_structure', on_delete=models.CASCADE)
-    basic_salary = models.DecimalField(max_digits=12, decimal_places=2)
-    housing_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
-    transport_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
-    medical_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
-    other_allowances = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
-    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
-                                   help_text="Percentage (e.g., 7.5)")
-    pension_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
-                                       help_text="Percentage (e.g., 8)")
-    effective_from = models.DateField(default=timezone.now)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Salary Structure"
-
-    @property
-    def gross_salary(self):
-        return (
-                    self.basic_salary + self.housing_allowance + self.transport_allowance + self.medical_allowance + self.other_allowances)
-
-    @property
-    def tax_amount(self):
-        return self.gross_salary * (self.tax_rate / 100)
-
-    @property
-    def pension_amount(self):
-        return self.basic_salary * (self.pension_rate / 100)
-
-    @property
-    def total_deductions(self):
-        return self.tax_amount + self.pension_amount
-
-    @property
-    def net_salary(self):
-        return self.gross_salary - self.total_deductions
-
-    def __str__(self):
-        return f"Salary for {self.staff.staff_profile.user.get_full_name()}"
-
-
 class SalaryAdvance(models.Model):
     """Tracks salary advance requests for staff."""
 
@@ -1037,87 +993,6 @@ class StaffLoanRepayment(models.Model):
     def __str__(self):
         return f"Loan Repayment of {self.amount_paid} for {self.staff}"
 
-
-class SalaryRecord(models.Model):
-    """A historical snapshot of a staff member's payslip for a specific month."""
-    staff = models.ForeignKey(StaffModel, on_delete=models.PROTECT, related_name='payslips')
-    month = models.PositiveIntegerField()
-    year = models.PositiveIntegerField()
-
-    # NEW: Added Session and Term fields for auditing
-    session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL, null=True, blank=True)
-    term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True)
-
-    # Snapshot fields from SalaryStructure
-    basic_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    housing_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    transport_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    medical_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    other_allowances = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    pension_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
-    # Month-specific adjustments
-    bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    other_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0,
-                                           help_text="e.g., salary advance repayment")
-    salary_advance_deduction = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
-    notes = models.CharField(max_length=255, blank=True, null=True)
-
-    # Payment Tracking
-    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    is_paid = models.BooleanField(default=False)
-    paid_date = models.DateField(null=True, blank=True)
-    paid_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-
-    class Meta:
-        unique_together = ('staff', 'month', 'year')
-        ordering = ['-year', '-month']
-
-    def save(self, *args, **kwargs):
-        # Auto-populate session and term if not set
-        if self.session is None or self.term is None:
-            setting = SchoolSettingModel.objects.first()
-            if setting:
-                if self.session is None: self.session = setting.session
-                if self.term is None: self.term = setting.term
-        super().save(*args, **kwargs)
-
-    @property
-    def gross_salary(self):
-        return (
-                    self.basic_salary + self.housing_allowance + self.transport_allowance + self.medical_allowance + self.other_allowances + self.bonus)
-
-    @property
-    def total_deductions(self):
-        return self.tax_amount + self.pension_amount + self.salary_advance_deduction + self.other_deductions
-
-    @property
-    def net_salary(self):
-        return self.gross_salary - self.total_deductions
-
-    @property
-    def balance_due(self):
-        return self.net_salary - self.amount_paid
-
-    @property
-    def payment_status(self):
-        if self.balance_due <= 0 and self.net_salary > 0:
-            return "Paid"
-        if self.amount_paid > 0:
-            return "Partially Paid"
-        return "Pending"
-
-    @property
-    def month_name(self):
-        """Returns the full name of the month."""
-        if self.month:
-            return calendar.month_name[self.month]
-        return ""
-
-    def __str__(self):
-        return f"Payslip for {self.staff.staff_profile.user.get_full_name()} - {self.month}/{self.year}"
 
 
 class SupplierPaymentModel(models.Model):
@@ -1507,3 +1382,442 @@ class OtherPaymentClearanceModel(models.Model):
     @property
     def currency_symbol(self):
         return '₦' if self.currency == 'naira' else '$'
+
+
+class SalarySetting(models.Model):
+    """
+    Configurable salary calculation settings.
+    Multiple settings can exist but only one is active at a time.
+    Settings are locked once used to process salary.
+    """
+    name = models.CharField(max_length=200, help_text="e.g., '2025 Tax Rules'")
+    description = models.TextField(blank=True, null=True)
+
+    is_active = models.BooleanField(default=False, help_text="Only one setting can be active")
+    is_locked = models.BooleanField(default=False, help_text="Locked once used in salary processing")
+
+    effective_from = models.DateField()
+    effective_to = models.DateField(blank=True, null=True)
+
+    # Leave Allowance Configuration
+    leave_allowance_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('10.00'),
+        help_text="Percentage of annual basic salary for leave allowance"
+    )
+
+    # Basic Salary Components (must total 100%)
+    # Format: {"basic": {"code": "B", "percentage": 40.0, "name": "Basic Salary"}, ...}
+    basic_components = models.JSONField(
+        default=dict,
+        help_text="Basic salary breakdown components with codes and percentages"
+    )
+
+    # Additional Allowances
+    # Format: [{"name": "Leave Allowance", "is_active": true, "calculation_type": "percentage", ...}, ...]
+    allowances = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Additional allowances configuration"
+    )
+
+    # Include Leave Allowance in Gross Income
+    include_leave_in_gross = models.BooleanField(
+        default=False,
+        help_text="Whether to include leave allowance in gross income calculation"
+    )
+
+    # Reliefs and Exemptions
+    # Format: [{"name": "Personal Allowance", "percentage": 20.0, "fixed_amount": 200000, ...}, ...]
+    reliefs_exemptions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Tax reliefs and exemptions configuration"
+    )
+
+    # Tax Brackets (PAYE)
+    # Format: [{"limit": 300000, "rate": 7.0}, {"limit": 300000, "rate": 11.0}, ...]
+    tax_brackets = models.JSONField(
+        default=list,
+        help_text="Progressive tax bracket configuration"
+    )
+
+    # Income Items for Payslip (Reimbursables, Other Payables, etc.)
+    # Format: [{"name": "Reimbursables", "display_rule": "show_if_filled", "order": 1}, ...]
+    income_items = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Additional income items to display on payslip"
+    )
+
+    # Statutory Deductions Configuration
+    # Format: [{"name": "Pension", "percentage": 8.0, "based_on": ["B", "H", "T"], ...}, ...]
+    statutory_deductions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Statutory deductions like Pension, NHF"
+    )
+
+    # Other Deductions Configuration
+    # Format: [{"name": "Loan", "display_rule": "show_if_filled", "linked_to": "staff_loan", ...}, ...]
+    other_deductions_config = models.JSONField(
+        default=list,
+        help_text="Other deduction items configuration"
+    )
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_salary_settings')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-effective_from', '-created_at']
+        verbose_name = "Salary Setting"
+        verbose_name_plural = "Salary Settings"
+
+    def clean(self):
+        """Validate the salary setting configuration"""
+        super().clean()
+
+        # Validate basic components total 100%
+        if self.basic_components:
+            total_percentage = sum(
+                component.get('percentage', 0)
+                for component in self.basic_components.values()
+            )
+            if abs(total_percentage - 100) > 0.01:  # Allow small floating point differences
+                raise ValidationError({
+                    'basic_components': f'Basic components must total 100%. Current total: {total_percentage}%'
+                })
+
+        # Validate only one active setting
+        if self.is_active:
+            active_settings = SalarySetting.objects.filter(is_active=True)
+            if self.pk:
+                active_settings = active_settings.exclude(pk=self.pk)
+            if active_settings.exists():
+                raise ValidationError({
+                    'is_active': 'Another setting is already active. Deactivate it first.'
+                })
+
+        # Prevent modification if locked
+        if self.pk and self.is_locked:
+            old_instance = SalarySetting.objects.get(pk=self.pk)
+            if old_instance.is_locked and self != old_instance:
+                raise ValidationError('Cannot modify a locked salary setting.')
+
+    def save(self, *args, **kwargs):
+        # Auto-deactivate other settings when this becomes active
+        if self.is_active:
+            SalarySetting.objects.filter(is_active=True).exclude(id=self.id).update(is_active=False)
+        super().save(*args, **kwargs)
+
+    def lock(self):
+        """Lock this setting to prevent modifications"""
+        self.is_locked = True
+        self.save(update_fields=['is_locked'])
+
+    def calculate_basic_component_amount(self, component_code, monthly_salary):
+        """Calculate amount for a specific basic component"""
+        for key, component in self.basic_components.items():
+            if component.get('code') == component_code:
+                percentage = component.get('percentage', 0)
+                return (Decimal(str(monthly_salary)) * Decimal(str(percentage))) / Decimal('100')
+        return Decimal('0.00')
+
+    def calculate_combined_components_amount(self, component_codes, monthly_salary):
+        """Calculate combined amount for multiple components (e.g., B+H+T for pension)"""
+        total = Decimal('0.00')
+        codes_list = [code.strip() for code in component_codes.split('+')]
+        for code in codes_list:
+            total += self.calculate_basic_component_amount(code, monthly_salary)
+        return total
+
+    def __str__(self):
+        status = "🔒 Locked" if self.is_locked else "✅ Active" if self.is_active else "⏸️ Inactive"
+        return f"{self.name} ({status}) - From {self.effective_from}"
+
+
+class SalaryStructure(models.Model):
+    """
+    Simplified salary structure - stores only the monthly salary amount.
+    All components are calculated based on the active SalarySetting.
+    """
+    staff = models.ForeignKey(StaffModel, related_name='salary_structures', on_delete=models.CASCADE)
+    salary_setting = models.ForeignKey(SalarySetting, on_delete=models.PROTECT, related_name='staff_structures')
+
+    # Core salary amount - everything else is calculated
+    monthly_salary = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+
+    # Optional bank details
+    bank_name = models.CharField(max_length=200, blank=True, null=True)
+    account_number = models.CharField(max_length=20, blank=True, null=True)
+    account_name = models.CharField(max_length=200, blank=True, null=True)
+
+    effective_from = models.DateField(default=timezone.now)
+    effective_to = models.DateField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-effective_from']
+        verbose_name = "Salary Structure"
+        verbose_name_plural = "Salary Structures"
+
+    def clean(self):
+        """Ensure only one active structure per staff"""
+        super().clean()
+        if self.is_active:
+            active_structures = SalaryStructure.objects.filter(
+                staff=self.staff,
+                is_active=True
+            )
+            if self.pk:
+                active_structures = active_structures.exclude(pk=self.pk)
+            if active_structures.exists():
+                raise ValidationError({
+                    'is_active': 'This staff already has an active salary structure.'
+                })
+
+    def save(self, *args, **kwargs):
+        # Auto-deactivate other structures for this staff when this becomes active
+        if self.is_active:
+            SalaryStructure.objects.filter(
+                staff=self.staff,
+                is_active=True
+            ).update(is_active=False)
+        super().save(*args, **kwargs)
+
+    @property
+    def annual_salary(self):
+        """Calculate annual salary"""
+        return self.monthly_salary * 12
+
+    @property
+    def basic_salary(self):
+        """Calculate basic salary component"""
+        return self.salary_setting.calculate_basic_component_amount('B', self.monthly_salary)
+
+    @property
+    def housing_allowance(self):
+        """Calculate housing allowance component"""
+        return self.salary_setting.calculate_basic_component_amount('H', self.monthly_salary)
+
+    @property
+    def transport_allowance(self):
+        """Calculate transport allowance component"""
+        return self.salary_setting.calculate_basic_component_amount('T', self.monthly_salary)
+
+    def get_component_amount(self, component_code):
+        """Get amount for any component by code"""
+        return self.salary_setting.calculate_basic_component_amount(component_code, self.monthly_salary)
+
+    def calculate_gross_salary(self, include_allowances=True):
+        """Calculate gross salary based on configuration"""
+        # Start with monthly salary (which is already the sum of basic components)
+        gross = self.monthly_salary
+
+        # Add allowances if configured
+        if include_allowances:
+            for allowance in self.salary_setting.allowances:
+                if not allowance.get('is_active', False):
+                    continue
+
+                calc_type = allowance.get('calculation_type', 'fixed')
+
+                if calc_type == 'percentage':
+                    based_on = allowance.get('based_on', 'TOTAL')
+                    percentage = Decimal(str(allowance.get('percentage', 0)))
+
+                    if based_on == 'TOTAL':
+                        base_amount = self.monthly_salary
+                    else:
+                        base_amount = self.salary_setting.calculate_combined_components_amount(
+                            based_on, self.monthly_salary
+                        )
+
+                    gross += (base_amount * percentage) / Decimal('100')
+
+                elif calc_type == 'fixed':
+                    fixed_amount = Decimal(str(allowance.get('fixed_amount', 0)))
+                    gross += fixed_amount
+
+        return gross
+
+    def calculate_annual_leave_allowance(self):
+        """Calculate annual leave allowance"""
+        annual_basic = self.basic_salary * 12
+        percentage = self.salary_setting.leave_allowance_percentage
+        return (annual_basic * percentage) / Decimal('100')
+
+    def calculate_monthly_leave_allowance(self):
+        """Calculate monthly leave allowance"""
+        return self.calculate_annual_leave_allowance() / 12
+
+    def __str__(self):
+        return f"Salary for {self.staff} - ₦{self.monthly_salary:,.2f}/month"
+
+
+class SalaryRecord(models.Model):
+    """
+    Monthly salary record (payslip) for a staff member.
+    Snapshot of all salary calculations for a specific month.
+    """
+
+    class PaymentStatus(models.TextChoices):
+        NOT_PROCESSED = 'not_processed', 'Not Processed'
+        PENDING = 'pending', 'Pending Payment'
+        PAID = 'paid', 'Paid'
+        PARTIALLY_PAID = 'partially_paid', 'Partially Paid'
+
+    staff = models.ForeignKey(StaffModel, on_delete=models.PROTECT, related_name='salary_records')
+    salary_structure = models.ForeignKey(SalaryStructure, on_delete=models.PROTECT, related_name='salary_records')
+    salary_setting = models.ForeignKey(SalarySetting, on_delete=models.PROTECT, related_name='salary_records')
+
+    month = models.PositiveIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
+    year = models.PositiveIntegerField(validators=[MinValueValidator(2020)])
+
+    # Session and Term for auditing
+    session = models.ForeignKey(SessionModel, on_delete=models.SET_NULL, null=True, blank=True)
+    term = models.ForeignKey(TermModel, on_delete=models.SET_NULL, null=True, blank=True)
+
+    # Core salary snapshot
+    monthly_salary = models.DecimalField(max_digits=12, decimal_places=2)
+    annual_salary = models.DecimalField(max_digits=12, decimal_places=2)
+
+    # Basic components snapshot (stored as JSON for flexibility)
+    basic_components_breakdown = models.JSONField(
+        default=dict,
+        help_text="Breakdown of basic salary components"
+    )
+
+    # Allowances snapshot
+    allowances_breakdown = models.JSONField(
+        default=dict,
+        help_text="Breakdown of allowances"
+    )
+
+    # Additional income items (Reimbursables, Other Payables, etc.)
+    additional_income = models.JSONField(
+        default=dict,
+        help_text="Additional income items for this month"
+    )
+
+    # Bonus (manual entry)
+    bonus = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    # Calculated totals
+    total_income = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    gross_salary = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    # Statutory deductions (auto-calculated)
+    statutory_deductions = models.JSONField(
+        default=dict,
+        help_text="Statutory deductions breakdown (Pension, NHF, etc.)"
+    )
+    total_statutory_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    # Other deductions
+    other_deductions = models.JSONField(
+        default=dict,
+        help_text="Other deductions (Loans, Advances, Welfare, etc.)"
+    )
+    total_other_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    # Tax calculation
+    annual_gross_income = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_reliefs = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    taxable_income = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    annual_tax = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    monthly_tax = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    other_taxes = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_taxation = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    effective_tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+
+    # Net salary
+    net_salary = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    # Payment tracking
+    payment_status = models.CharField(
+        max_length=20,
+        choices=PaymentStatus.choices,
+        default=PaymentStatus.NOT_PROCESSED
+    )
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    paid_date = models.DateField(null=True, blank=True)
+    paid_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='paid_salaries')
+
+    notes = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='created_salary_records')
+
+    class Meta:
+        unique_together = ('staff', 'month', 'year')
+        ordering = ['-year', '-month', 'staff__staff_id']
+        verbose_name = "Salary Record"
+        verbose_name_plural = "Salary Records"
+
+    def save(self, *args, **kwargs):
+        # Auto-populate session and term if not set
+        if self.session is None or self.term is None:
+            setting = SchoolSettingModel.objects.first()
+            if setting:
+                if self.session is None:
+                    self.session = setting.session
+                if self.term is None:
+                    self.term = setting.term
+
+        # Lock the salary setting once a record is created
+        if not self.pk and self.salary_setting and not self.salary_setting.is_locked:
+            self.salary_setting.lock()
+
+        # Update payment status based on amount paid
+        # if self.amount_paid >= self.net_salary and self.net_salary > 0:
+        #     self.payment_status = self.PaymentStatus.PAID
+        # elif self.amount_paid > 0:
+        #     self.payment_status = self.PaymentStatus.PARTIALLY_PAID
+        # elif self.payment_status == self.PaymentStatus.NOT_PROCESSED:
+        #     self.payment_status = self.PaymentStatus.PENDING
+
+        super().save(*args, **kwargs)
+
+    @property
+    def balance_due(self):
+        """Calculate outstanding balance"""
+        return self.net_salary - self.amount_paid
+
+    @property
+    def month_name(self):
+        """Return month name"""
+        import calendar
+        return calendar.month_name[self.month] if self.month else ""
+
+    def __str__(self):
+        return f"{self.staff} - {self.month_name} {self.year} - ₦{self.net_salary:,.2f}"
+
+
+class SalaryRecordHistory(models.Model):
+    """Audit trail for salary record changes"""
+
+    salary_record = models.ForeignKey(SalaryRecord, on_delete=models.CASCADE, related_name='history')
+    action = models.CharField(max_length=50)  # 'created', 'updated', 'paid', etc.
+    changes = models.JSONField(default=dict, help_text="What changed")
+    changed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "Salary Record History"
+        verbose_name_plural = "Salary Record Histories"
+
+    def __str__(self):
+        return f"{self.action} - {self.salary_record} - {self.timestamp}"

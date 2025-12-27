@@ -1,3 +1,4 @@
+import calendar
 import json
 import traceback
 from datetime import date, datetime, timedelta
@@ -24,7 +25,16 @@ from django.utils.timezone import now
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import TemplateView, CreateView, UpdateView, ListView, DetailView, DeleteView, FormView
-from openpyxl.styles import Font
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from django.contrib.auth.decorators import login_required, permission_required
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+import json
 
 from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ActivityLogModel
 from admin_site.views import FlashFormErrorsMixin
@@ -37,15 +47,18 @@ from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePa
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryRecord, SalaryAdvance, \
     SalaryStructure, StudentFundingModel, InvoiceItemModel, AdvanceSettlementModel, \
     SchoolBankDetail, StaffLoan, StaffLoanRepayment, StaffFundingModel, DiscountModel, DiscountApplicationModel, \
-    StudentDiscountModel, OtherPaymentClearanceModel, OtherPaymentModel
+    StudentDiscountModel, OtherPaymentClearanceModel, OtherPaymentModel, SalarySetting
 from .forms import FinanceSettingForm, SupplierPaymentForm, PurchaseAdvancePaymentForm, FeeForm, FeeGroupForm, \
     InvoiceGenerationForm, FeePaymentForm, ExpenseCategoryForm, ExpenseForm, IncomeCategoryForm, \
     IncomeForm, TermlyFeeAmountFormSet, FeeMasterCreateForm, BulkPaymentForm, StaffBankDetailForm, PaysheetRowForm, \
     SalaryAdvanceForm, SalaryStructureForm, StudentFundingForm, SchoolBankDetailForm, \
     StaffLoanForm, StaffLoanRepaymentForm, StaffFundingForm, DiscountForm, DiscountApplicationForm, \
-    StudentDiscountAssignForm, OtherPaymentClearanceForm, OtherPaymentCreateForm
+    StudentDiscountAssignForm, OtherPaymentClearanceForm, OtherPaymentCreateForm, SalarySettingForm
 from finance.tasks import generate_invoices_task
 from pytz import timezone as pytz_timezone
+
+from .utility import *
+
 
 # ===================================================================
 # Finance Settings Views (Singleton Pattern)
@@ -1914,6 +1927,19 @@ class StaffBankDetailCreateView(LoginRequiredMixin, PermissionRequiredMixin, Fla
         return super().dispatch(request, *args, **kwargs)
 
 
+class StaffBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = StaffBankDetail
+    permission_required = 'finance.add_salaryrecord'
+    template_name = 'finance/staff_bank/delete.html'
+    context_object_name = "bank_detail"
+    success_url = reverse_lazy('finance_staff_bank_detail_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, "Bank Detail Deleted Successfully.")
+        return super().form_valid(form)
+
+
+
 class StaffBankDetailUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView):
     model = StaffBankDetail
     permission_required = 'finance.add_salaryrecord'
@@ -2003,60 +2029,6 @@ class SchoolBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, De
 
     def form_valid(self, form):
         messages.success(self.request, "School Bank Detail Deleted Successfully.")
-        return super().form_valid(form)
-
-
-# ===================================================================
-# Salary Structure Views (Multi-page Interface)
-# ===================================================================
-class SalaryStructureListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
-    model = SalaryStructure
-    permission_required = 'finance.view_salaryrecord'
-    template_name = 'finance/salary_structure/index.html'
-    context_object_name = "salary_structure_list"
-
-    def get_queryset(self):
-        return SalaryStructure.objects.select_related('staff__staff_profile__user').order_by(
-            'staff__staff_profile__user__first_name')
-
-
-class SalaryStructureCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
-    model = SalaryStructure
-    permission_required = 'finance.add_salaryrecord'
-    form_class = SalaryStructureForm
-    template_name = 'finance/salary_structure/create.html'
-
-    def get_success_url(self):
-        messages.success(self.request, "Salary Structure Created Successfully.")
-        return reverse('finance_salary_structure_detail', kwargs={'pk': self.object.pk})
-
-
-class SalaryStructureUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
-    model = SalaryStructure
-    permission_required = 'finance.add_salaryrecord'
-    form_class = SalaryStructureForm
-    template_name = 'finance/salary_structure/edit.html'
-
-    def get_success_url(self):
-        messages.success(self.request, "Salary Structure Updated Successfully.")
-        return reverse('finance_salary_structure_detail', kwargs={'pk': self.object.pk})
-
-
-class SalaryStructureDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
-    model = SalaryStructure
-    permission_required = 'finance.view_salaryrecord'
-    template_name = 'finance/salary_structure/detail.html'
-    context_object_name = "salary_structure"
-
-
-class SalaryStructureDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
-    model = SalaryStructure
-    permission_required = 'finance.add_salaryrecord'
-    template_name = 'finance/salary_structure/delete.html'
-    success_url = reverse_lazy('finance_salary_structure_list')
-
-    def form_valid(self, form):
-        messages.success(self.request, "Salary Structure Deleted Successfully.")
         return super().form_valid(form)
 
 
@@ -2263,236 +2235,6 @@ def record_staff_loan_repayment(request, staff_pk):
         messages.error(request, "Invalid data submitted. Please check the form.")
     return redirect('finance_staff_loan_debt_detail', staff_pk=staff.pk)
 
-
-@login_required
-@permission_required("finance.add_salaryrecord", raise_exception=True)
-def process_payroll_view(request):
-    # This GET request logic is correct and does not need changes.
-    current_year = datetime.now().year
-    current_month = datetime.now().month
-    try:
-        year = int(request.GET.get('year', current_year))
-        month = int(request.GET.get('month', current_month))
-    except (ValueError, TypeError):
-        year = current_year
-        month = current_month
-
-    staff_with_structures = StaffModel.objects.filter(salary_structure__is_active=True).select_related(
-        'salary_structure')
-    for staff in staff_with_structures:
-        structure = staff.salary_structure
-        total_advance_for_month = \
-        SalaryAdvance.objects.filter(staff=staff, status=SalaryAdvance.Status.DISBURSED, request_date__year=year,
-                                     request_date__month=month).aggregate(total=Sum('amount'))['total'] or Decimal(
-            '0.00')
-        record, created = SalaryRecord.objects.get_or_create(staff=staff, year=year, month=month,
-                                                             defaults={'basic_salary': structure.basic_salary,
-                                                                       'housing_allowance': structure.housing_allowance,
-                                                                       'transport_allowance': structure.transport_allowance,
-                                                                       'medical_allowance': structure.medical_allowance,
-                                                                       'other_allowances': structure.other_allowances,
-                                                                       'tax_amount': structure.tax_amount,
-                                                                       'pension_amount': structure.pension_amount,
-                                                                       'salary_advance_deduction': total_advance_for_month})
-        if not created and record.salary_advance_deduction != total_advance_for_month:
-            record.salary_advance_deduction = total_advance_for_month
-            record.save(update_fields=['salary_advance_deduction'])
-
-    queryset = SalaryRecord.objects.filter(year=year, month=month, staff__in=staff_with_structures).select_related(
-        'staff__staff_profile__user')
-    PaysheetFormSet = modelformset_factory(SalaryRecord, form=PaysheetRowForm, extra=0)
-
-    # ==============================================================================
-    # ===== THIS IS THE NEW, CORRECTED LOGIC FOR SAVING THE FORM =====
-    # ==============================================================================
-    if request.method == 'POST':
-        formset = PaysheetFormSet(request.POST, queryset=queryset)
-        if formset.is_valid():
-
-            # We will now manually iterate through every form in the formset
-            # and save it explicitly. This bypasses the issue where Django
-            # thinks the pre-filled amount hasn't changed.
-            for form in formset.forms:
-                # Get the instance attached to the form
-                instance = form.instance
-                # Get the validated data from the submitted form
-                cleaned_data = form.cleaned_data
-
-                # Manually update the instance with all the data from the form fields
-                instance.bonus = cleaned_data.get('bonus', instance.bonus)
-                instance.other_deductions = cleaned_data.get('other_deductions', instance.other_deductions)
-                instance.amount_paid = cleaned_data.get('amount_paid', instance.amount_paid)
-                instance.notes = cleaned_data.get('notes', instance.notes)
-
-                # Save each instance with its updated data.
-                instance.save()
-
-            # 'Mark as Paid' logic can now run on the correctly saved data.
-            paid_ids = request.POST.getlist('mark_as_paid')
-            if paid_ids:
-                paid_records = SalaryRecord.objects.filter(id__in=paid_ids)
-                for record in paid_records:
-                    if not record.is_paid:
-                        record.is_paid = True
-                        if record.amount_paid == 0:
-                            record.amount_paid = record.net_salary
-                        record.paid_date = date.today()
-                        record.paid_by = request.user
-                        record.save()
-
-            messages.success(request, 'Paysheet saved successfully!')
-            return redirect(reverse('finance_process_payroll') + f'?year={year}&month={month}')
-        else:
-            messages.error(request, 'Please correct the errors below.')
-    else:
-        # The GET request logic and context calculation are correct.
-        formset = PaysheetFormSet(queryset=queryset)
-
-    totals = queryset.aggregate(total_bonus=Sum('bonus'), total_advance=Sum('salary_advance_deduction'),
-                                total_other_deductions=Sum('other_deductions'))
-    total_net_salary = 0
-    total_amount_paid = 0
-    # We refresh the queryset to get the newly saved values for the totals
-    # This is important after a POST request, but doesn't hurt on a GET
-    for record in queryset.all():
-        total_net_salary += record.net_salary
-        if record.amount_paid > 0:
-            total_amount_paid += record.amount_paid
-        else:
-            total_amount_paid += record.net_salary
-
-    context = {
-        'formset': formset, 'year': year, 'month': month,
-        'years': range(2020, datetime.now().year + 2),
-        'months': [(i, datetime(2000, i, 1).strftime('%B')) for i in range(1, 13)],
-        'totals': totals, 'total_net_salary': total_net_salary, 'total_amount_paid': total_amount_paid,
-    }
-    return render(request, 'finance/salary_record/process_payroll.html', context)
-
-
-@login_required
-@permission_required('finance.view_salaryrecord')
-def export_payroll_to_excel(request, year, month):
-    """
-    Generates an Excel file with a detailed breakdown of the payroll for a given month and year.
-    """
-    # 1. Fetch the relevant salary records
-    queryset = SalaryRecord.objects.filter(year=year, month=month).select_related('staff')
-
-    # 2. Create an in-memory Excel workbook
-    workbook = openpyxl.Workbook()
-    worksheet = workbook.active
-    month_name = datetime(2000, month, 1).strftime('%B')
-    worksheet.title = f'Payroll_{year}_{month_name}'
-
-    # 3. Define the detailed header row
-    headers = [
-        'Staff ID', 'Full Name', 'Basic Salary', 'Housing', 'Transport', 'Medical',
-        'Other Allowances', 'Bonus', 'Gross Salary', 'Tax (PAYE)', 'Pension',
-        'Other Deductions', 'Total Deductions', 'Net Salary', 'Amount Paid', 'Status', 'Notes'
-    ]
-    for col_num, header_title in enumerate(headers, 1):
-        cell = worksheet.cell(row=1, column=col_num, value=header_title)
-        cell.font = Font(bold=True)
-
-    # 4. Write data rows for each salary record
-    for row_num, record in enumerate(queryset, 2):
-        worksheet.cell(row=row_num, column=1, value=record.staff.staff_id)
-        worksheet.cell(row=row_num, column=2, value=record.staff.__str__())
-        worksheet.cell(row=row_num, column=3, value=record.basic_salary)
-        worksheet.cell(row=row_num, column=4, value=record.housing_allowance)
-        worksheet.cell(row=row_num, column=5, value=record.transport_allowance)
-        worksheet.cell(row=row_num, column=6, value=record.medical_allowance)
-        worksheet.cell(row=row_num, column=7, value=record.other_allowances)
-        worksheet.cell(row=row_num, column=8, value=record.bonus)
-        worksheet.cell(row=row_num, column=9, value=record.gross_salary)
-        worksheet.cell(row=row_num, column=10, value=record.tax_amount)
-        worksheet.cell(row=row_num, column=11, value=record.pension_amount)
-        worksheet.cell(row=row_num, column=12, value=record.other_deductions)
-        worksheet.cell(row=row_num, column=13, value=record.total_deductions)
-        worksheet.cell(row=row_num, column=14, value=record.net_salary)
-        worksheet.cell(row=row_num, column=15, value=record.amount_paid)
-        worksheet.cell(row=row_num, column=16, value=record.payment_status)
-        worksheet.cell(row=row_num, column=17, value=record.notes)
-
-    # 5. Create the HttpResponse object with the correct headers
-    response = HttpResponse(
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    )
-    response['Content-Disposition'] = f'attachment; filename="payroll_{year}_{month_name}.xlsx"'
-
-    # Save the workbook to the response
-    workbook.save(response)
-
-    return response
-
-
-@login_required
-@permission_required('finance.view_salaryrecord')
-def payroll_dashboard_view(request):
-    """
-    Provides data for a dashboard with payroll statistics and visualizations.
-    Calculates net salary at the database level to fix the FieldError.
-    """
-    # Define the net salary calculation using F() objects for database-level arithmetic
-    net_salary_expression = (
-            F('basic_salary') + F('housing_allowance') + F('transport_allowance') +
-            F('medical_allowance') + F('other_allowances') + F('bonus') -
-            (F('tax_amount') + F('pension_amount') + F('other_deductions'))
-    )
-
-    # Get the current period
-    today = datetime.now()
-    current_year = today.year
-    current_month = today.month
-
-    # Get last month's period for comparison
-    last_month_date = today.replace(day=1) - timedelta(days=1)
-    last_month = last_month_date.month
-    last_year = last_month_date.year
-
-    # --- 1. KPI Cards Data ---
-    current_month_payroll = SalaryRecord.objects.filter(year=current_year, month=current_month)
-    last_month_payroll = SalaryRecord.objects.filter(year=last_year, month=last_month)
-
-    total_payroll_current = current_month_payroll.aggregate(total=Sum(net_salary_expression))['total'] or 0
-    total_payroll_last = last_month_payroll.aggregate(total=Sum(net_salary_expression))['total'] or 0
-
-    staff_paid_count = current_month_payroll.count()
-    average_net_salary = current_month_payroll.aggregate(avg=Avg(net_salary_expression))['avg'] or 0
-
-    # Calculate percentage change
-    if total_payroll_last > 0:
-        percent_change = ((total_payroll_current - total_payroll_last) / total_payroll_last) * 100
-    else:
-        percent_change = 100 if total_payroll_current > 0 else 0
-
-    # --- 2. Charts Data ---
-    # Chart 2: Salary Trend (Line Chart - Last 12 Months)
-    twelve_months_ago = today - timedelta(days=365)
-    salary_trend = SalaryRecord.objects.filter(paid_date__gte=twelve_months_ago) \
-        .annotate(month_year=TruncMonth('paid_date')) \
-        .values('month_year') \
-        .annotate(total_net=Sum(net_salary_expression)) \
-        .order_by('month_year')
-
-    salary_trend_data = [
-        {'month': item['month_year'].strftime('%b %Y'), 'total': float(item['total_net'])}
-        for item in salary_trend if item['month_year'] and item['total_net']
-    ]
-
-    context = {
-        # KPI Cards
-        'total_payroll_current': total_payroll_current,
-        'staff_paid_count': staff_paid_count,
-        'average_net_salary': average_net_salary,
-        'percent_change': percent_change,
-
-        # Chart Data (passed as JSON)
-        'salary_trend_data': json.dumps(salary_trend_data),
-    }
-
-    return render(request, 'finance/salary_record/dashboard.html', context)
 
 
 class DepositPaymentSelectStudentView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, TemplateView):
@@ -3871,63 +3613,11 @@ def finance_dashboard(request):
     return render(request, 'finance/finance_dashboard.html', context)
 
 
-@login_required
-def my_salary_profile_view(request):
-    """
-    Displays the salary profile for the currently logged-in staff member.
-    Includes salary structure, bank details, and a filterable payslip history.
-    """
-    try:
-        user_staff_profile = request.user.staff_profile
-        staff = StaffModel.objects.get(staff_profile=user_staff_profile)
-    except ObjectDoesNotExist:  # Catches both DoesNotExist exceptions
-        messages.error(request, "You do not have a staff profile and cannot access this page.")
-        return render(request, 'finance/staff_profile/no_profile.html')
-
-    # Get the staff's salary structure
-    try:
-        salary_structure = staff.salary_structure
-    except ObjectDoesNotExist:
-        salary_structure = None
-
-    try:
-        bank_detail = staff.bank_details
-    except ObjectDoesNotExist:  # This will correctly catch the error if no details exist
-        bank_detail = None
-    # =======================================
-
-    # Handle filtering for the payslip history
-    payslips = SalaryRecord.objects.filter(staff=staff)
-    available_years = payslips.values_list('year', flat=True).distinct().order_by('-year')
-
-    selected_year = request.GET.get('year', '')
-    selected_month = request.GET.get('month', '')
-
-    if selected_year:
-        payslips = payslips.filter(year=selected_year)
-    if selected_month:
-        payslips = payslips.filter(month=selected_month)
-
-    payslips = payslips.order_by('-year', '-month')
-
-    context = {
-        'staff': staff,
-        'salary_structure': salary_structure,
-        'bank_detail': bank_detail,
-        'payslips': payslips,
-        'available_years': available_years,
-        'available_months': [(i, datetime(2000, i, 1).strftime('%B')) for i in range(1, 13)],
-        'selected_year': selected_year,
-        'selected_month': selected_month
-    }
-    return render(request, 'finance/staff_profile/salary_profile.html', context)
 
 
 # ===================================================================
 # Discount Model Views (Blueprint Interface)
 # ===================================================================
-
-import json  # Make sure to import json
 
 
 class DiscountListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
@@ -5476,3 +5166,1424 @@ class OtherPaymentClearanceRevertView(LoginRequiredMixin, PermissionRequiredMixi
         )
 
         return redirect('finance_student_other_payment_index', student_pk=other_payment.student.pk)
+
+
+# ============================================================================
+# SALARY SETTINGS VIEWS
+# ============================================================================
+
+@login_required
+@permission_required('finance.view_salarysetting', raise_exception=True)
+def salary_setting_list_view(request):
+    """List all salary settings"""
+    settings = SalarySetting.objects.all().order_by('-is_active', '-effective_from')
+
+    context = {
+        'settings': settings,
+        'page_title': 'Salary Settings'
+    }
+    return render(request, 'finance/salary_setting/list.html', context)
+
+
+@login_required
+@permission_required('finance.add_salarysetting', raise_exception=True)
+def salary_setting_create_view(request):
+    """Create new salary setting"""
+    if request.method == 'POST':
+        form = SalarySettingForm(request.POST)
+        if form.is_valid():
+            setting = form.save(commit=False)
+            setting.created_by = request.user
+            setting.save()
+
+            messages.success(request, f'Salary setting "{setting.name}" created successfully!')
+            return redirect('finance_salary_setting_detail', pk=setting.pk)
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = SalarySettingForm()
+
+    context = {
+        'form': form,
+        'page_title': 'Create Salary Setting',
+        'action': 'Create'
+    }
+    return render(request, 'finance/salary_setting/form.html', context)
+
+
+@login_required
+@permission_required('finance.view_salarysetting', raise_exception=True)
+def salary_setting_detail_view(request, pk):
+    """View and manage salary setting"""
+    setting = get_object_or_404(SalarySetting, pk=pk)
+
+    # Handle actions
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'activate' and not setting.is_active:
+            if request.user.has_perm('finance.change_salarysetting'):
+                setting.is_active = True
+                setting.save()
+                messages.success(request, f'"{setting.name}" is now active.')
+            else:
+                messages.error(request, 'You do not have permission to activate settings.')
+
+        elif action == 'deactivate' and setting.is_active:
+            if request.user.has_perm('finance.change_salarysetting'):
+                setting.is_active = False
+                setting.save()
+                messages.success(request, f'"{setting.name}" has been deactivated.')
+            else:
+                messages.error(request, 'You do not have permission to deactivate settings.')
+
+        elif action == 'edit' and not setting.is_locked:
+            return redirect('finance_salary_setting_update', pk=pk)
+
+        return redirect('finance_salary_setting_detail', pk=pk)
+
+    # Get usage stats
+    usage_stats = {
+        'structures_count': setting.staff_structures.count(),
+        'records_count': setting.salary_records.count(),
+    }
+
+    # Serialize JSONFields for safe use in the template (JS will parse these <script> blocks)
+    # default=str is used to safely serialize Decimal/date values if present
+    basic_components_json = json.dumps(setting.basic_components or {}, default=str)
+    allowances_json = json.dumps(setting.allowances or [], default=str)
+    reliefs_json = json.dumps(setting.reliefs_exemptions or [], default=str)
+    tax_brackets_json = json.dumps(setting.tax_brackets or [], default=str)
+    income_items_json = json.dumps(setting.income_items or [], default=str)
+    statutory_deductions_json = json.dumps(setting.statutory_deductions or [], default=str)
+    other_deductions_json = json.dumps(setting.other_deductions_config or [], default=str)
+
+    context = {
+        'setting': setting,
+        'usage_stats': usage_stats,
+        'page_title': f'Salary Setting: {setting.name}',
+        # serialized JSON strings for the template
+        'basic_components_json': basic_components_json,
+        'allowances_json': allowances_json,
+        'reliefs_json': reliefs_json,
+        'tax_brackets_json': tax_brackets_json,
+        'income_items_json': income_items_json,
+        'statutory_deductions_json': statutory_deductions_json,
+        'other_deductions_json': other_deductions_json,
+        # optional helper (handy in templates if you prefer)
+        'can_change': request.user.has_perm('finance.change_salarysetting'),
+    }
+    return render(request, 'finance/salary_setting/detail.html', context)
+
+@login_required
+@permission_required('finance.change_salarysetting', raise_exception=True)
+def salary_setting_update_view(request, pk):
+    """Update salary setting (only if not locked)"""
+    setting = get_object_or_404(SalarySetting, pk=pk)
+
+    if setting.is_locked:
+        messages.error(request, 'Cannot edit a locked salary setting.')
+        return redirect('finance_salary_setting_detail', pk=pk)
+
+    if request.method == 'POST':
+        form = SalarySettingForm(request.POST, instance=setting)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Salary setting "{setting.name}" updated successfully!')
+            return redirect('finance_salary_setting_detail', pk=setting.pk)
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = SalarySettingForm(instance=setting)
+
+    context = {
+        'form': form,
+        'setting': setting,
+        'page_title': f'Edit: {setting.name}',
+        'action': 'Update'
+    }
+    return render(request, 'finance/salary_setting/form.html', context)
+
+
+# ============================================================================
+# SALARY STRUCTURE VIEWS
+# ============================================================================
+
+@login_required
+@permission_required('finance.view_salarystructure', raise_exception=True)
+def salary_structure_list_view(request):
+    """List all salary structures"""
+    structures = SalaryStructure.objects.select_related(
+        'staff__staff_profile__user', 'salary_setting'
+    ).filter(is_active=True).order_by('staff__staff_id')
+
+    # Search filter
+    search = request.GET.get('search', '')
+    if search:
+        structures = structures.filter(
+            Q(staff__staff_id__icontains=search) |
+            Q(staff__staff_profile__user__first_name__icontains=search) |
+            Q(staff__staff_profile__user__last_name__icontains=search)
+        )
+
+    context = {
+        'structures': structures,
+        'search': search,
+        'page_title': 'Staff Salary Structures'
+    }
+    return render(request, 'finance/salary_structure/list.html', context)
+
+
+@login_required
+@permission_required('finance.add_salarystructure', raise_exception=True)
+def salary_structure_create_view(request):
+    """Create salary structure for staff"""
+    if request.method == 'POST':
+        form = SalaryStructureForm(request.POST)
+        if form.is_valid():
+            structure = form.save()
+            messages.success(
+                request,
+                f'Salary structure created for {structure.staff} - ₦{structure.monthly_salary:,.2f}/month'
+            )
+            return redirect('finance_salary_structure_detail', pk=structure.pk)
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = SalaryStructureForm()
+
+    # Get all active salary settings with their configurations for preview
+    salary_settings = SalarySetting.objects.filter(is_active=True)
+    salary_settings_json = {}
+    for setting in salary_settings:
+        salary_settings_json[str(setting.id)] = {
+            'id': setting.id,
+            'name': setting.name,
+            'basic_components': setting.basic_components,
+            'allowances': setting.allowances,
+            'leave_allowance_percentage': float(setting.leave_allowance_percentage),  # Add this
+            'include_leave_in_gross': setting.include_leave_in_gross,  # Add this
+            'reliefs_exemptions': setting.reliefs_exemptions,  # Add this
+            'tax_brackets': setting.tax_brackets,  # Add this
+            'statutory_deductions': setting.statutory_deductions,  # Add this
+        }
+
+    context = {
+        'form': form,
+        'salary_settings_json': json.dumps(salary_settings_json),
+        'page_title': 'Create Salary Structure',
+        'action': 'Create'
+    }
+    return render(request, 'finance/salary_structure/form.html', context)
+
+
+@login_required
+@permission_required('finance.change_salarystructure', raise_exception=True)
+def salary_structure_update_view(request, pk):
+    """Update salary structure"""
+    structure = get_object_or_404(SalaryStructure, pk=pk)
+
+    if request.method == 'POST':
+        form = SalaryStructureForm(request.POST, instance=structure)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Salary structure updated for {structure.staff}')
+            return redirect('finance_salary_structure_detail', pk=structure.pk)
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = SalaryStructureForm(instance=structure)
+
+    # Get all active salary settings with their configurations for preview
+    salary_settings = SalarySetting.objects.filter(is_active=True)
+    salary_settings_json = {}
+    for setting in salary_settings:
+        salary_settings_json[str(setting.id)] = {
+            'id': setting.id,
+            'name': setting.name,
+            'basic_components': setting.basic_components,
+            'allowances': setting.allowances,
+            'leave_allowance_percentage': float(setting.leave_allowance_percentage),  # Add this
+            'include_leave_in_gross': setting.include_leave_in_gross,  # Add this
+            'reliefs_exemptions': setting.reliefs_exemptions,  # Add this
+            'tax_brackets': setting.tax_brackets,  # Add this
+            'statutory_deductions': setting.statutory_deductions,  # Add this
+        }
+
+    context = {
+        'form': form,
+        'structure': structure,
+        'salary_settings_json': json.dumps(salary_settings_json),
+        'page_title': f'Edit Salary: {structure.staff}',
+        'action': 'Update'
+    }
+    return render(request, 'finance/salary_structure/form.html', context)
+
+
+@login_required
+@permission_required('finance.view_salarystructure', raise_exception=True)
+def salary_structure_detail_view(request, pk):
+    """View salary structure details with complete breakdown"""
+    structure = get_object_or_404(
+        SalaryStructure.objects.select_related(
+            'staff__staff_profile__user',
+            'salary_setting'
+        ).prefetch_related(
+            'staff__salary_structures__salary_setting'
+        ),
+        pk=pk
+    )
+
+    # Calculate complete salary breakdown
+    calculation = calculate_salary_breakdown(structure)
+
+    context = {
+        'structure': structure,
+        'calculation': calculation,
+        'page_title': f'Salary Structure: {structure.staff}'
+    }
+    return render(request, 'finance/salary_structure/detail.html', context)
+
+
+def calculate_salary_breakdown(structure):
+    """
+    Calculate complete salary breakdown for a salary structure.
+    This mirrors the JavaScript calculation logic from the form.
+    """
+    monthly_salary = structure.monthly_salary
+    annual_salary = monthly_salary * 12
+    setting = structure.salary_setting
+
+    # Round to 2 decimal places
+    def round_decimal(value):
+        return round(Decimal(str(value)), 2)
+
+    # Calculate basic components
+    basic_components = {}
+    total_basic_percentage = Decimal('0')
+
+    for key, component in setting.basic_components.items():
+        percentage = Decimal(str(component.get('percentage', 0)))
+        monthly_amount = round_decimal((monthly_salary * percentage) / Decimal('100'))
+        annual_amount = round_decimal(monthly_amount * 12)
+
+        basic_components[component['code']] = {
+            'name': component['name'],
+            'percentage': percentage,
+            'monthly': monthly_amount,
+            'annual': annual_amount
+        }
+        total_basic_percentage += percentage
+
+    # Calculate leave allowance
+    leave_allowance_percentage = Decimal(str(setting.leave_allowance_percentage or 0))
+    annual_basic_salary = sum(comp['annual'] for comp in basic_components.values())
+    leave_allowance_annual = round_decimal((annual_basic_salary * leave_allowance_percentage) / Decimal('100'))
+    leave_allowance_monthly = round_decimal(leave_allowance_annual / 12)
+
+    # Helper function to calculate amount based on component codes
+    def calculate_based_on_components(based_on):
+        if not based_on:
+            return Decimal('0')
+
+        if based_on.upper() == 'TOTAL':
+            return sum(comp['monthly'] for comp in basic_components.values()) * 12
+
+        if based_on.upper() == 'GROSS_INCOME':
+            return Decimal('0')  # Will be handled separately
+
+        # Handle component codes like "B+H+T"
+        codes = [code.strip().upper() for code in based_on.split('+')]
+        total = Decimal('0')
+        for code in codes:
+            for comp_code, comp_data in basic_components.items():
+                if comp_code.upper() == code:
+                    total += comp_data['monthly']
+        return total * 12
+
+    # Calculate other allowances
+    allowances = []
+    total_other_allowances_monthly = Decimal('0')
+    total_other_allowances_annual = Decimal('0')
+
+    for allowance in setting.allowances:
+        if allowance.get('is_active', False):
+            monthly_amount = Decimal('0')
+
+            if allowance.get('calculation_type') == 'fixed':
+                monthly_amount = round_decimal(Decimal(str(allowance.get('fixed_amount', 0))))
+
+            elif allowance.get('calculation_type') == 'percentage':
+                percentage = Decimal(str(allowance.get('percentage', 0)))
+                based_on = allowance.get('based_on', 'TOTAL')
+
+                if based_on.upper() == 'TOTAL':
+                    monthly_amount = round_decimal((monthly_salary * percentage) / Decimal('100'))
+                elif based_on.upper() == 'GROSS_INCOME':
+                    temp_gross = monthly_salary + total_other_allowances_monthly
+                    monthly_amount = round_decimal((temp_gross * percentage) / Decimal('100'))
+                else:
+                    base_amount = calculate_based_on_components(based_on)
+                    monthly_amount = round_decimal((base_amount * percentage) / Decimal('100'))
+
+            annual_amount = round_decimal(monthly_amount * 12)
+
+            allowances.append({
+                'name': allowance['name'],
+                'monthly': monthly_amount,
+                'annual': annual_amount,
+                'percentage': round_decimal((monthly_amount / monthly_salary * 100) if monthly_salary > 0 else 0)
+            })
+
+            total_other_allowances_monthly += monthly_amount
+            total_other_allowances_annual += annual_amount
+
+    # Calculate gross income based on include_leave_in_gross setting
+    if setting.include_leave_in_gross:
+        gross_income_monthly = round_decimal(monthly_salary + total_other_allowances_monthly + leave_allowance_monthly)
+        gross_income_annual = round_decimal(annual_salary + total_other_allowances_annual + leave_allowance_annual)
+    else:
+        gross_income_monthly = round_decimal(monthly_salary + total_other_allowances_monthly)
+        gross_income_annual = round_decimal(annual_salary + total_other_allowances_annual)
+
+    # Calculate statutory deductions
+    statutory_deductions = []
+    total_statutory_deductions = Decimal('0')
+    total_reliefs = Decimal('0')
+
+    for deduction in setting.statutory_deductions:
+        if deduction.get('is_active', True):
+            percentage = Decimal(str(deduction.get('percentage', 0)))
+            base_amount = calculate_based_on_components(deduction.get('based_on', ''))
+            amount = round_decimal((base_amount * percentage) / Decimal('100'))
+
+            statutory_deductions.append({
+                'name': deduction['name'],
+                'percentage': percentage,
+                'monthly': amount,
+                'annual': round_decimal(amount * 12)
+            })
+            total_statutory_deductions += amount
+            total_reliefs += amount
+    # Calculate reliefs and exemptions
+    reliefs = []
+
+    for relief in setting.reliefs_exemptions:
+        amount = Decimal('0')
+
+        # Determine base amount
+        base_amount = Decimal('0')
+        based_on = relief.get('based_on', '')
+
+        if based_on.upper() == 'GROSS_INCOME':
+            base_amount = gross_income_annual
+        elif based_on:
+            base_amount = calculate_based_on_components(based_on)
+        else:
+            base_amount = gross_income_annual
+
+        # Calculate relief amount
+        if relief.get('formula_type') == 'percentage_plus_fixed':
+            if relief.get('percentage'):
+                amount = round_decimal((base_amount * Decimal(str(relief['percentage']))) / Decimal('100'))
+            if relief.get('fixed_amount'):
+                amount += round_decimal(Decimal(str(relief['fixed_amount'])))
+        else:
+            if relief.get('percentage'):
+                amount = round_decimal((base_amount * Decimal(str(relief['percentage']))) / Decimal('100'))
+            if relief.get('fixed_amount'):
+                amount += round_decimal(Decimal(str(relief['fixed_amount'])))
+
+        reliefs.append({
+            'name': relief['name'],
+            'amount': amount,
+            'percentage': relief.get('percentage'),
+            'fixed_amount': relief.get('fixed_amount')
+        })
+        total_reliefs += amount
+
+    # Calculate taxable income
+    taxable_income = round_decimal(gross_income_annual - total_reliefs)
+
+    # Calculate PAYE tax using brackets
+    annual_tax = Decimal('0')
+    tax_breakdown = []
+    remaining_income = taxable_income
+
+    for index, bracket in enumerate(setting.tax_brackets):
+        if remaining_income > 0:
+            bracket_limit = bracket.get('limit')
+            bracket_size = Decimal(str(bracket_limit)) if bracket_limit is not None else remaining_income
+
+            taxable_amount = min(remaining_income, bracket_size)
+            tax_rate = Decimal(str(bracket.get('rate', 0)))
+            tax_amount = round_decimal((taxable_amount * tax_rate) / Decimal('100'))
+
+            if taxable_amount > 0:
+                if index == 0:
+                    description = f"First {taxable_amount:,.2f}"
+                elif bracket_limit is None:
+                    description = f"Remaining {taxable_amount:,.2f}"
+                else:
+                    description = f"Next {bracket_size:,.2f}"
+
+                tax_breakdown.append({
+                    'description': description,
+                    'rate': tax_rate,
+                    'amount': tax_amount
+                })
+
+                annual_tax += tax_amount
+                remaining_income -= taxable_amount
+
+    monthly_tax = round_decimal(annual_tax / 12)
+
+    # Calculate net salary and effective tax rate
+    net_salary = round_decimal(gross_income_monthly - monthly_tax)
+    effective_tax_rate = round_decimal((monthly_tax / gross_income_monthly * 100) if gross_income_monthly > 0 else 0)
+
+    return {
+        'monthly_salary': float(monthly_salary),
+        'annual_salary': float(annual_salary),
+        'basic_components': {k: {
+            'name': v['name'],
+            'percentage': float(v['percentage']),
+            'monthly': float(v['monthly']),
+            'annual': float(v['annual'])
+        } for k, v in basic_components.items()},
+        'leave_allowance_percentage': float(leave_allowance_percentage),
+        'leave_allowance_monthly': float(leave_allowance_monthly),
+        'leave_allowance_annual': float(leave_allowance_annual),
+        'allowances': [{
+            'name': a['name'],
+            'monthly': float(a['monthly']),
+            'annual': float(a['annual']),
+            'percentage': float(a['percentage'])
+        } for a in allowances],
+        'gross_income_monthly': float(gross_income_monthly),
+        'gross_income_annual': float(gross_income_annual),
+        'statutory_deductions': [{
+            'name': s['name'],
+            'percentage': float(s['percentage']),
+            'monthly': float(s['monthly'])/12,
+            'annual': float(s['annual'])/12
+        } for s in statutory_deductions],
+        'total_statutory_deductions': float(total_statutory_deductions),
+        'reliefs': [{
+            'name': r['name'],
+            'amount': float(r['amount']),
+            'percentage': r.get('percentage'),
+            'fixed_amount': r.get('fixed_amount')
+        } for r in reliefs],
+        'total_reliefs': float(total_reliefs),
+        'taxable_income': float(taxable_income),
+        'tax_breakdown': [{
+            'description': t['description'],
+            'rate': float(t['rate']),
+            'amount': float(t['amount'])
+        } for t in tax_breakdown],
+        'annual_tax': float(annual_tax),
+        'monthly_tax': float(monthly_tax),
+        'net_salary': float(net_salary),
+        'effective_tax_rate': float(effective_tax_rate)
+    }
+
+
+@login_required
+@permission_required('finance.view_salaryrecord', raise_exception=True)
+def payroll_view(request):
+    """Main payroll dashboard with salary structures list"""
+    today = datetime.now()
+    current_year = int(request.GET.get('year', today.year))
+    current_month = int(request.GET.get('month', today.month))
+    status_filter = request.GET.get('status', 'all')
+
+    # Get all active salary structures
+    structures = SalaryStructure.objects.filter(is_active=True).select_related(
+        'staff__staff_profile__user', 'salary_setting'
+    ).order_by('staff__staff_id')
+
+    # Check which structures have been processed for the selected month
+    processed_ids = SalaryRecord.objects.filter(
+        year=current_year,
+        month=current_month
+    ).values_list('salary_structure_id', flat=True)
+
+    # Annotate structures with processing status
+    for structure in structures:
+        structure.is_processed = structure.id in processed_ids
+        if structure.is_processed:
+            record = SalaryRecord.objects.get(
+                salary_structure=structure,
+                year=current_year,
+                month=current_month
+            )
+            structure.payment_status = record.payment_status
+        else:
+            structure.payment_status = 'not_processed'
+
+    # Apply status filter
+    if status_filter != 'all':
+        if status_filter == 'processed':
+            structures = [s for s in structures if s.is_processed]
+        elif status_filter == 'pending':
+            structures = [s for s in structures if s.is_processed and s.payment_status == 'pending']
+        elif status_filter == 'paid':
+            structures = [s for s in structures if s.is_processed and s.payment_status == 'paid']
+        elif status_filter == 'not_paid':
+            structures = [s for s in structures if
+                          not s.is_processed or (s.is_processed and s.payment_status != 'paid')]
+
+    import calendar
+    context = {
+        'structures': structures,
+        'current_year': current_year,
+        'current_month': current_month,
+        'month_name': calendar.month_name[current_month],
+        'status_filter': status_filter,
+        'years': range(2020, today.year + 2),
+        'months': [(i, calendar.month_name[i]) for i in range(1, 13)],
+        'page_title': f'Payroll - {calendar.month_name[current_month]} {current_year}'
+    }
+    return render(request, 'finance/payroll/payroll.html', context)
+
+
+@login_required
+@permission_required('finance.add_salaryrecord', raise_exception=True)
+def process_payroll_view(request, structure_id):
+    """Process individual staff payroll with payslip creation"""
+    # Get salary structure
+    structure = get_object_or_404(
+        SalaryStructure.objects.select_related(
+            'staff__staff_profile__user', 'salary_setting'
+        ),
+        pk=structure_id
+    )
+
+    today = datetime.now()
+    current_year = int(request.GET.get('year', today.year))
+    current_month = int(request.GET.get('month', today.month))
+
+    # Check if already processed
+    existing_record = SalaryRecord.objects.filter(
+        salary_structure=structure,
+        year=current_year,
+        month=current_month
+    ).first()
+
+    # Parse JSON fields for template use
+    additional_income = {}
+    other_deductions = {}
+
+    if existing_record:
+        # Safely parse additional_income
+        if existing_record.additional_income:
+            try:
+                if isinstance(existing_record.additional_income, str):
+                    additional_income = json.loads(existing_record.additional_income)
+                else:
+                    additional_income = existing_record.additional_income
+            except (json.JSONDecodeError, TypeError):
+                additional_income = {}
+
+        # Safely parse other_deductions
+        if existing_record.other_deductions:
+            try:
+                if isinstance(existing_record.other_deductions, str):
+                    other_deductions = json.loads(existing_record.other_deductions)
+                else:
+                    other_deductions = existing_record.other_deductions
+            except (json.JSONDecodeError, TypeError):
+                other_deductions = {}
+
+    if request.method == 'POST':
+        # Get form data
+        bonus = Decimal(request.POST.get('bonus', '0'))
+        notes = request.POST.get('notes', '')
+
+        # Get allowances
+        allowances = {}
+        for allowance_config in structure.salary_setting.income_items:
+            if allowance_config.get('is_active', True):
+                allowance_name = allowance_config['name']
+                allowance_value = request.POST.get(f'allowance_{allowance_name}', '0')
+                if allowance_value:
+                    allowances[allowance_name] = Decimal(allowance_value)
+
+        # Get deductions
+        deductions = {}
+        for deduction_config in structure.salary_setting.other_deductions_config:
+            if not deduction_config.get('linked_to'):  # Only manual deductions
+                deduction_name = deduction_config['name']
+                deduction_value = request.POST.get(f'deduction_{deduction_name}', '0')
+                if deduction_value:
+                    deductions[deduction_name] = Decimal(deduction_value)
+
+        # Calculate salary using SalaryCalculator - BUT WITHOUT additional_income and custom_deductions
+        calculator = SalaryCalculator(structure, current_month, current_year)
+        salary_data = calculator.calculate_complete_salary(
+            bonus=bonus,
+            custom_deductions=deductions,  # ← PASS THE DEDUCTIONS
+            additional_income=allowances  # ← PASS THE ALLOWANCES
+        )
+
+        # Helper function to convert Decimals in nested structures
+        def convert_decimals(obj):
+            if isinstance(obj, Decimal):
+                return str(obj)
+            elif isinstance(obj, dict):
+                return {k: convert_decimals(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_decimals(item) for item in obj]
+            return obj
+
+        # Calculate totals manually
+        # total_additional_income = sum(allowances.values()) if allowances else Decimal('0')
+        # total_other_deductions = sum(deductions.values()) if deductions else Decimal('0')
+        #
+        # # Calculate final values
+        # gross_salary = salary_data.get('gross_salary', Decimal('0')) + total_additional_income
+        # net_salary = gross_salary - salary_data.get('total_statutory_deductions', Decimal('0')) - salary_data.get(
+        #     'monthly_tax', Decimal('0')) - total_other_deductions
+
+        # Use calculated values directly
+        gross_salary = salary_data['total_income']  # Already includes allowances
+        net_salary = salary_data['net_salary']  # Already includes all deductions
+
+        # Create or update salary record
+        if existing_record:
+            record = existing_record
+            record.bonus = bonus
+            record.notes = notes
+            record.additional_income = convert_decimals(allowances)
+            record.other_deductions = convert_decimals(deductions)
+        else:
+            record = SalaryRecord(
+                staff=structure.staff,
+                salary_structure=structure,
+                salary_setting=structure.salary_setting,
+                month=current_month,
+                year=current_year,
+                monthly_salary=structure.monthly_salary,
+                annual_salary=structure.annual_salary,
+                basic_components_breakdown=convert_decimals(salary_data.get('basic_components', {})),
+                allowances_breakdown=convert_decimals(salary_data.get('allowances', {})),
+                bonus=bonus,
+                additional_income=convert_decimals(allowances),
+                other_deductions=convert_decimals(deductions),
+                notes=notes,
+                created_by=request.user
+            )
+
+        # Update calculated fields
+        record.total_income = gross_salary
+        record.gross_salary = gross_salary
+        record.statutory_deductions = convert_decimals(salary_data.get('statutory_deductions', {}))
+        record.total_statutory_deductions = Decimal(salary_data.get('total_statutory_deductions', '0'))
+        record.total_other_deductions = salary_data['total_other_deductions']
+        record.annual_gross_income = Decimal(salary_data.get('annual_gross_income', '0'))
+        record.total_reliefs = Decimal(salary_data.get('total_reliefs', '0'))
+        record.taxable_income = Decimal(salary_data.get('taxable_income', '0'))
+        record.annual_tax = Decimal(salary_data.get('annual_tax', '0'))
+        record.monthly_tax = Decimal(salary_data.get('monthly_tax', '0'))
+        record.total_taxation = Decimal(salary_data.get('monthly_tax', '0'))
+        record.effective_tax_rate = Decimal(salary_data.get('effective_tax_rate', '0'))
+        record.net_salary = net_salary
+
+        record.save()
+
+        messages.success(request, f'Payroll for {structure.staff} processed successfully!')
+        return redirect(reverse('finance_salary_record_detail', kwargs={'pk': record.id}))
+
+    # Prepare context for GET request
+    context = {
+        'structure': structure,
+        'existing_record': existing_record,
+        'additional_income': additional_income,
+        'other_deductions': other_deductions,
+        'current_year': current_year,
+        'current_month': current_month,
+        'month_name': calendar.month_name[current_month],
+        'page_title': f'Process Payroll - {structure.staff}',
+        # Pass salary setting data to JavaScript
+        'salary_setting_data': json.dumps({
+            'statutory_deductions': structure.salary_setting.statutory_deductions,
+            'tax_brackets': structure.salary_setting.tax_brackets,
+            'reliefs_exemptions': structure.salary_setting.reliefs_exemptions
+        })
+    }
+    return render(request, 'finance/payroll/process.html', context)
+
+
+@login_required
+@permission_required('finance.view_salaryrecord', raise_exception=True)
+def salary_record_detail_view(request, pk):
+    """View salary record (payslip) - using SalaryCalculator for consistency"""
+    import json
+    import calendar
+    from decimal import Decimal
+
+    # Get the salary record
+    record = get_object_or_404(
+        SalaryRecord.objects.select_related(
+            'staff__staff_profile__user',
+            'salary_structure',
+            'salary_setting'
+        ),
+        pk=pk
+    )
+
+    structure = record.salary_structure
+
+    # Parse JSON fields for additional data
+    def parse_json_field(field):
+        if field and isinstance(field, str):
+            try:
+                return json.loads(field)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return field or {}
+
+    additional_income = parse_json_field(record.additional_income)
+    other_deductions = parse_json_field(record.other_deductions)
+
+    # Use SalaryCalculator to recalculate (ensures consistency with process view)
+    calculator = SalaryCalculator(structure, record.month, record.year)
+    salary_data = calculator.calculate_complete_salary(
+        bonus=record.bonus,
+        custom_deductions=other_deductions,  # ← Pass the parsed deductions
+        additional_income=additional_income  # ← Pass the parsed allowances
+
+    )
+
+    # Build income breakdown list from calculator results
+    income_breakdown = []
+
+    # Add basic components - CORRECTED KEY NAME
+    basic_components = salary_data.get('basic_components_breakdown', {})
+    if basic_components:
+        for code, component in basic_components.items():
+            if isinstance(component, dict):
+                income_breakdown.append({
+                    'name': component.get('name', code),
+                    'amount': float(component.get('amount', 0)),
+                    'percentage': float(component.get('percentage', 0)),
+                    'type': 'basic'
+                })
+
+    # Add allowances - CORRECTED KEY NAME
+    allowances = salary_data.get('allowances_breakdown', {})
+    if allowances:
+        for allowance_name, allowance_data in allowances.items():
+            if isinstance(allowance_data, dict):
+                amount = float(allowance_data.get('amount', 0))
+                if amount > 0:
+                    income_breakdown.append({
+                        'name': allowance_name,
+                        'amount': amount,
+                        'percentage': 0,
+                        'type': 'allowance'
+                    })
+
+    # Add bonus
+    if record.bonus > 0:
+        income_breakdown.append({
+            'name': 'Bonus',
+            'amount': float(record.bonus),
+            'percentage': 0,
+            'type': 'bonus'
+        })
+
+    # Add additional income
+    if additional_income:
+        for name, amount in additional_income.items():
+            amount_val = float(amount) if amount else 0
+            if amount_val > 0:
+                income_breakdown.append({
+                    'name': name,
+                    'amount': amount_val,
+                    'percentage': 0,
+                    'type': 'additional'
+                })
+
+    # Build statutory deductions breakdown from calculator
+    statutory_breakdown = []
+    statutory_deductions = salary_data.get('statutory_deductions', {})
+
+    if statutory_deductions:
+        for name, deduction in statutory_deductions.items():
+            if isinstance(deduction, dict):
+                statutory_breakdown.append({
+                    'name': name,
+                    'amount': float(deduction.get('amount', 0)),
+                    'percentage': float(deduction.get('percentage', 0)),
+                    'based_on': deduction.get('based_on', '')
+                })
+
+    # Build other deductions breakdown
+    other_breakdown = []
+    other_deductions_calc = salary_data.get('other_deductions', {})
+    if other_deductions_calc:
+        for name, deduction in other_deductions_calc.items():
+            if isinstance(deduction, dict):
+                amount_val = float(deduction.get('amount', 0))
+            else:
+                amount_val = float(deduction) if deduction else 0
+
+            if amount_val > 0:
+                other_breakdown.append({
+                    'name': name,
+                    'amount': amount_val
+                })
+
+    # Get calculated totals from salary_data (from calculator)
+    calculated_totals = {
+        'total_income': float(salary_data.get('total_income', 0)),
+        'total_statutory': float(salary_data.get('total_statutory_deductions', 0)),
+        'total_other': float(salary_data.get('total_other_deductions', 0)),
+        'total_tax': float(salary_data.get('total_taxation', 0)),
+        'net_salary': float(salary_data.get('net_salary', 0))
+    }
+
+    # Prepare context
+    context = {
+        'record': record,
+        'structure': structure,
+        'income_breakdown': income_breakdown,
+        'statutory_breakdown': statutory_breakdown,
+        'other_breakdown': other_breakdown,
+        'calculated_totals': calculated_totals,
+        'page_title': f'Payslip - {record.staff} - {record.month_name} {record.year}',
+        # Pass salary setting data for any JavaScript calculations
+        'salary_setting_data': json.dumps({
+            'basic_components': structure.salary_setting.basic_components,
+            'statutory_deductions': structure.salary_setting.statutory_deductions,
+            'tax_brackets': structure.salary_setting.tax_brackets,
+            'reliefs_exemptions': structure.salary_setting.reliefs_exemptions
+        })
+    }
+
+    return render(request, 'finance/payroll/record_detail.html', context)
+
+
+@login_required
+@permission_required('finance.view_salaryrecord', raise_exception=True)
+def download_payslip_pdf(request, pk):
+    """Generate and download payslip as PDF"""
+    from .models import SalaryRecord
+
+    # Get the salary record
+    record = get_object_or_404(
+        SalaryRecord.objects.select_related(
+            'staff__staff_profile__user',
+            'salary_structure',
+            'salary_setting'
+        ),
+        pk=pk
+    )
+
+    structure = record.salary_structure
+
+    # Parse JSON fields
+    def parse_json_field(field):
+        if field and isinstance(field, str):
+            try:
+                return json.loads(field)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return field or {}
+
+    additional_income = parse_json_field(record.additional_income)
+    other_deductions = parse_json_field(record.other_deductions)
+
+    # Recalculate using calculator
+    calculator = SalaryCalculator(structure, record.month, record.year)
+    salary_data = calculator.calculate_complete_salary(
+        bonus=record.bonus,
+        custom_deductions=other_deductions,
+        additional_income=additional_income
+    )
+
+    # Create the HttpResponse object with PDF headers
+    response = HttpResponse(content_type='application/pdf')
+    response[
+        'Content-Disposition'] = f'attachment; filename="payslip_{record.staff.staff_id}_{record.month}_{record.year}.pdf"'
+
+    # Create the PDF object
+    doc = SimpleDocTemplate(response, pagesize=A4, topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+    elements = []
+
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#1a237e'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#1a237e'),
+        spaceAfter=12,
+        spaceBefore=20
+    )
+
+    # Title
+    elements.append(Paragraph("PAYSLIP", title_style))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # Staff Information
+    staff_data = [
+        ['Staff Information', '', 'Payment Details', ''],
+        ['Name:', str(record.staff), 'Period:', f'{record.month_name} {record.year}'],
+        ['Staff ID:', record.staff.staff_id, 'Payment Date:', str(record.paid_date) if record.paid_date else 'Pending'],
+        ['Department:', 'N/A', 'Status:', record.get_payment_status_display()],
+    ]
+
+    staff_table = Table(staff_data, colWidths=[1.5 * inch, 2 * inch, 1.5 * inch, 2 * inch])
+    staff_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (1, 0), colors.HexColor('#e3f2fd')),
+        ('BACKGROUND', (2, 0), (3, 0), colors.HexColor('#e3f2fd')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(staff_table)
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Bank Details (if available)
+    if structure.bank_name:
+        elements.append(Paragraph("Bank Details", heading_style))
+        bank_data = [[
+            f"Bank: {structure.bank_name} | Account: {structure.account_number} | Name: {structure.account_name}"
+        ]]
+        bank_table = Table(bank_data, colWidths=[7 * inch])
+        bank_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(bank_table)
+        elements.append(Spacer(1, 0.2 * inch))
+
+    # Basic Salary Components
+    elements.append(Paragraph("Basic Salary Components", heading_style))
+    basic_data = [['Component', 'Percentage', 'Amount (₦)']]
+
+    basic_components = salary_data.get('basic_components_breakdown', {})
+    for code, component in basic_components.items():
+        if isinstance(component, dict):
+            basic_data.append([
+                component.get('name', code),
+                f"{component.get('percentage', 0):.2f}%",
+                f"₦{float(component.get('amount', 0)):,.2f}"
+            ])
+
+    basic_table = Table(basic_data, colWidths=[3 * inch, 2 * inch, 2 * inch])
+    basic_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+    ]))
+    elements.append(basic_table)
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # Additional Income
+    if additional_income or record.bonus > 0:
+        elements.append(Paragraph("Additional Income", heading_style))
+        income_data = [['Description', 'Amount (₦)']]
+
+        if record.bonus > 0:
+            income_data.append(['Bonus', f"₦{float(record.bonus):,.2f}"])
+
+        for name, amount in additional_income.items():
+            if float(amount) > 0:
+                income_data.append([name, f"₦{float(amount):,.2f}"])
+
+        income_table = Table(income_data, colWidths=[5 * inch, 2 * inch])
+        income_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        elements.append(income_table)
+        elements.append(Spacer(1, 0.2 * inch))
+
+    # Total Payable
+    total_payable_data = [['Total Payable (A)', f"₦{float(salary_data['total_income']):,.2f}"]]
+    total_payable_table = Table(total_payable_data, colWidths=[5 * inch, 2 * inch])
+    total_payable_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e3f2fd')),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('BOX', (0, 0), (-1, -1), 1.5, colors.HexColor('#1a237e')),
+    ]))
+    elements.append(total_payable_table)
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Deductions Section
+    elements.append(Paragraph("Deductions", heading_style))
+
+    # Statutory Deductions
+    statutory_data = [['Statutory Deductions', 'Amount (₦)']]
+    statutory_deductions = salary_data.get('statutory_deductions', {})
+    for name, deduction in statutory_deductions.items():
+        if isinstance(deduction, dict):
+            percentage = deduction.get('percentage', 0)
+            based_on = deduction.get('based_on', '')
+            desc = f"{name}"
+            if percentage > 0:
+                desc += f" ({percentage:.2f}% of {based_on})"
+            statutory_data.append([desc, f"₦{float(deduction.get('amount', 0)):,.2f}"])
+
+    statutory_table = Table(statutory_data, colWidths=[5 * inch, 2 * inch])
+    statutory_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(statutory_table)
+
+    # Statutory Sub-total
+    statutory_total_data = [['Sub-Total (B)', f"₦{float(salary_data['total_statutory_deductions']):,.2f}"]]
+    statutory_total_table = Table(statutory_total_data, colWidths=[5 * inch, 2 * inch])
+    statutory_total_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(statutory_total_table)
+    elements.append(Spacer(1, 0.15 * inch))
+
+    # Other Deductions
+    if other_deductions:
+        other_ded_data = [['Other Deductions', 'Amount (₦)']]
+        for name, amount in other_deductions.items():
+            if float(amount) > 0:
+                other_ded_data.append([name, f"₦{float(amount):,.2f}"])
+
+        if len(other_ded_data) > 1:
+            other_ded_table = Table(other_ded_data, colWidths=[5 * inch, 2 * inch])
+            other_ded_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('TOPPADDING', (0, 1), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(other_ded_table)
+
+            # Other Deductions Sub-total
+            other_total_data = [['Sub-Total (C)', f"₦{float(salary_data['total_other_deductions']):,.2f}"]]
+            other_total_table = Table(other_total_data, colWidths=[5 * inch, 2 * inch])
+            other_total_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ]))
+            elements.append(other_total_table)
+            elements.append(Spacer(1, 0.15 * inch))
+
+    # Taxation
+    tax_data = [
+        ['Taxation', 'Amount (₦)'],
+        ['PAYE', f"₦{float(record.monthly_tax):,.2f}"]
+    ]
+
+    if record.other_taxes > 0:
+        tax_data.append(['Other Taxes', f"₦{float(record.other_taxes):,.2f}"])
+
+    tax_table = Table(tax_data, colWidths=[5 * inch, 2 * inch])
+    tax_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(tax_table)
+
+    # Tax Sub-total
+    tax_total_data = [['Sub-Total (D)', f"₦{float(salary_data['total_taxation']):,.2f}"]]
+    tax_total_table = Table(tax_total_data, colWidths=[5 * inch, 2 * inch])
+    tax_total_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(tax_total_table)
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Take Home Pay
+    take_home_style = ParagraphStyle(
+        'TakeHome',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.white,
+        alignment=TA_CENTER
+    )
+
+    take_home_data = [
+        [Paragraph("Take Home Pay", take_home_style)],
+        [Paragraph("A - B - C - D", styles['Normal'])],
+        [Paragraph(f"₦{float(salary_data['net_salary']):,.2f}", title_style)]
+    ]
+
+    take_home_table = Table(take_home_data, colWidths=[7 * inch])
+    take_home_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#667eea')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 15),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 15),
+        ('LINEBELOW', (0, 1), (-1, 1), 1, colors.white),
+    ]))
+    elements.append(take_home_table)
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Tax Information
+    elements.append(Paragraph("Tax Information", heading_style))
+    tax_info_data = [
+        ['Annual Gross Income:', f"₦{float(record.annual_gross_income):,.2f}"],
+        ['Total Reliefs:', f"₦{float(record.total_reliefs):,.2f}"],
+        ['Taxable Income:', f"₦{float(record.taxable_income):,.2f}"],
+        ['Effective Tax Rate:', f"{float(record.effective_tax_rate):.2f}%"],
+    ]
+
+    tax_info_table = Table(tax_info_data, colWidths=[3.5 * inch, 3.5 * inch])
+    tax_info_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(tax_info_table)
+
+    # Notes
+    if record.notes:
+        elements.append(Spacer(1, 0.3 * inch))
+        elements.append(Paragraph("Notes", heading_style))
+        notes_style = ParagraphStyle(
+            'Notes',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=14
+        )
+        elements.append(Paragraph(record.notes, notes_style))
+
+    # Build PDF
+    doc.build(elements)
+
+    return response
+
+
+@login_required
+@permission_required('finance.change_salaryrecord', raise_exception=True)
+def mark_as_paid_view(request, pk):
+    """Mark salary record as paid"""
+    record = get_object_or_404(SalaryRecord, pk=pk)
+
+    if request.method == 'POST':
+        record.payment_status = SalaryRecord.PaymentStatus.PAID
+        record.paid_date = date.today()
+        record.paid_by = request.user
+        if record.amount_paid == 0:
+            record.amount_paid = record.net_salary
+        record.save()
+
+        messages.success(request, f'Salary for {record.staff} marked as paid!')
+        return redirect('finance_salary_record_detail', pk=pk)
+
+    context = {
+        'record': record,
+        'page_title': f'Mark as Paid - {record.staff}'
+    }
+    return render(request, 'finance/payroll/mark_as_paid.html', context)
+
+
+@login_required
+@permission_required('finance.view_salaryrecord', raise_exception=True)
+def payroll_dashboard_view(request):
+    """Payroll dashboard with monthly summary and statistics"""
+    from .models import SalaryRecord, SalaryStructure
+
+    # Get current or requested month/year
+    today = datetime.now()
+    current_year = int(request.GET.get('year', today.year))
+    current_month = int(request.GET.get('month', today.month))
+
+    # Get all records for the selected month
+    records = SalaryRecord.objects.filter(
+        year=current_year,
+        month=current_month
+    ).select_related('staff', 'salary_structure')
+
+    # Calculate statistics
+    total_staff = SalaryStructure.objects.filter(is_active=True).count()
+    processed_count = records.count()
+    unprocessed_count = total_staff - processed_count
+
+    # Payment status breakdown
+    paid_records = records.filter(payment_status=SalaryRecord.PaymentStatus.PAID)
+    partially_paid_records = records.filter(payment_status=SalaryRecord.PaymentStatus.PARTIALLY_PAID)
+    pending_records = records.filter(payment_status=SalaryRecord.PaymentStatus.PENDING)
+
+    paid_count = paid_records.count()
+    partially_paid_count = partially_paid_records.count()
+    pending_count = pending_records.count()
+
+    # Financial totals
+    total_gross = records.aggregate(total=Sum('total_income'))['total'] or Decimal('0.00')
+    total_net = records.aggregate(total=Sum('net_salary'))['total'] or Decimal('0.00')
+    total_statutory = records.aggregate(total=Sum('total_statutory_deductions'))['total'] or Decimal('0.00')
+    total_tax = records.aggregate(total=Sum('monthly_tax'))['total'] or Decimal('0.00')
+    total_other_deductions = records.aggregate(total=Sum('total_other_deductions'))['total'] or Decimal('0.00')
+
+    # Amount paid vs outstanding
+    total_amount_paid = records.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+    total_outstanding = total_net - total_amount_paid
+
+    # Average statistics
+    avg_gross = records.aggregate(avg=Avg('total_income'))['avg'] or Decimal('0.00')
+    avg_net = records.aggregate(avg=Avg('net_salary'))['avg'] or Decimal('0.00')
+    avg_tax_rate = records.aggregate(avg=Avg('effective_tax_rate'))['avg'] or Decimal('0.00')
+
+    # Top earners (by net salary)
+    top_earners = records.order_by('-net_salary')[:5]
+
+    # Recent payments
+    recent_payments = records.filter(
+        payment_status=SalaryRecord.PaymentStatus.PAID,
+        paid_date__isnull=False
+    ).order_by('-paid_date')[:10]
+
+    # Staff without salary records (unprocessed)
+    processed_staff_ids = records.values_list('staff_id', flat=True)
+    unprocessed_staff = SalaryStructure.objects.filter(
+        is_active=True
+    ).exclude(staff_id__in=processed_staff_ids).select_related('staff')[:10]
+
+    # Month navigation data
+    months = [
+        {'value': i, 'name': calendar.month_name[i]}
+        for i in range(1, 13)
+    ]
+
+    years = list(range(today.year - 2, today.year + 2))
+
+    # Payment completion percentage
+    payment_completion = 0
+    if processed_count > 0:
+        payment_completion = (paid_count / processed_count) * 100
+
+    # Processing completion percentage
+    processing_completion = 0
+    if total_staff > 0:
+        processing_completion = (processed_count / total_staff) * 100
+
+    context = {
+        'page_title': f'Payroll Dashboard - {calendar.month_name[current_month]} {current_year}',
+        'current_month': current_month,
+        'current_year': current_year,
+        'month_name': calendar.month_name[current_month],
+        'months': months,
+        'years': years,
+
+        # Staff counts
+        'total_staff': total_staff,
+        'processed_count': processed_count,
+        'unprocessed_count': unprocessed_count,
+        'processing_completion': processing_completion,
+
+        # Payment status
+        'paid_count': paid_count,
+        'partially_paid_count': partially_paid_count,
+        'pending_count': pending_count,
+        'payment_completion': payment_completion,
+
+        # Financial totals
+        'total_gross': total_gross,
+        'total_net': total_net,
+        'total_statutory': total_statutory,
+        'total_tax': total_tax,
+        'total_other_deductions': total_other_deductions,
+        'total_amount_paid': total_amount_paid,
+        'total_outstanding': total_outstanding,
+
+        # Averages
+        'avg_gross': avg_gross,
+        'avg_net': avg_net,
+        'avg_tax_rate': avg_tax_rate,
+
+        # Lists
+        'records': records,
+        'top_earners': top_earners,
+        'recent_payments': recent_payments,
+        'unprocessed_staff': unprocessed_staff,
+    }
+
+    return render(request, 'finance/payroll/dashboard.html', context)

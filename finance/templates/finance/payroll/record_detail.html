@@ -1,0 +1,293 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+{% load finance_filters %}
+
+{% block 'main' %}
+<style>
+.payslip-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+.payslip-section {
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    background: white;
+}
+.payslip-header {
+    border-bottom: 3px solid #0d6efd;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+.amount-label {
+    font-weight: 500;
+    color: #6c757d;
+}
+.amount-value {
+    font-weight: 600;
+    color: #212529;
+}
+.section-total {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+.take-home {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 25px;
+    border-radius: 10px;
+    text-align: center;
+}
+@media print {
+    .no-print { display: none; }
+    .payslip-section { page-break-inside: avoid; }
+}
+</style>
+
+<div class="container-fluid">
+    <!-- Header with actions -->
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+        <h2 class="mb-0">{{ page_title }}</h2>
+        <div class="btn-group">
+            <a href="{% url 'finance_payroll_dashboard' %}?year={{ record.year }}&month={{ record.month }}"
+               class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+            <a href="{% url 'finance_download_payslip_pdf' record.pk %}"
+           class="btn btn-success">
+            <i class="bi bi-file-earmark-pdf"></i> Download PDF
+        </a>
+            {% if record.payment_status != 'paid' and perms.finance.change_salaryrecord %}
+            <a href="{% url 'finance_mark_as_paid' record.pk %}" class="btn btn-success">
+                <i class="bi bi-cash-coin"></i> Mark as Paid
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="payslip-container">
+        <!-- Payslip Header -->
+        <div class="payslip-section">
+            <div class="payslip-header">
+                <h3 class="mb-3">PAYSLIP</h3>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Name:</strong> {{ record.staff }}</p>
+                        <p class="mb-1"><strong>Staff ID:</strong> {{ record.staff.staff_id }}</p>
+                        <p class="mb-1"><strong>Department:</strong> {{ record.staff.department|default:"N/A" }}</p>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <p class="mb-1"><strong>Period:</strong> {{ record.month_name }} {{ record.year }}</p>
+                        <p class="mb-1"><strong>Payment Date:</strong> {{ record.paid_date|default:"Pending" }}</p>
+                        <p class="mb-1">
+                            <strong>Status:</strong>
+                            {% if record.payment_status == 'paid' %}
+                                <span class="badge bg-success">Paid</span>
+                            {% elif record.payment_status == 'partially_paid' %}
+                                <span class="badge bg-warning">Partially Paid</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Pending</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bank Details -->
+            {% if structure.bank_name %}
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <h6 class="text-muted mb-2">Bank Details</h6>
+                    <p class="mb-1">
+                        <strong>Bank:</strong> {{ structure.bank_name }} |
+                        <strong>Account:</strong> {{ structure.account_number }} |
+                        <strong>Name:</strong> {{ structure.account_name }}
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Basic Components Breakdown -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <h5 class="mb-3">Basic Salary Components</h5>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Component</th>
+                                <th>Percentage</th>
+                                <th>Amount (₦)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in income_breakdown %}
+                            {% if item.type == 'basic' %}
+                            <tr>
+                                <td>{{ item.name }}</td>
+                                <td>{{ item.percentage|floatformat:2 }}%</td>
+                                <td class="text-end">{{ item.amount|floatformat:2|intcomma }}</td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Additional Income -->
+            {% if income_breakdown %}
+            <div class="row mb-3">
+                <div class="col-12">
+                    <h6 class="text-muted mb-2">Additional Income</h6>
+                    <table class="table table-sm">
+                        {% for item in income_breakdown %}
+                        {% if item.type != 'basic' %}
+                        <tr>
+                            <td class="amount-label">{{ item.name }}</td>
+                            <td class="text-end amount-value">
+                                ₦{{ item.amount|floatformat:2|intcomma }}
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Total Payable (A) -->
+            <div class="section-total">
+                <div class="d-flex justify-content-between">
+                    <strong>Total Payable (A):</strong>
+                    <strong class="text-primary">₦{{ calculated_totals.total_income|floatformat:2|intcomma }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deductions Section -->
+        <div class="payslip-section">
+            <h5 class="mb-3">Deductions</h5>
+
+            <!-- Statutory Deductions (B) -->
+            <div class="mb-3">
+                <h6 class="text-muted mb-2">Statutory</h6>
+                <table class="table table-sm">
+                    {% for deduction in statutory_breakdown %}
+                    <tr>
+                        <td class="amount-label">
+                            {{ deduction.name }}
+                            {% if deduction.percentage > 0 %}({{ deduction.percentage|floatformat:2 }}% of {{ deduction.based_on }}){% endif %}
+                        </td>
+                        <td class="text-end amount-value">
+                            ₦{{ deduction.amount|floatformat:2|intcomma }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                <div class="section-total">
+                    <div class="d-flex justify-content-between">
+                        <strong>Sub-Total (B):</strong>
+                        <strong>₦{{ calculated_totals.total_statutory|floatformat:2|intcomma }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Other Deductions (C) -->
+            {% if other_breakdown %}
+            <div class="mb-3">
+                <h6 class="text-muted mb-2">Other Deductions</h6>
+                <table class="table table-sm">
+                    {% for deduction in other_breakdown %}
+                    <tr>
+                        <td class="amount-label">{{ deduction.name }}</td>
+                        <td class="text-end amount-value">
+                            ₦{{ deduction.amount|floatformat:2|intcomma }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                <div class="section-total">
+                    <div class="d-flex justify-content-between">
+                        <strong>Sub-Total (C):</strong>
+                        <strong>₦{{ calculated_totals.total_other|floatformat:2|intcomma }}</strong>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Taxation (D) -->
+            <div class="mb-3">
+                <h6 class="text-muted mb-2">Taxation</h6>
+                <table class="table table-sm">
+                    <tr>
+                        <td class="amount-label">PAYE</td>
+                        <td class="text-end amount-value">
+                            ₦{{ record.monthly_tax|floatformat:2|intcomma }}
+                        </td>
+                    </tr>
+                    {% if record.other_taxes > 0 %}
+                    <tr>
+                        <td class="amount-label">Other Taxes</td>
+                        <td class="text-end amount-value">
+                            ₦{{ record.other_taxes|floatformat:2|intcomma }}
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+                <div class="section-total">
+                    <div class="d-flex justify-content-between">
+                        <strong>Sub-Total (D):</strong>
+                        <strong>₦{{ calculated_totals.total_tax|floatformat:2|intcomma }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Take Home Pay -->
+        <div class="take-home">
+            <h4 class="mb-2">Take Home Pay</h4>
+            <h6 class="mb-3 opacity-75">A - B - C - D</h6>
+            <h2 class="mb-0">₦{{ calculated_totals.net_salary|floatformat:2|intcomma }}</h2>
+        </div>
+
+        <!-- Notes -->
+        {% if record.notes %}
+        <div class="payslip-section">
+            <h6 class="text-muted mb-2">Notes</h6>
+            <p class="mb-0">{{ record.notes }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Tax Information -->
+        <div class="payslip-section">
+            <h6 class="text-muted mb-3">Tax Information</h6>
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-2">
+                        <span class="amount-label">Annual Gross Income:</span>
+                        <span class="amount-value">₦{{ record.annual_gross_income|floatformat:2|intcomma }}</span>
+                    </p>
+                    <p class="mb-2">
+                        <span class="amount-label">Total Reliefs:</span>
+                        <span class="amount-value">₦{{ record.total_reliefs|floatformat:2|intcomma }}</span>
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <p class="mb-2">
+                        <span class="amount-label">Taxable Income:</span>
+                        <span class="amount-value">₦{{ record.taxable_income|floatformat:2|intcomma }}</span>
+                    </p>
+                    <p class="mb-2">
+                        <span class="amount-label">Effective Tax Rate:</span>
+                        <span class="amount-value">{{ record.effective_tax_rate|floatformat:2 }}%</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

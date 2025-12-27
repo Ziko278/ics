@@ -1,0 +1,127 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <h4 class="card-title">Payroll Management</h4>
+
+      <!-- Filter Controls -->
+      <div class="row mb-4">
+        <div class="col-md-3">
+          <label class="form-label">Month</label>
+          <select name="month" class="form-select" onchange="changeMonth(this.value)">
+            {% for month_num, month_name in months %}
+            <option value="{{ month_num }}" {% if month_num == current_month %}selected{% endif %}>
+              {{ month_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Year</label>
+          <select name="year" class="form-select" onchange="changeYear(this.value)">
+            {% for year in years %}
+            <option value="{{ year }}" {% if year == current_year %}selected{% endif %}>
+              {{ year }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select" onchange="changeStatus(this.value)">
+            <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
+            <option value="processed" {% if status_filter == 'processed' %}selected{% endif %}>Processed</option>
+            <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="paid" {% if status_filter == 'paid' %}selected{% endif %}>Paid</option>
+            <option value="not_paid" {% if status_filter == 'not_paid' %}selected{% endif %}>Not Paid</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Staff List -->
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Staff</th>
+              <th>Department</th>
+              <th>Monthly Salary</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for structure in structures %}
+            <tr>
+              <td>{{ structure.staff }}</td>
+              <td>{{ structure.staff.department|default:"N/A" }}</td>
+              <td>₦{{ structure.monthly_salary|floatformat:2|intcomma }}</td>
+              <td>
+                {% if structure.is_processed %}
+                  {% if structure.payment_status == 'paid' %}
+                    <span class="badge bg-success">Paid</span>
+                  {% elif structure.payment_status == 'partially_paid' %}
+                    <span class="badge bg-warning">Partially Paid</span>
+                  {% else %}
+                    <span class="badge bg-info">Processed</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge bg-secondary">Not Processed</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if structure.is_processed %}
+                  <a href="{% url 'finance_salary_record_detail' structure.salary_records.first.id %}"
+                     class="btn btn-sm btn-primary">
+                    <i class="bi bi-eye"></i> View
+                  </a>
+                  {% if structure.payment_status != 'paid' %}
+                  <a href="{% url 'finance_process_payroll' structure.id %}?year={{ current_year }}&month={{ current_month }}"
+                     class="btn btn-sm btn-warning">
+                    <i class="bi bi-pencil"></i> Edit
+                  </a>
+                  {% endif %}
+                {% else %}
+                  <a href="{% url 'finance_process_payroll' structure.id %}?year={{ current_year }}&month={{ current_month }}"
+                     class="btn btn-sm btn-success">
+                    <i class="bi bi-play"></i> Process
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center">No staff found with the selected criteria.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function changeMonth(value) {
+  const url = new URL(window.location);
+  url.searchParams.set('month', value);
+  window.location = url;
+}
+
+function changeYear(value) {
+  const url = new URL(window.location);
+  url.searchParams.set('year', value);
+  window.location = url;
+}
+
+function changeStatus(value) {
+  const url = new URL(window.location);
+  url.searchParams.set('status', value);
+  window.location = url;
+}
+</script>
+{% endblock %}

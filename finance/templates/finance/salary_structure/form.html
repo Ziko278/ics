@@ -1,0 +1,796 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% block 'main' %}
+
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <h4 class="card-title">
+        {% if action == 'Create' %}Add{% else %}Edit{% endif %} Salary Structure
+        <a title="Go Back" onclick="window.history.back()" style="float:right" class="btn btn-sm btn-danger">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+      </h4>
+      <p class="text-muted mb-4">Monthly salary is stored here — all components are calculated from active salary setting.</p>
+
+      <form method="post" id="salaryStructureForm" novalidate>
+        {% csrf_token %}
+
+        <!-- Basic Information Section -->
+        <div class="card border-light mb-4">
+          <div class="card-header bg-primary text-white">
+            <h6 class="mb-0"><i class="bi bi-info-circle"></i> Basic Information</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Staff <span class="text-danger">*</span></label>
+                {{ form.staff }}
+                {% for err in form.staff.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label">Salary Setting <span class="text-danger">*</span></label>
+                {{ form.salary_setting }}
+                <small class="form-text text-muted">Only active salary settings are listed.</small>
+                {% for err in form.salary_setting.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Effective From <span class="text-danger">*</span></label>
+                {{ form.effective_from }}
+                {% for err in form.effective_from.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Effective To</label>
+                {{ form.effective_to }}
+                {% for err in form.effective_to.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <div class="form-check mt-4">
+                  {{ form.is_active }}
+                  <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                    Active (Auto-deactivates other structures for this staff)
+                  </label>
+                  {% for err in form.is_active.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bank Details Section -->
+        <div class="card border-light mb-4">
+          <div class="card-header bg-secondary text-white">
+            <h6 class="mb-0"><i class="bi bi-bank"></i> Bank Details</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Bank Name</label>
+                {{ form.bank_name }}
+                {% for err in form.bank_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Account Number</label>
+                {{ form.account_number }}
+                {% for err in form.account_number.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Account Name</label>
+                {{ form.account_name }}
+                {% for err in form.account_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Monthly Salary Input Section -->
+        <div class="card border-light mb-4">
+          <div class="card-header bg-info text-white">
+            <h6 class="mb-0"><i class="bi bi-cash"></i> Monthly Salary Input</h6>
+          </div>
+          <div class="card-body">
+            <div class="row align-items-end">
+              <div class="col-md-4">
+                <label class="form-label">Monthly Salary (₦) <span class="text-danger">*</span></label>
+                {{ form.monthly_salary }}
+                {% for err in form.monthly_salary.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-md-8">
+                <div class="alert alert-info mb-0">
+                  <i class="bi bi-info-circle"></i> Enter monthly salary to see complete salary calculation breakdown below.
+                  All components will be calculated automatically based on selected salary setting.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Salary Calculation Preview -->
+        <div class="card border-primary mb-4">
+          <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-calculator"></i> Salary Calculation Preview</strong>
+            <span id="calculationStatus" class="badge bg-light text-primary">Waiting for input...</span>
+          </div>
+          <div class="card-body">
+            <div id="previewLoading" class="text-center text-muted py-5">
+              <i class="bi bi-calculator display-4"></i>
+              <p class="mt-2">Select a salary setting and enter monthly salary to see complete calculation...</p>
+            </div>
+
+            <div id="previewContent" style="display: none;">
+              <!-- Salary & Leave Allowance Section -->
+              <div class="table-responsive mb-4">
+                <table class="table table-sm table-bordered">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width: 40%;">Description</th>
+                      <th style="width: 20%;">Percentage</th>
+                      <th style="width: 20%;">Monthly (₦)</th>
+                      <th style="width: 20%;">Annual (₦)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="salaryLeaveTableBody">
+                    <!-- Will be populated by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Income Breakdown Section -->
+              <div class="table-responsive mb-4">
+                <table class="table table-sm table-bordered">
+                  <thead class="table-light">
+                    <tr>
+                      <th colspan="4" class="text-center bg-success text-white">INCOME BREAKDOWN</th>
+                    </tr>
+                    <tr>
+                      <th style="width: 40%;">Description</th>
+                      <th style="width: 20%;">Monthly (₦)</th>
+                      <th style="width: 20%;">Annual (₦)</th>
+                      <th style="width: 20%;">Percentage</th>
+                    </tr>
+                  </thead>
+                  <tbody id="incomeBreakdownTableBody">
+                    <!-- Will be populated by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Gross Income Section -->
+              <div class="table-responsive mb-4">
+                <table class="table table-sm table-bordered">
+                  <tbody>
+                    <tr class="table-success fw-bold">
+                      <td style="width: 60%;">GROSS INCOME (ANNUAL)</td>
+                      <td style="width: 40%;" class="text-end">₦<span id="annualGrossIncome">0.00</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Relief & Exemption Section -->
+              <div class="table-responsive mb-4">
+                <table class="table table-sm table-bordered">
+                  <thead class="table-light">
+                    <tr>
+                      <th colspan="2" class="text-center bg-warning text-dark">RELIEF & EXEMPTION</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reliefExemptionTableBody">
+                    <!-- Will be populated by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- PAYE Tax Calculation Section -->
+              <div class="table-responsive mb-4">
+                <table class="table table-sm table-bordered">
+                  <thead class="table-light">
+                    <tr>
+                      <th colspan="3" class="text-center bg-danger text-white">PAYE TAX CALCULATION</th>
+                    </tr>
+                  </thead>
+                  <tbody id="payeTaxTableBody">
+                    <!-- Will be populated by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Summary Section -->
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="card bg-light">
+                    <div class="card-body">
+                      <h6 class="card-title">Monthly Summary</h6>
+                      <div class="d-flex justify-content-between mb-2">
+                        <span>Monthly Income:</span>
+                        <strong>₦<span id="monthlyIncome">0.00</span></strong>
+                      </div>
+                      <div class="d-flex justify-content-between mb-2">
+                        <span>Monthly PAYE Tax:</span>
+                        <strong>₦<span id="monthlyPayeTax">0.00</span></strong>
+                      </div>
+                      <div class="d-flex justify-content-between mb-2">
+                        <span>Net Salary:</span>
+                        <strong class="text-success">₦<span id="netSalary">0.00</span></strong>
+                      </div>
+                      <div class="d-flex justify-content-between">
+                        <span>Effective Tax Rate:</span>
+                        <strong class="text-primary"><span id="effectiveTaxRate">0.00</span>%</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="card bg-light">
+                    <div class="card-body">
+                      <h6 class="card-title">Annual Summary</h6>
+                      <div class="d-flex justify-content-between mb-2">
+                        <span>Annual Gross:</span>
+                        <strong>₦<span id="annualGross">0.00</span></strong>
+                      </div>
+                      <div class="d-flex justify-content-between mb-2">
+                        <span>Tax Free Pay:</span>
+                        <strong>₦<span id="taxFreePay">0.00</span></strong>
+                      </div>
+                      <div class="d-flex justify-content-between mb-2">
+                        <span>Taxable Income:</span>
+                        <strong>₦<span id="taxableIncome">0.00</span></strong>
+                      </div>
+                      <div class="d-flex justify-content-between">
+                        <span>Total PAYE Tax:</span>
+                        <strong class="text-danger">₦<span id="totalPayeTax">0.00</span></strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save"></i> Save Salary Structure
+          </button>
+          <a href="{% url 'finance_salary_structure_list' %}" class="btn btn-danger">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Salary Settings Data -->
+<script id="salary_settings_data" type="application/json">{{ salary_settings_json|safe }}</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const monthlySalaryInput = document.querySelector('[name="monthly_salary"]');
+  const settingSelect = document.querySelector('[name="salary_setting"]');
+  const previewLoading = document.getElementById('previewLoading');
+  const previewContent = document.getElementById('previewContent');
+  const calculationStatus = document.getElementById('calculationStatus');
+
+  // Parse salary settings data
+  let salarySettingsData = null;
+  try {
+    const el = document.getElementById('salary_settings_data');
+    if (el && el.textContent) {
+      salarySettingsData = JSON.parse(el.textContent);
+    }
+  } catch (e) {
+    console.error('Failed to parse salary settings data:', e);
+  }
+
+  // Format currency with proper rounding
+  function formatCurrency(amount) {
+    const roundedAmount = Math.round(amount * 100) / 100;
+    return new Intl.NumberFormat('en-NG', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(roundedAmount);
+  }
+
+  // Helper function to calculate amount based on component codes
+  function calculateAmountBasedOnComponents(basicComponents, basedOn) {
+    if (!basedOn) return 0;
+
+    // Handle special cases
+    if (basedOn.toUpperCase() === 'TOTAL') {
+      // Return total of all basic components
+      return Object.values(basicComponents).reduce((sum, comp) => sum + comp.monthly, 0);
+    }
+
+    if (basedOn.toUpperCase() === 'GROSS_INCOME') {
+      // This would be calculated after we know gross income
+      // Return 0 for now, will be handled in calling function
+      return 0;
+    }
+
+    // Handle component codes (case-insensitive)
+    const codes = basedOn.split('+').map(code => code.trim().toUpperCase());
+    let totalAmount = 0;
+
+    codes.forEach(code => {
+      if (basicComponents[code]) {
+        totalAmount += basicComponents[code].monthly;
+      }
+    });
+
+    return totalAmount * 12;
+  }
+
+  // Calculate complete salary
+  function calculateSalary(monthlySalary, setting) {
+    monthlySalary = Math.round(monthlySalary * 100) / 100;
+    const annualSalary = Math.round((monthlySalary * 12) * 100) / 100;
+
+    // Calculate basic components
+    const basicComponents = {};
+    let totalBasicPercentage = 0;
+
+    if (setting.basic_components) {
+      Object.values(setting.basic_components).forEach(component => {
+        const percentage = parseFloat(component.percentage) || 0;
+        const monthlyAmount = Math.round((monthlySalary * percentage / 100) * 100) / 100;
+        const annualAmount = Math.round((monthlyAmount * 12) * 100) / 100;
+
+        basicComponents[component.code] = {
+          name: component.name,
+          percentage: percentage,
+          monthly: monthlyAmount,
+          annual: annualAmount
+        };
+        totalBasicPercentage += percentage;
+      });
+    }
+
+    // Calculate leave allowance - use leave_allowance_percentage from setting
+    let leaveAllowanceMonthly = 0;
+    let leaveAllowanceAnnual = 0;
+    let leaveAllowancePercentage = 0;
+
+    // Use leave_allowance_percentage from setting
+    if (setting.leave_allowance_percentage !== undefined) {
+      leaveAllowancePercentage = parseFloat(setting.leave_allowance_percentage) || 0;
+      // Leave allowance is calculated on annual basic salary (sum of basic components)
+      const annualBasicSalary = Object.values(basicComponents).reduce((sum, comp) => sum + comp.annual, 0);
+      leaveAllowanceAnnual = Math.round((annualBasicSalary * leaveAllowancePercentage / 100) * 100) / 100;
+      leaveAllowanceMonthly = Math.round((leaveAllowanceAnnual / 12) * 100) / 100;
+    }
+
+    // Calculate other allowances
+    const allowances = [];
+    let totalOtherAllowancesMonthly = 0;
+    let totalOtherAllowancesAnnual = 0;
+
+    if (setting.allowances) {
+      setting.allowances.forEach(allowance => {
+        if (allowance.is_active) {
+          let monthlyAmount = 0;
+          if (allowance.calculation_type === 'fixed') {
+            monthlyAmount = Math.round((parseFloat(allowance.fixed_amount) || 0) * 100) / 100;
+          } else if (allowance.calculation_type === 'percentage') {
+            const percentage = parseFloat(allowance.percentage) || 0;
+            if (allowance.based_on.toUpperCase() === 'TOTAL') {
+              monthlyAmount = Math.round((monthlySalary * percentage / 100) * 100) / 100;
+            } else if (allowance.based_on.toUpperCase() === 'GROSS_INCOME') {
+              // Calculate based on gross income (we'll need to handle this recursively)
+              // For now, use monthly salary + other allowances
+              const tempGross = monthlySalary + totalOtherAllowancesMonthly;
+              monthlyAmount = Math.round((tempGross * percentage / 100) * 100) / 100;
+            } else {
+              // Handle component codes with + separator
+              const baseAmount = calculateAmountBasedOnComponents(basicComponents, allowance.based_on);
+              monthlyAmount = Math.round((baseAmount * percentage / 100) * 100) / 100;
+            }
+          }
+
+          const annualAmount = Math.round((monthlyAmount * 12) * 100) / 100;
+
+          allowances.push({
+            name: allowance.name,
+            monthly: monthlyAmount,
+            annual: annualAmount
+          });
+
+          totalOtherAllowancesMonthly += monthlyAmount;
+          totalOtherAllowancesAnnual += annualAmount;
+        }
+      });
+    }
+
+    // Calculate gross income based on include_leave_in_gross setting
+    let grossIncomeMonthly;
+    let grossIncomeAnnual;
+
+    if (setting.include_leave_in_gross) {
+      grossIncomeMonthly = Math.round((monthlySalary + totalOtherAllowancesMonthly + leaveAllowanceMonthly) * 100) / 100;
+      grossIncomeAnnual = Math.round((annualSalary + totalOtherAllowancesAnnual + leaveAllowanceAnnual) * 100) / 100;
+    } else {
+      grossIncomeMonthly = Math.round((monthlySalary + totalOtherAllowancesMonthly) * 100) / 100;
+      grossIncomeAnnual = Math.round((annualSalary + totalOtherAllowancesAnnual) * 100) / 100;
+    }
+
+    // Calculate statutory deductions
+    const statutoryDeductions = [];
+    let totalStatutoryDeductions = 0;
+    let totalReliefs = 0;
+
+    if (setting.statutory_deductions) {
+      setting.statutory_deductions.forEach(deduction => {
+        if (deduction.is_active !== false) {  // Default to true if not specified
+          const percentage = parseFloat(deduction.percentage) || 0;
+          const baseAmount = calculateAmountBasedOnComponents(basicComponents, deduction.based_on);
+          const amount = Math.round((baseAmount * percentage / 100) * 100) / 100;
+
+          statutoryDeductions.push({
+            name: deduction.name,
+            percentage: percentage,
+             based_on: deduction.based_on,
+            monthly: amount,
+            annual: Math.round((amount) * 100) / 100
+          });
+          totalStatutoryDeductions += amount;
+          totalReliefs += amount;
+        }
+      });
+    }
+
+    // Calculate reliefs and exemptions
+
+    const reliefs = [];
+
+    if (setting.reliefs_exemptions && setting.reliefs_exemptions.length > 0) {
+      setting.reliefs_exemptions.forEach(relief => {
+        let amount = 0;
+
+        // First determine the base amount based on 'based_on' property
+        let baseAmount = 0;
+        if (relief.based_on) {
+          if (relief.based_on.toUpperCase() === 'GROSS_INCOME') {
+            baseAmount = grossIncomeAnnual;
+          } else {
+            // Handle component codes (case-insensitive)
+            baseAmount = calculateAmountBasedOnComponents(basicComponents, relief.based_on, monthlySalary, totalOtherAllowancesMonthly);
+          }
+        } else {
+          // If no based_on specified, use gross income
+          baseAmount = grossIncomeAnnual;
+        }
+
+        // Now calculate the relief amount based on the base amount
+        if (relief.formula_type === 'percentage_plus_fixed') {
+          // Handle percentage + fixed amount
+          if (relief.percentage) {
+            amount = Math.round((baseAmount * parseFloat(relief.percentage) / 100) * 100) / 100;
+          }
+          if (relief.fixed_amount) {
+            amount += Math.round((parseFloat(relief.fixed_amount) || 0) * 100) / 100;
+          }
+        } else {
+          // Handle standard percentage or fixed
+          if (relief.percentage) {
+            amount = Math.round((baseAmount * parseFloat(relief.percentage) / 100) * 100) / 100;
+          }
+          if (relief.fixed_amount) {
+            amount += Math.round((parseFloat(relief.fixed_amount) || 0) * 100) / 100;
+          }
+        }
+
+        reliefs.push({
+          name: relief.name,
+          amount: amount
+        });
+        totalReliefs += amount;
+      });
+    }
+
+    // Calculate taxable income
+    const taxableIncome = Math.round((grossIncomeAnnual - totalReliefs) * 100) / 100;
+
+    // Calculate PAYE tax using brackets
+    let annualTax = 0;
+    const taxBreakdown = [];
+
+    if (setting.tax_brackets && setting.tax_brackets.length > 0) {
+      let remainingIncome = taxableIncome;
+
+      setting.tax_brackets.forEach((bracket, index) => {
+        if (remainingIncome > 0) {
+          // Each bracket limit is the SIZE of that bracket, not cumulative
+          const bracketSize = bracket.limit !== null && bracket.limit !== undefined
+            ? parseFloat(bracket.limit)
+            : remainingIncome; // null limit means "all remaining"
+
+          const taxableAmount = Math.min(remainingIncome, bracketSize);
+          const taxRate = parseFloat(bracket.rate) || 0;
+          const taxAmount = Math.round((taxableAmount * taxRate / 100) * 100) / 100;
+
+          if (taxableAmount > 0) {
+            let description;
+            if (index === 0) {
+              description = `First ${formatCurrency(bracketSize)} @ ${taxRate}%`;
+            } else if (bracket.limit === null || bracket.limit === undefined) {
+              description = `Remaining ${formatCurrency(taxableAmount)} @ ${taxRate}%`;
+            } else {
+              description = `Next ${formatCurrency(bracketSize)} @ ${taxRate}%`;
+            }
+
+            taxBreakdown.push({
+              description: description,
+              rate: taxRate,
+              amount: taxAmount
+            });
+
+            annualTax += taxAmount;
+            remainingIncome -= taxableAmount;
+          }
+        }
+      });
+    }
+
+
+    const monthlyTax = Math.round((annualTax / 12) * 100) / 100;
+
+    // Calculate effective tax rate
+    const effectiveTaxRate = grossIncomeMonthly > 0 ? Math.round((monthlyTax / grossIncomeMonthly * 100) * 100) / 100 : 0;
+
+    return {
+      basicComponents,
+      leaveAllowancePercentage,
+      leaveAllowanceMonthly,
+      leaveAllowanceAnnual,
+      allowances,
+      grossIncomeMonthly,
+      grossIncomeAnnual,
+      reliefs,
+      totalReliefs,
+      taxableIncome,
+      taxBreakdown,
+      annualTax,
+      monthlyTax,
+      effectiveTaxRate,
+      statutoryDeductions,
+      totalStatutoryDeductions
+    };
+  }
+
+  // Render preview
+  function renderPreview() {
+    const monthlySalary = parseFloat(monthlySalaryInput.value) || 0;
+    const settingId = settingSelect.value;
+
+    if (!settingId || monthlySalary <= 0 || !salarySettingsData) {
+      previewLoading.style.display = 'block';
+      previewContent.style.display = 'none';
+      calculationStatus.textContent = 'Waiting for input...';
+      calculationStatus.className = 'badge bg-light text-primary';
+      return;
+    }
+
+    const setting = salarySettingsData[settingId];
+    if (!setting) {
+      previewLoading.style.display = 'block';
+      previewContent.style.display = 'none';
+      calculationStatus.textContent = 'Invalid setting';
+      calculationStatus.className = 'badge bg-danger';
+      return;
+    }
+
+    previewLoading.style.display = 'none';
+    previewContent.style.display = 'block';
+    calculationStatus.textContent = 'Calculation complete';
+    calculationStatus.className = 'badge bg-success';
+
+    const calculation = calculateSalary(monthlySalary, setting);
+
+    // Update salary & leave allowance table
+    const salaryLeaveTableBody = document.getElementById('salaryLeaveTableBody');
+    salaryLeaveTableBody.innerHTML = '';
+
+    // Salary row
+    const salaryRow = document.createElement('tr');
+    salaryRow.innerHTML = `
+      <td><strong>Salary</strong></td>
+      <td></td>
+      <td class="text-end">${formatCurrency(monthlySalary)}</td>
+      <td class="text-end">${formatCurrency(monthlySalary * 12)}</td>
+    `;
+    salaryLeaveTableBody.appendChild(salaryRow);
+
+    // Leave allowance row
+    const leaveAllowanceRow = document.createElement('tr');
+    leaveAllowanceRow.innerHTML = `
+      <td><strong>Leave Allowance</strong></td>
+      <td class="text-center">${calculation.leaveAllowancePercentage.toFixed(2)}%</td>
+      <td class="text-end">${formatCurrency(calculation.leaveAllowanceMonthly)}</td>
+      <td class="text-end">${formatCurrency(calculation.leaveAllowanceAnnual)}</td>
+    `;
+    salaryLeaveTableBody.appendChild(leaveAllowanceRow);
+
+    // Update income breakdown table
+    const incomeBreakdownTableBody = document.getElementById('incomeBreakdownTableBody');
+    incomeBreakdownTableBody.innerHTML = '';
+
+    // Add basic components
+    Object.values(calculation.basicComponents).forEach(component => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${component.name}</td>
+        <td class="text-end">${formatCurrency(component.monthly)}</td>
+        <td class="text-end">${formatCurrency(component.annual)}</td>
+        <td class="text-end">${component.percentage.toFixed(2)}%</td>
+      `;
+      incomeBreakdownTableBody.appendChild(row);
+    });
+
+    // Add 100% separator
+    const separatorRow = document.createElement('tr');
+    separatorRow.className = 'table-secondary fw-bold';
+    separatorRow.innerHTML = `
+      <td colspan="3" class="text-center">100%</td>
+      <td></td>
+    `;
+    incomeBreakdownTableBody.appendChild(separatorRow);
+
+    // Add other allowances
+    calculation.allowances.forEach(allowance => {
+      const row = document.createElement('tr');
+      const monthlyPercentage = monthlySalary > 0 ? (allowance.monthly / monthlySalary * 100).toFixed(2) : 0;
+      row.innerHTML = `
+        <td>${allowance.name}</td>
+        <td class="text-end">${formatCurrency(allowance.monthly)}</td>
+        <td class="text-end">${formatCurrency(allowance.annual)}</td>
+        <td class="text-end">${monthlyPercentage}%</td>
+      `;
+      incomeBreakdownTableBody.appendChild(row);
+    });
+
+    // Update gross income
+    document.getElementById('annualGrossIncome').textContent = formatCurrency(calculation.grossIncomeAnnual);
+
+    // Update relief & exemption table
+    const reliefExemptionTableBody = document.getElementById('reliefExemptionTableBody');
+    reliefExemptionTableBody.innerHTML = '';
+
+    // Add statutory deductions first
+    calculation.statutoryDeductions.forEach(deduction => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${deduction.name} (${deduction.percentage}% of ${deduction.based_on})</td>
+        <td class="text-end">${formatCurrency(deduction.annual)}</td>
+      `;
+      reliefExemptionTableBody.appendChild(row);
+    });
+
+    // Add reliefs
+    calculation.reliefs.forEach(relief => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${relief.name}</td>
+        <td class="text-end">${formatCurrency(relief.amount)}</td>
+      `;
+      reliefExemptionTableBody.appendChild(row);
+    });
+
+    // Add total relief
+    const totalReliefRow = document.createElement('tr');
+    totalReliefRow.className = 'table-warning fw-bold';
+    totalReliefRow.innerHTML = `
+      <td>Tax Free Pay (Total Relief)</td>
+      <td class="text-end">${formatCurrency(calculation.totalReliefs)}</td>
+    `;
+    reliefExemptionTableBody.appendChild(totalReliefRow);
+
+    // Update PAYE tax table
+    const payeTaxTableBody = document.getElementById('payeTaxTableBody');
+    payeTaxTableBody.innerHTML = '';
+
+    // Add annual gross
+    const annualGrossRow = document.createElement('tr');
+    annualGrossRow.innerHTML = `
+      <td>Annual Gross Income</td>
+      <td class="text-end">${formatCurrency(calculation.grossIncomeAnnual)}</td>
+      <td></td>
+    `;
+    payeTaxTableBody.appendChild(annualGrossRow);
+
+    // Add tax free pay
+    const taxFreePayRow = document.createElement('tr');
+    taxFreePayRow.innerHTML = `
+      <td>Less: Tax Free Pay</td>
+      <td class="text-end">${formatCurrency(calculation.totalReliefs)}</td>
+      <td></td>
+    `;
+    payeTaxTableBody.appendChild(taxFreePayRow);
+
+    // Add taxable income
+    const taxableIncomeRow = document.createElement('tr');
+    taxableIncomeRow.className = 'table-warning fw-bold';
+    taxableIncomeRow.innerHTML = `
+      <td>Taxable Income</td>
+      <td class="text-end">${formatCurrency(calculation.taxableIncome)}</td>
+      <td></td>
+    `;
+    payeTaxTableBody.appendChild(taxableIncomeRow);
+
+    // Add tax breakdown
+    calculation.taxBreakdown.forEach(breakdown => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${breakdown.description} </td>
+        <td class="text-end">${formatCurrency(breakdown.amount)}</td>
+        <td></td>
+      `;
+      payeTaxTableBody.appendChild(row);
+    });
+
+    // Add total PAYE
+    const totalPayeRow = document.createElement('tr');
+    totalPayeRow.className = 'table-danger fw-bold';
+    totalPayeRow.innerHTML = `
+      <td>Total PAYE (Annual)</td>
+      <td class="text-end">${formatCurrency(calculation.annualTax)}</td>
+      <td class="text-end">${formatCurrency(calculation.monthlyTax)} (per month)</td>
+    `;
+    payeTaxTableBody.appendChild(totalPayeRow);
+
+    // Update summary cards
+    document.getElementById('monthlyIncome').textContent = formatCurrency(calculation.grossIncomeMonthly);
+    document.getElementById('monthlyPayeTax').textContent = formatCurrency(calculation.monthlyTax);
+    document.getElementById('netSalary').textContent = formatCurrency(calculation.grossIncomeMonthly - calculation.monthlyTax);
+    document.getElementById('effectiveTaxRate').textContent = formatCurrency(calculation.effectiveTaxRate);
+
+    document.getElementById('annualGross').textContent = formatCurrency(calculation.grossIncomeAnnual);
+    document.getElementById('taxFreePay').textContent = formatCurrency(calculation.totalReliefs);
+    document.getElementById('taxableIncome').textContent = formatCurrency(calculation.taxableIncome);
+    document.getElementById('totalPayeTax').textContent = formatCurrency(calculation.annualTax);
+  }
+
+  // Attach event listeners
+  if (monthlySalaryInput) monthlySalaryInput.addEventListener('input', renderPreview);
+  if (settingSelect) settingSelect.addEventListener('change', renderPreview);
+
+  // Initial render
+  renderPreview();
+
+  // Form validation
+  const form = document.getElementById('salaryStructureForm');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      const monthly = parseFloat(monthlySalaryInput.value) || 0;
+      if (monthly <= 0) {
+        e.preventDefault();
+        alert('Please provide a valid monthly salary greater than 0.');
+        monthlySalaryInput.focus();
+        return false;
+      }
+      return true;
+    });
+  }
+});
+</script>
+
+<style>
+.table th {
+  border: 1px solid #dee2e6;
+}
+.table td {
+  border: 1px solid #dee2e6;
+  vertical-align: middle;
+}
+.card {
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+.card-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+</style>
+
+{% endblock %}
