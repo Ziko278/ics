@@ -4939,16 +4939,31 @@ class OtherPaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView
         if session_id:
             queryset = queryset.filter(session_id=session_id)
 
+        # Filter by term
+        term_id = self.request.GET.get('term')
+        if term_id:
+            queryset = queryset.filter(term_id=term_id)
+
         # Filter by category
         category = self.request.GET.get('category')
         if category:
             queryset = queryset.filter(category=category)
+
+        # Search by student name or registration number
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(student__first_name__icontains=search) |
+                Q(student__last_name__icontains=search) |
+                Q(student__registration_number__icontains=search)
+            )
 
         return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['sessions'] = SessionModel.objects.all().order_by('-start_year')
+        context['terms'] = TermModel.objects.all().order_by('id')
         context['total_outstanding'] = sum(op.balance for op in self.get_queryset())
         return context
 
