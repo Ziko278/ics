@@ -921,6 +921,12 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
         context['student'] = student
 
         school_setting = SchoolSettingModel.objects.first()
+        other_payments = OtherPaymentModel.objects.filter(
+            student=student
+        ).exclude(status='paid')
+
+        context['other_payments'] = other_payments
+        context['total_other_payment_balance'] = sum(op.balance for op in other_payments)
 
         # --- NEW LOGIC: Load a specific invoice or the current one ---
         invoice_id = self.request.GET.get('invoice_id')
