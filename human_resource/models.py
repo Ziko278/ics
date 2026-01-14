@@ -29,6 +29,29 @@ class StaffIDGeneratorModel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class DepartmentModel(models.Model):
+    """"""
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True, blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name'],
+                name='unique_dept_name_combo'
+            )
+        ]
+
+    def __str__(self):
+        return self.name.upper()
+
+    def number_of_staff(self):
+        return StaffModel.objects.filter(department=self).count()
+
+
 class StaffModel(models.Model):
     """
     Represents a staff member in the school.
@@ -40,7 +63,7 @@ class StaffModel(models.Model):
     # Renamed for consistency with Django conventions
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
-
+    department = models.ForeignKey(DepartmentModel, blank=True, null=True, on_delete=models.SET_NULL)
     staff_id = models.CharField(max_length=100, unique=True, blank=True)
     image = models.FileField(upload_to='images/staff_images', blank=True, null=True)
     mobile = models.CharField(max_length=20, blank=True, null=True, default='')

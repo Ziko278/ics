@@ -2,6 +2,13 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
+
+    path('department/create', DepartmentCreateView.as_view(), name='department_create'),
+    path('department/index', DepartmentListView.as_view(), name='department_index'),
+    path('department/<int:pk>/detail', DepartmentDetailView.as_view(), name='department_detail'),
+    path('department/<int:pk>/edit', DepartmentUpdateView.as_view(), name='department_edit'),
+    path('department/<int:pk>/delete', DepartmentDeleteView.as_view(), name='department_delete'),
+
     # Staff URLs
     path('staff/', StaffListView.as_view(), name='staff_index'),
     path('staff/create/', StaffCreateView.as_view(), name='staff_create'),

@@ -1,0 +1,11 @@
+{% if form.errors %}
+    {% for key, errors in form.errors.items %}
+        {% for error in errors %}
+            <div class="alert alert-danger alert-dismissible fade show non-printable" role="alert">
+                <i class="bi bi-exclamation-octagon me-1"></i>
+                <strong>{{ key|title }}</strong>: {{ error }}  <!-- No .message needed -->
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endfor %}
+{% endif %}

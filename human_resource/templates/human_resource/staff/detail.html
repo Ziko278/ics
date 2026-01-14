@@ -44,6 +44,10 @@
                     <div class="col-lg-9 col-md-8">{{ staff.staff_id }}</div>
                 </div>
                 <div class="row mt-2">
+                    <div class="col-lg-3 col-md-4 label fw-bold">Department</div>
+                    <div class="col-lg-9 col-md-8">{{ staff.department|title|default:"Not Provided" }}</div>
+                </div>
+                <div class="row mt-2">
                     <div class="col-lg-3 col-md-4 label fw-bold">Email</div>
                     <div class="col-lg-9 col-md-8">{{ staff.email|default:"Not Provided" }}</div>
                 </div>

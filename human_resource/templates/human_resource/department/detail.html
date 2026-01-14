@@ -1,0 +1,236 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <h4 class="card-title">ACTIONS:
+        <span class="card-description">Hover an Icon to reveal its function</span>
+      </h4>
+
+      <!-- Edit -->
+      <a title="Edit Department" type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#edit">
+        <i class="bi bi-pencil-square"></i>
+      </a>
+
+      <!-- Delete -->
+      <a title="Delete Department" type="button" class="btn btn-danger" href="{% url 'department_delete' department.id %}">
+        <i class="bi bi-trash"></i>
+      </a>
+
+      <!-- Assign / Change HOD -->
+      <button title="{% if not department.hod %} Assign {% else %} Change {% endif %} HOD" type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#assignHOD">
+        <i class="bi bi-person-check"></i>
+      </button>
+
+      <a onclick="window.history.back()" title="Go Back" style="float:right" class="btn btn-danger"><i class="bi bi-arrow-left"></i></a>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-12">
+    <div class="card">
+      <div class="card-body pt-3">
+        <ul class="nav nav-tabs nav-tabs-bordered">
+          <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" data-bs-target="#profile-overview">Department Data</a></li>
+          <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" data-bs-target="#staff-list">Staff List</a></li>
+          <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" data-bs-target="#hod-history">HOD History</a></li>
+        </ul>
+
+        <div class="tab-content pt-2">
+          <!-- Department Data -->
+          <div class="tab-pane fade show active profile-overview" id="profile-overview">
+            <div class="col-12 grid-margin">
+              <div class="card">
+                <div class="card-body" style="padding:20px">
+                  <p><b>Department Name: </b>{{ department.name|title }}</p>
+                  <p><b>Code: </b>{{ department.code|upper }}</p>
+                  <p><b>Number of Staff: </b>{{ staff_list.count }}</p>
+                  <p><b>HOD: </b>
+                    {% if department.hod %}
+                      <a href="{% url 'staff_detail' department.hod.id %}">{{ department.hod|title }}</a>
+                    {% else %}
+                      Not Assigned
+                    {% endif %}
+                  </p>
+                  <p><b>Deputy HOD: </b>
+                    {% if department.deputy_hod %}
+                      <a href="{% url 'staff_detail' department.deputy_hod.id %}">{{ department.deputy_hod|title }}</a>
+                    {% else %}
+                      Not Assigned
+                    {% endif %}
+                  </p>
+                  <p><b>Description: </b>{{ department.description|default:"No description provided" }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Staff List -->
+          <div class="tab-pane fade profile-overview" id="staff-list">
+            <div class="card-body">
+              <h5 class="card-title">Staff in {{ department|title }} Department</h5>
+              <table class="table table-borderless datatable">
+                <thead>
+                  <tr>
+                    <th>#</th><th>Full Name</th><th>Staff ID</th><th>Position</th><th>Mobile</th><th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for staff in staff_list %}
+                  <tr>
+                    <th><img class="rounded-circle" style="width:50px" src="{% if staff.image %}{{ staff.image.url }}{% else %}{% static 'admin_site/images/default_image.jpg' %}{% endif %}" /></th>
+                    <td>{{ staff|title }}</td>
+                    <td>{{ staff.staff_id|upper }}</td>
+                    <td>{{ staff.position.name|title }}</td>
+                    <td>{{ staff.mobile|default:"-" }}</td>
+                    <td><a href="{% url 'staff_detail' staff.id %}" class="btn btn-primary"><i class="bi bi-eye"></i></a></td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="6"><h3 class="text-center">No Staff Registered in Department Yet</h3></td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- HOD History -->
+          <div class="tab-pane fade profile-overview" id="hod-history">
+            <div class="card-body">
+              <h5 class="card-title">HOD History</h5>
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>HOD</th><th>Deputy HOD</th><th>Status</th><th>Start Date</th><th>End Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for record in past_hod_list %}
+                  <tr>
+                    <td>{{ record.hod|title }}</td>
+                    <td>{{ record.deputy_hod|default:"-" }}</td>
+                    <td>{{ record.status|upper }}</td>
+                    <td>{{ record.start_date }}</td>
+                    <td>{{ record.end_date|default:"-" }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="5" class="text-center">No HOD history recorded.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Assign / Change HOD Modal -->
+<div class="modal fade" id="assignHOD" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{% url 'assign_hod' department.id %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">
+            {% if not department.hod %}Assign{% else %}Change{% endif %} HOD
+          </h5>
+        </div>
+        <div class="modal-body">
+          <!-- HOD Selection -->
+          <div class="form-floating mb-3">
+            <select class="form-control" name="hod" required>
+                <option value="">------ Select HOD --------</option>
+                {% for staff in staff_list %}
+                <option value="{{staff.id}}">{{ staff|title }}</option>
+                {% endfor %}
+            </select>
+            <label for="{{ hod_form.hod.id_for_label }}">Head of Department</label>
+            {% for error in hod_form.hod.errors %}
+              <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <!-- Deputy HOD Selection -->
+          <div class="form-floating mb-3">
+            <select class="form-control" name="deputy_hod">
+                <option value="">------ Select Deputy HOD --------</option>
+                {% for staff in staff_list %}
+                <option value="{{staff.id}}">{{ staff|title }}</option>
+                {% endfor %}
+            </select>
+            <label for="{{ hod_form.deputy_hod.id_for_label }}">Deputy HOD</label>
+            {% for error in hod_form.deputy_hod.errors %}
+              <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <!-- Start Date -->
+          <div class="form-floating mb-3">
+            {{ hod_form.start_date }}
+            <label for="{{ hod_form.start_date.id_for_label }}">Start Date</label>
+            {% for error in hod_form.start_date.errors %}
+              <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="form-floating mb-3">
+            {{ hod_form.status }}
+            <label for="{{ hod_form.status.id_for_label }}">Status</label>
+            {% for error in hod_form.status.errors %}
+              <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <!-- Hidden Department ID -->
+          <input type="hidden" name="department" value="{{ department.id }}">
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<form method="POST" action="{% url 'department_edit' department.id %}">
+    {% csrf_token %}
+    <div class="modal fade" id="edit{{ forloop.counter }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit Department</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating">
+                        <input type="text" name="name" value="{{ department.name|lower }}" autocomplete="off" required class="form-control">
+                        <label for="floatingName">Department <span style="color:red"><b>*</b></span></label>
+                    </div><br />
+
+                    <div class="form-floating">
+                        <input type="text" name="code" {% if department.code %} value="{{ department.code|lower }}" {% endif %} autocomplete="off" class="form-control">
+                        <label for="floatingName">Department Code </label>
+                    </div><br />
+
+                    <div class="form-floating">
+                        <textarea name="description" class="form-control">{% if department.description %}{{ department.description|lower }}{% endif %}</textarea>
+                        <label for="floatingName">Description </label>
+                    </div><br />
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}

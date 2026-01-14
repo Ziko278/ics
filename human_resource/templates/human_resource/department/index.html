@@ -1,0 +1,165 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+
+<div class="col-12">
+    <div class="card recent-sales overflow-auto">
+        <div class="filter px-2">
+            <a title="Add Department" class="icon" href="#" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></a>
+            <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#departmentHelperModal"><b>Helper</b></button>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                <li class="dropdown-header text-start">
+                    <h6>Action</h6>
+                </li>
+                <li><a class="dropdown-item" href="#">
+                    <button title="Add Department" type="button" style="width:100%" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#verticalycentered">Add Department</button>
+                </a></li>
+            </ul>
+        </div>
+
+
+        <div class="card-body">
+            <h5 class="card-title">List of Departments</h5>
+            {% include 'admin_site/partials/error.html' %}
+            <table class="table table-borderless datatable">
+                <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Code</th>
+                    <th class="text-center" scope="col">No of Staff</th>
+                    <th scope="col" class="text-center">Action</th>
+                </tr>
+                </thead>
+                <tbody>
+
+                {% for department in department_list %}
+                <tr>
+                    <th scope="row"><a href="#">{{ forloop.counter }}</a></th>
+                    <td title="created at {{ department.created_at|date }}">{{ department.name|upper }}</td>
+                    <td>{% if department.code %}{{ department.code }}{% endif %}</td>
+                    <td class="text-center">{{ department.number_of_staff }}</td>
+                    <td class="text-center">
+<!--                        <a title="Department Detail" href="{% url 'department_detail' department.id %}" class="btn btn-primary"><i class="bi bi-eye"></i></a>-->
+<!--                        -->
+                        <button title="Edit Department" type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#edit{{ forloop.counter }}"><i class="bi bi-pencil-square"></i></button>
+                        <a title="Delete Department" href="{% url 'department_delete' department.id %}" class="btn btn-danger"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+
+
+                </tbody>
+            </table>
+            {% if not department_list %}
+                 <h3 class="text-center">No Department Added Yet</h3>
+
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+<!-- Department Helper Modal -->
+<div class="modal fade" id="departmentHelperModal" tabindex="-1" style="font-family: sans-serif">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><b>Department Helper</b></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="card-description">
+                    Departments are used to group staff into functional units or specialties. Each department can have a unique code and a description to clarify its role within the organization.
+                </p>
+
+                <div class="alert alert-info">
+                    <strong>Tip:</strong> Codes are optional but useful when referencing departments programmatically or in reports.
+                </div>
+
+                <div class="alert alert-warning">
+                    <strong>Note:</strong> Department descriptions are optional, but they help clarify the department's purpose.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<form method="POST" action="{% url 'department_create' %}">
+    {% csrf_token %}
+    <div class="modal fade" id="verticalycentered" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Add Department</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating">
+                        {{ form.name }}
+                        <label for="floatingName">Department Name<span style="color:red"><b>*</b></span></label>
+                    </div><br />
+
+                    <div class="form-floating">
+                        {{ form.code }}
+                        <label for="floatingName">Department Code </label>
+                    </div><br />
+
+                    <div class="form-floating">
+                        {{ form.description }}
+                        <label for="floatingName">Description </label>
+                    </div><br />
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+{% for department in department_list %}
+<form method="POST" action="{% url 'department_edit' department.id %}">
+    {% csrf_token %}
+    <div class="modal fade" id="edit{{ forloop.counter }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit Department</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating">
+                        <input type="text" name="name" value="{{ department.name|lower }}" autocomplete="off" required class="form-control">
+                        <label for="floatingName">Department <span style="color:red"><b>*</b></span></label>
+                    </div><br />
+
+                    <div class="form-floating">
+                        <input type="text" name="code" {% if department.code %} value="{{ department.code|lower }}" {% endif %} autocomplete="off" class="form-control">
+                        <label for="floatingName">Department Code </label>
+                    </div><br />
+
+                    <div class="form-floating">
+                        <textarea name="description" class="form-control">{% if department.description %}{{ department.description|lower }}{% endif %}</textarea>
+                        <label for="floatingName">Description </label>
+                    </div><br />
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endfor %}
+
+
+{% endblock %}

@@ -24,8 +24,8 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from xlsxwriter import Workbook
 
-from .models import StaffModel, StaffProfileModel, HRSettingModel, StaffUploadTask
-from .forms import StaffForm, GroupForm, HRSettingForm, StaffUploadForm, StaffProfileUpdateForm
+from .models import StaffModel, StaffProfileModel, HRSettingModel, StaffUploadTask, DepartmentModel
+from .forms import StaffForm, GroupForm, HRSettingForm, StaffUploadForm, StaffProfileUpdateForm, DepartmentForm
 from human_resource.tasks import process_staff_upload
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,99 @@ def _send_credentials_email(staff, username, password):
     except Exception:
         logger.exception(f"Failed to send credentials email to {staff.email}")
         return False
+
+
+
+# -------------------------
+# Department Views
+# -------------------------
+class DepartmentCreateView(
+    LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin,
+    CreateView
+):
+    model = DepartmentModel
+    permission_required = 'human_resource.add_departmentmodel'
+    form_class = DepartmentForm
+    template_name = 'human_resource/department/index.html'
+    success_message = 'Department Successfully Registered'
+
+    def get_success_url(self):
+        return reverse('department_index')
+
+    def dispatch(self, request, *args, **kwargs):
+        # Keep original behavior: redirect GET to index
+        if request.method == 'GET':
+            return redirect(reverse('department_index'))
+        return super().dispatch(request, *args, **kwargs)
+
+
+class DepartmentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = DepartmentModel
+    permission_required = 'human_resource.view_departmentmodel'
+    template_name = 'human_resource/department/index.html'
+    context_object_name = "department_list"
+
+    def get_queryset(self):
+        return DepartmentModel.objects.all().order_by('name')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form'] = DepartmentForm()
+        return context
+
+
+class DepartmentUpdateView(
+    LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView
+):
+    model = DepartmentModel
+    permission_required = 'human_resource.add_departmentmodel'
+    form_class = DepartmentForm
+    template_name = 'human_resource/department/index.html'
+    success_message = 'Department Successfully Updated'
+
+    def get_success_url(self):
+        return reverse('department_index')
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == 'GET':
+            return redirect(reverse('department_index'))
+        return super().dispatch(request, *args, **kwargs)
+
+
+class DepartmentDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
+    model = DepartmentModel
+    permission_required = 'human_resource.view_departmentmodel'
+    template_name = 'human_resource/department/detail.html'
+    context_object_name = "department"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        department = self.object
+
+        # Staff list in this department
+        staff_qs = StaffModel.objects.filter(
+            department=department
+        ).select_related(
+            "position", "group"
+        ).order_by("position__name", "first_name")
+
+        # Add all context pieces
+        context.update({
+            "staff_list": staff_qs,
+            "total_staff": staff_qs.count(),
+        })
+        return context
+
+
+class DepartmentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = DepartmentModel
+    permission_required = 'human_resource.delete_departmentmodel'
+    template_name = 'human_resource/department/delete.html'
+    context_object_name = "department"
+    success_message = 'Department Successfully Deleted'
+
+    def get_success_url(self):
+        return reverse('department_index')
 
 
 # -------------------------

@@ -1,0 +1,744 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="card-title mb-0">Bulk Payroll Processing - {{ month_name }} {{ current_year }}</h4>
+        <a href="{% url 'finance_payroll_dashboard' %}" class="btn btn-sm btn-secondary">
+          <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+      </div>
+
+      <!-- Filter Controls -->
+      <div class="row mb-3">
+        <div class="col-md-2">
+          <label class="form-label">Month</label>
+          <select name="month" class="form-select" onchange="changeMonth(this.value)">
+            {% for month_num, month_name_item in months %}
+            <option value="{{ month_num }}" {% if month_num == current_month %}selected{% endif %}>
+              {{ month_name_item }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Year</label>
+          <select name="year" class="form-select" onchange="changeYear(this.value)">
+            {% for year in years %}
+            <option value="{{ year }}" {% if year == current_year %}selected{% endif %}>
+              {{ year }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-8 d-flex align-items-end gap-2">
+          <!-- Search Box -->
+          <div class="input-group" style="max-width: 300px;">
+            <input type="text" class="form-control form-control-sm" id="staffSearchInput" placeholder="Search staff...">
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="searchStaffBtn">
+              <i class="bi bi-search"></i> Search
+            </button>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="hideStatutory">
+            <label class="form-check-label" for="hideStatutory">
+              Hide Statutory Deductions
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="hidePaye">
+            <label class="form-check-label" for="hidePaye">
+              Hide PAYE Tax
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="markAllPaid">
+            <label class="form-check-label" for="markAllPaid">
+              Mark All as Paid
+            </label>
+          </div>
+          <button class="btn btn-primary" id="bulkSaveBtn">
+            <i class="bi bi-save"></i> Save All
+          </button>
+        </div>
+      </div>
+
+      <!-- Payroll Table -->
+      <div class="table-responsive" style="max-height: 70vh; overflow-y: auto;">
+        <table class="table table-bordered table-hover" id="payrollTable">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th style="min-width: 180px;">Staff</th>
+              <th style="min-width: 120px;">Monthly Salary</th>
+              <th class="statutory-col" style="min-width: 120px;">Statutory Ded.</th>
+              <th class="paye-col" style="min-width: 100px;">PAYE Tax</th>
+              <th style="min-width: 120px;">Net Monthly</th>
+              <th style="min-width: 100px;">Deduction</th>
+              <th style="min-width: 100px;">Allowance</th>
+              <th style="min-width: 120px;">Take Home</th>
+              <th style="min-width: 120px;">Amount Paid</th>
+              <th style="min-width: 80px;">Paid?</th>
+              <th style="min-width: 150px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="payrollTableBody">
+            {% for data in staff_data %}
+            <tr data-structure-id="{{ data.structure.id }}"
+                data-staff-name="{{ data.staff }}"
+                class="staff-row">
+              <td>
+                <strong>{{ data.staff }}</strong><br>
+                <small class="text-muted">{{ data.staff.department|default:"No Department" }}</small>
+              </td>
+              <td class="text-end">₦{{ data.monthly_salary|floatformat:2|intcomma }}</td>
+              <td class="text-end statutory-col">₦{{ data.statutory_deductions|floatformat:2|intcomma }}</td>
+              <td class="text-end paye-col">₦{{ data.paye_tax|floatformat:2|intcomma }}</td>
+              <td class="text-end net-monthly">₦{{ data.net_monthly|floatformat:2|intcomma }}</td>
+              <td class="text-end deduction-total">₦0.00</td>
+              <td class="text-end allowance-total">₦0.00</td>
+              <td class="text-end take-home">₦{{ data.net_monthly|floatformat:2|intcomma }}</td>
+              <td>
+                <input type="number"
+                       class="form-control form-control-sm amount-paid-input"
+                       value="{{ data.amount_paid }}"
+                       step="0.01"
+                       min="0">
+              </td>
+              <td class="text-center">
+                <input type="checkbox"
+                       class="form-check-input mark-paid-checkbox"
+                       {% if data.is_paid %}checked{% endif %}>
+              </td>
+              <td>
+                <div class="btn-group btn-group-sm" role="group">
+                  <button class="btn btn-danger btn-sm add-deduction-btn"
+                          title="Add Deduction"
+                          data-structure-id="{{ data.structure.id }}">
+                    <i class="bi bi-dash"></i>
+                  </button>
+                  <button class="btn btn-success btn-sm add-allowance-btn"
+                          title="Add Allowance"
+                          data-structure-id="{{ data.structure.id }}">
+                    <i class="bi bi-plus"></i>
+                  </button>
+                  {% if data.has_record %}
+                  <a href="{% url 'finance_salary_record_detail' data.record_id %}"
+                     class="btn btn-info btn-sm"
+                     title="View Details">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  {% else %}
+                  <a href="{% url 'finance_process_payroll' data.structure.id %}?year={{ current_year }}&month={{ current_month }}"
+                     class="btn btn-info btn-sm"
+                     title="Process">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+
+            <!-- Deduction Row -->
+            {% if data.existing_deductions %}
+            <tr class="deduction-row" style="background-color: #dc3545; color: white;">
+              <td colspan="11" class="py-1">
+                <small>
+                  <strong>Deductions:</strong>
+                  {% for name, amount in data.existing_deductions.items %}
+                    {{ name }}: ₦{{ amount|floatformat:2|intcomma }}{% if not forloop.last %}, {% endif %}
+                  {% endfor %}
+                </small>
+              </td>
+            </tr>
+            {% endif %}
+
+            <!-- Allowance Row -->
+            {% if data.existing_allowances %}
+            <tr class="allowance-row" style="background-color: #28a745; color: white;">
+              <td colspan="11" class="py-1">
+                <small>
+                  <strong>Allowances:</strong>
+                  {% for name, amount in data.existing_allowances.items %}
+                    {{ name }}: ₦{{ amount|floatformat:2|intcomma }}{% if not forloop.last %}, {% endif %}
+                  {% endfor %}
+                </small>
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Deduction Modal -->
+<div class="modal fade" id="deductionModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Add Deduction</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Deduction Type</label>
+          <select class="form-select" id="deductionType">
+            <option value="">Select deduction...</option>
+            {% for config in deduction_configs %}
+            <option value="{{ config.name }}">{{ config.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Amount (₦)</label>
+          <input type="number" class="form-control" id="deductionAmount" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="saveDeductionBtn">Add Deduction</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Allowance Modal -->
+<div class="modal fade" id="allowanceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">Add Allowance</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Allowance Type</label>
+          <select class="form-select" id="allowanceType">
+            <option value="">Select allowance...</option>
+            {% for config in allowance_configs %}
+            <option value="{{ config.name }}">{{ config.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Amount (₦)</label>
+          <input type="number" class="form-control" id="allowanceAmount" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="saveAllowanceBtn">Add Allowance</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Progress Modal -->
+<div class="modal fade" id="progressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Processing Payroll...</h5>
+      </div>
+      <div class="modal-body">
+        <div class="text-center mb-3">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+        <p class="text-center mb-2" id="progressMessage">Preparing to save...</p>
+        <div class="progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated"
+               id="progressBar"
+               role="progressbar"
+               style="width: 0%">
+          </div>
+        </div>
+        <p class="text-center mt-2 small text-muted" id="progressCount">0 / 0</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Global variables
+let currentStructureId = null;
+let staffDeductions = {};
+let staffAllowances = {};
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+  initializeEventListeners();
+  loadExistingData();
+});
+
+function initializeEventListeners() {
+  // Column visibility toggles
+  document.getElementById('hideStatutory').addEventListener('change', function() {
+    document.querySelectorAll('.statutory-col').forEach(el => {
+      el.style.display = this.checked ? 'none' : '';
+    });
+  });
+
+  document.getElementById('hidePaye').addEventListener('change', function() {
+    document.querySelectorAll('.paye-col').forEach(el => {
+      el.style.display = this.checked ? 'none' : '';
+    });
+  });
+
+  // Mark all as paid
+  document.getElementById('markAllPaid').addEventListener('change', function() {
+    document.querySelectorAll('.mark-paid-checkbox').forEach(checkbox => {
+      checkbox.checked = this.checked;
+    });
+  });
+
+  // Staff search functionality
+  document.getElementById('searchStaffBtn').addEventListener('click', searchStaff);
+  document.getElementById('staffSearchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      searchStaff();
+    }
+  });
+
+  // Amount paid input changes
+  document.querySelectorAll('.amount-paid-input').forEach(input => {
+    input.addEventListener('change', function() {
+      const row = this.closest('.staff-row');
+      validateAmountPaid(row);
+      autoSaveRow(row);
+    });
+  });
+
+  // Add deduction buttons
+  document.querySelectorAll('.add-deduction-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      currentStructureId = this.dataset.structureId;
+      const modal = new bootstrap.Modal(document.getElementById('deductionModal'));
+      modal.show();
+    });
+  });
+
+  // Add allowance buttons
+  document.querySelectorAll('.add-allowance-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      currentStructureId = this.dataset.structureId;
+      const modal = new bootstrap.Modal(document.getElementById('allowanceModal'));
+      modal.show();
+    });
+  });
+
+  // Save deduction
+  document.getElementById('saveDeductionBtn').addEventListener('click', saveDeduction);
+
+  // Save allowance
+  document.getElementById('saveAllowanceBtn').addEventListener('click', saveAllowance);
+
+  // Bulk save
+  document.getElementById('bulkSaveBtn').addEventListener('click', bulkSave);
+}
+
+function loadExistingData() {
+  // Load existing deductions and allowances from hidden data in rows
+  document.querySelectorAll('.staff-row').forEach(row => {
+    const structureId = row.dataset.structureId;
+
+    // Initialize objects
+    staffDeductions[structureId] = {};
+    staffAllowances[structureId] = {};
+
+    // Check for deduction row and parse deductions
+    let nextRow = row.nextElementSibling;
+    if (nextRow && nextRow.classList.contains('deduction-row')) {
+      const deductionText = nextRow.textContent;
+      const matches = deductionText.match(/(\w[\w\s]+):\s*₦([\d,]+(?:\.\d{2})?)/g);
+      if (matches) {
+        matches.forEach(match => {
+          const parts = match.split(':');
+          const name = parts[0].trim();
+          const amount = parseFloat(parts[1].replace(/[₦,]/g, '').trim());
+          if (name !== 'Deductions') {
+            staffDeductions[structureId][name] = amount;
+          }
+        });
+      }
+      nextRow = nextRow.nextElementSibling;
+    }
+
+    // Check for allowance row and parse allowances
+    if (nextRow && nextRow.classList.contains('allowance-row')) {
+      const allowanceText = nextRow.textContent;
+      const matches = allowanceText.match(/(\w[\w\s]+):\s*₦([\d,]+(?:\.\d{2})?)/g);
+      if (matches) {
+        matches.forEach(match => {
+          const parts = match.split(':');
+          const name = parts[0].trim();
+          const amount = parseFloat(parts[1].replace(/[₦,]/g, '').trim());
+          if (name !== 'Allowances') {
+            staffAllowances[structureId][name] = amount;
+          }
+        });
+      }
+    }
+
+    // Recalculate take home on load
+    recalculateTakeHome(row);
+  });
+}
+
+function searchStaff() {
+  const searchTerm = document.getElementById('staffSearchInput').value.trim().toLowerCase();
+
+  if (!searchTerm) {
+    alert('Please enter a staff name to search.');
+    return;
+  }
+
+  let found = false;
+
+  document.querySelectorAll('.staff-row').forEach(row => {
+    const staffName = row.dataset.staffName.toLowerCase();
+
+    if (staffName.includes(searchTerm)) {
+      // Found the staff - scroll to them
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Highlight the row temporarily
+      row.style.backgroundColor = '#fff3cd';
+      setTimeout(() => {
+        row.style.backgroundColor = '';
+      }, 2000);
+
+      found = true;
+      return;
+    }
+  });
+
+  if (!found) {
+    alert('Staff not found. Please check the name and try again.');
+  }
+}
+
+function saveDeduction() {
+  const type = document.getElementById('deductionType').value;
+  const amount = parseFloat(document.getElementById('deductionAmount').value);
+
+  if (!type || !amount || amount <= 0) {
+    alert('Please select a deduction type and enter a valid amount.');
+    return;
+  }
+
+  // Add to staff deductions
+  if (!staffDeductions[currentStructureId]) {
+    staffDeductions[currentStructureId] = {};
+  }
+  staffDeductions[currentStructureId][type] = amount;
+
+  // Update UI
+  updateDeductionRow(currentStructureId);
+
+  // Recalculate take home and auto-update amount paid
+  const row = document.querySelector(`[data-structure-id="${currentStructureId}"]`);
+  recalculateTakeHome(row);
+  autoSaveRow(row);
+
+  // Close modal
+  bootstrap.Modal.getInstance(document.getElementById('deductionModal')).hide();
+
+  // Reset form
+  document.getElementById('deductionType').value = '';
+  document.getElementById('deductionAmount').value = '';
+}
+
+function saveAllowance() {
+  const type = document.getElementById('allowanceType').value;
+  const amount = parseFloat(document.getElementById('allowanceAmount').value);
+
+  if (!type || !amount || amount <= 0) {
+    alert('Please select an allowance type and enter a valid amount.');
+    return;
+  }
+
+  // Add to staff allowances
+  if (!staffAllowances[currentStructureId]) {
+    staffAllowances[currentStructureId] = {};
+  }
+  staffAllowances[currentStructureId][type] = amount;
+
+  // Update UI
+  updateAllowanceRow(currentStructureId);
+
+  // Recalculate take home and auto-update amount paid
+  const row = document.querySelector(`[data-structure-id="${currentStructureId}"]`);
+  recalculateTakeHome(row);
+  autoSaveRow(row);
+
+  // Close modal
+  bootstrap.Modal.getInstance(document.getElementById('allowanceModal')).hide();
+
+  // Reset form
+  document.getElementById('allowanceType').value = '';
+  document.getElementById('allowanceAmount').value = '';
+}
+
+function updateDeductionRow(structureId) {
+  const row = document.querySelector(`[data-structure-id="${structureId}"]`);
+  const deductions = staffDeductions[structureId];
+
+  // Remove existing deduction row
+  let nextRow = row.nextElementSibling;
+  if (nextRow && nextRow.classList.contains('deduction-row')) {
+    nextRow.remove();
+  }
+
+  // Add new deduction row if there are deductions
+  if (deductions && Object.keys(deductions).length > 0) {
+    const deductionText = Object.entries(deductions)
+      .map(([name, amount]) => `${name}: ₦${formatCurrency(amount)}`)
+      .join(', ');
+
+    const newRow = document.createElement('tr');
+    newRow.className = 'deduction-row';
+    newRow.style.backgroundColor = '#dc3545';
+    newRow.style.color = 'white';
+    newRow.innerHTML = `
+      <td colspan="11" class="py-1">
+        <small><strong>Deductions:</strong> ${deductionText}</small>
+      </td>
+    `;
+
+    row.insertAdjacentElement('afterend', newRow);
+  }
+}
+
+function updateAllowanceRow(structureId) {
+  const row = document.querySelector(`[data-structure-id="${structureId}"]`);
+  const allowances = staffAllowances[structureId];
+
+  // Find and remove existing allowance row
+  let checkRow = row.nextElementSibling;
+  while (checkRow) {
+    if (checkRow.classList.contains('allowance-row')) {
+      checkRow.remove();
+      break;
+    }
+    if (checkRow.classList.contains('staff-row')) break;
+    checkRow = checkRow.nextElementSibling;
+  }
+
+  // Add new allowance row if there are allowances
+  if (allowances && Object.keys(allowances).length > 0) {
+    const allowanceText = Object.entries(allowances)
+      .map(([name, amount]) => `${name}: ₦${formatCurrency(amount)}`)
+      .join(', ');
+
+    const newRow = document.createElement('tr');
+    newRow.className = 'allowance-row';
+    newRow.style.backgroundColor = '#28a745';
+    newRow.style.color = 'white';
+    newRow.innerHTML = `
+      <td colspan="11" class="py-1">
+        <small><strong>Allowances:</strong> ${allowanceText}</small>
+      </td>
+    `;
+
+    // Insert after deduction row if exists, otherwise after main row
+    let insertAfter = row.nextElementSibling;
+    if (insertAfter && insertAfter.classList.contains('deduction-row')) {
+      insertAfter.insertAdjacentElement('afterend', newRow);
+    } else {
+      row.insertAdjacentElement('afterend', newRow);
+    }
+  }
+}
+
+function recalculateTakeHome(row) {
+  const structureId = row.dataset.structureId;
+  const netMonthly = parseFloat(row.querySelector('.net-monthly').textContent.replace(/[₦,]/g, ''));
+
+  // Calculate total allowances
+  const allowances = staffAllowances[structureId] || {};
+  const totalAllowances = Object.values(allowances).reduce((sum, val) => sum + val, 0);
+
+  // Calculate total deductions
+  const deductions = staffDeductions[structureId] || {};
+  const totalDeductions = Object.values(deductions).reduce((sum, val) => sum + val, 0);
+
+  // Calculate take home (Net Monthly + Allowances - Deductions)
+  const takeHome = netMonthly + totalAllowances - totalDeductions;
+
+  // Update UI
+  row.querySelector('.deduction-total').textContent = '₦' + formatCurrency(totalDeductions);
+  row.querySelector('.allowance-total').textContent = '₦' + formatCurrency(totalAllowances);
+  row.querySelector('.take-home').textContent = '₦' + formatCurrency(takeHome);
+
+  // Auto-update amount paid to match take home
+  const amountPaidInput = row.querySelector('.amount-paid-input');
+  amountPaidInput.value = takeHome.toFixed(2);
+  amountPaidInput.max = takeHome.toFixed(2);
+}
+
+function validateAmountPaid(row) {
+  const amountPaidInput = row.querySelector('.amount-paid-input');
+  const takeHome = parseFloat(row.querySelector('.take-home').textContent.replace(/[₦,]/g, ''));
+  const amountPaid = parseFloat(amountPaidInput.value) || 0;
+
+  if (amountPaid > takeHome) {
+    amountPaidInput.value = takeHome.toFixed(2);
+    alert('Amount paid cannot exceed take home pay.');
+  }
+}
+
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+}
+
+function autoSaveRow(row) {
+  const structureId = row.dataset.structureId;
+  const amountPaid = parseFloat(row.querySelector('.amount-paid-input').value) || 0;
+
+  const data = {
+    structure_id: structureId,
+    year: {{ current_year }},
+    month: {{ current_month }},
+    bonus: 0, // Bonus removed but keeping for backend compatibility
+    deductions: staffDeductions[structureId] || {},
+    allowances: staffAllowances[structureId] || {},
+    amount_paid: amountPaid
+  };
+
+  fetch("{% url 'finance_auto_save_payroll_row' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify(data)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      console.log('Auto-saved:', data.message);
+    }
+  })
+  .catch(error => console.error('Auto-save error:', error));
+}
+
+function bulkSave() {
+  const staffRecords = [];
+
+  document.querySelectorAll('.staff-row').forEach(row => {
+    const structureId = row.dataset.structureId;
+    const staffName = row.dataset.staffName;
+    const amountPaid = parseFloat(row.querySelector('.amount-paid-input').value) || 0;
+    const markAsPaid = row.querySelector('.mark-paid-checkbox').checked;
+
+    staffRecords.push({
+      structure_id: structureId,
+      staff_name: staffName,
+      bonus: 0, // Bonus removed but keeping for backend compatibility
+      deductions: staffDeductions[structureId] || {},
+      allowances: staffAllowances[structureId] || {},
+      amount_paid: amountPaid,
+      mark_as_paid: markAsPaid
+    });
+  });
+  
+  // Show progress modal
+  const progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+  progressModal.show();
+  
+  const progressBar = document.getElementById('progressBar');
+  const progressMessage = document.getElementById('progressMessage');
+  const progressCount = document.getElementById('progressCount');
+  
+  // Save records one by one
+  let savedCount = 0;
+  const total = staffRecords.length;
+  
+  function saveNext(index) {
+    if (index >= total) {
+      // All done
+      progressMessage.textContent = 'All records saved successfully!';
+      setTimeout(() => {
+        window.location.href = "{% url 'finance_payroll_dashboard' %}?year={{ current_year }}&month={{ current_month }}";
+      }, 1500);
+      return;
+    }
+    
+    const record = staffRecords[index];
+    progressMessage.textContent = `Saving for ${record.staff_name}...`;
+    progressCount.textContent = `${index + 1} / ${total}`;
+    progressBar.style.width = ((index + 1) / total * 100) + '%';
+    
+    fetch("{% url 'finance_bulk_payroll_save' %}", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}'
+      },
+      body: JSON.stringify({
+        staff_records: [record],
+        year: {{ current_year }},
+        month: {{ current_month }}
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      savedCount++;
+      saveNext(index + 1);
+    })
+    .catch(error => {
+      console.error('Error saving:', error);
+      saveNext(index + 1);
+    });
+  }
+  
+  saveNext(0);
+}
+
+function changeMonth(month) {
+  const url = new URL(window.location);
+  url.searchParams.set('month', month);
+  window.location = url;
+}
+
+function changeYear(year) {
+  const url = new URL(window.location);
+  url.searchParams.set('year', year);
+  window.location = url;
+}
+</script>
+
+<style>
+.sticky-top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #f8f9fa;
+}
+
+.staff-row:hover {
+  background-color: #f8f9fa;
+}
+
+.deduction-row, .allowance-row {
+  font-size: 0.85rem;
+}
+
+.table-responsive {
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+}
+</style>
+{% endblock %}

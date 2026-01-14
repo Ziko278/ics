@@ -1,0 +1,31 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load static %}
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Delete Department</h4>
+            <p>Department: <i>{{department.name|upper }}</i></p>
+
+            <p>The Department will be permanently deleted.</p>
+            {% if department.positions.all|length > 0 %}
+                <p>{{department.positions.all|length }} position{{department.positions.all|length|pluralize }} in the department will also be deleted</p>
+            {% else %}
+                <p>There is currently no position in this department.</p>
+            {% endif %}
+
+            {% if department.department_staffs.all|length > 0 %}
+                <p>{{department.department_staffs.all|length }} staff in the department will also de deleted</p>
+            {% else %}
+                <p>There is currently no staff in this department.</p>
+            {% endif %}
+            <form style="display:inline" method="post">
+                {% csrf_token %}
+
+                <button class="btn btn-success">Proceed</button>
+            </form>
+            <a class="btn btn-danger" href="{% url 'department_index' %}"> Cancel</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -2,7 +2,64 @@ import re
 from django import forms
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from .models import StaffModel, HRSettingModel
+from .models import StaffModel, HRSettingModel, DepartmentModel
+
+
+class DepartmentForm(forms.ModelForm):
+    class Meta:
+        model = DepartmentModel
+        fields = ['name', 'code', 'description']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Department Name'}),
+            'code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'DEPT', 'maxlength': '20'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def clean_name(self):
+        name = self.cleaned_data.get('name')
+        if not name:
+            raise ValidationError("Department name is required.")
+
+        # Remove extra spaces and validate
+        name = ' '.join(name.strip().split())
+        if len(name) < 2:
+            raise ValidationError("Department name must be at least 2 characters long.")
+
+        # Check for special characters (allow only letters, numbers, spaces, hyphens)
+        if not re.match(r'^[a-zA-Z0-9\s\-&]+$', name):
+            raise ValidationError("Department name contains invalid characters.")
+
+        # Check uniqueness (case-insensitive)
+        existing = DepartmentModel.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            existing = existing.exclude(pk=self.instance.pk)
+
+        if existing.exists():
+            raise ValidationError(f"Department '{name}' already exists.")
+
+        return name
+
+    def clean_code(self):
+        code = self.cleaned_data.get('code')
+        if code:
+            code = code.upper().strip()
+
+            # Validate format
+            if not re.match(r'^[A-Z0-9]+$', code):
+                raise ValidationError("Department code must contain only letters and numbers.")
+
+            if len(code) < 2 or len(code) > 20:
+                raise ValidationError("Department code must be between 2 and 20 characters.")
+
+            # Check uniqueness
+            existing = DepartmentModel.objects.filter(code=code)
+            if self.instance.pk:
+                existing = existing.exclude(pk=self.instance.pk)
+
+            if existing.exists():
+                raise ValidationError(f"Department code '{code}' already exists.")
+
+        return code
 
 
 class StaffForm(forms.ModelForm):
@@ -13,12 +70,13 @@ class StaffForm(forms.ModelForm):
     class Meta:
         model = StaffModel
         fields = [
-            'first_name', 'last_name', 'email', 'mobile',
+            'first_name', 'last_name', 'department', 'email', 'mobile',
             'gender', 'group', 'status', 'image'
         ]
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'department': forms.Select(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'mobile': forms.TextInput(attrs={'class': 'form-control'}),
             'gender': forms.Select(attrs={'class': 'form-control'}),

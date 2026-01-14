@@ -225,4 +225,7 @@ urlpatterns = [
     path('payroll/record/<int:pk>/', salary_record_detail_view, name='finance_salary_record_detail'),
     path('payroll/record/<int:pk>/pdf/', download_payslip_pdf, name='finance_download_payslip_pdf'),
     path('payroll/mark-paid/<int:pk>/', mark_as_paid_view, name='finance_mark_as_paid'),
+    path('payroll/bulk/', bulk_payroll_view, name='finance_bulk_payroll'),
+    path('payroll/bulk/save/', bulk_payroll_save, name='finance_bulk_payroll_save'),
+    path('payroll/auto-save-row/', auto_save_payroll_row, name='finance_auto_save_payroll_row'),
 ]

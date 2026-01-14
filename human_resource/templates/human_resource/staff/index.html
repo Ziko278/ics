@@ -41,6 +41,7 @@
                 <tr>
                     <th scope="col">Staff</th>
                     <th scope="col">Staff ID</th>
+                    <th scope="col">Department</th>
                     <th scope="col">Group / Role</th>
                     <th scope="col">Status</th>
                     <th scope="col" class="text-center">Action</th>
@@ -55,6 +56,7 @@
                     </td>
                     <td>{{ staff.staff_id }}</td>
                     <td>{{ staff.group.name|title|default:"N/A" }}</td>
+                    <td>{{ staff.department.name|title|default:"N/A" }}</td>
                     <td>
                         {% if staff.status == 'active' %}
                             <span class="badge bg-success">{{ staff.get_status_display }}</span>

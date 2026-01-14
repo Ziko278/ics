@@ -11,6 +11,16 @@
       <!-- Filter Controls -->
       <div class="row mb-4">
         <div class="col-md-3">
+          <label class="form-label">Search Staff</label>
+          <div class="input-group">
+            <input type="text" name="search" class="form-control" value="{{ search_query }}"
+                   placeholder="Search by name..." id="searchInput">
+            <button class="btn btn-outline-secondary" type="button" id="searchButton">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+        </div>
+        <div class="col-md-3">
           <label class="form-label">Month</label>
           <select name="month" class="form-select" onchange="changeMonth(this.value)">
             {% for month_num, month_name in months %}
@@ -123,5 +133,34 @@ function changeStatus(value) {
   url.searchParams.set('status', value);
   window.location = url;
 }
+
+// Search functionality
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('searchInput');
+  const searchButton = document.getElementById('searchButton');
+
+  // Function to perform search
+  function performSearch() {
+    const url = new URL(window.location);
+    const searchValue = searchInput.value.trim();
+
+    if (searchValue) {
+      url.searchParams.set('search', searchValue);
+    } else {
+      url.searchParams.delete('search');
+    }
+
+    window.location = url;
+  }
+
+  // Add event listeners
+  searchButton.addEventListener('click', performSearch);
+
+  searchInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      performSearch();
+    }
+  });
+});
 </script>
 {% endblock %}

@@ -5718,11 +5718,22 @@ def payroll_view(request):
     current_year = int(request.GET.get('year', today.year))
     current_month = int(request.GET.get('month', today.month))
     status_filter = request.GET.get('status', 'all')
+    search_query = request.GET.get('search', '')
 
     # Get all active salary structures
     structures = SalaryStructure.objects.filter(is_active=True).select_related(
-        'staff__staff_profile__user', 'salary_setting'
-    ).order_by('staff__staff_id')
+        'staff__staff_profile__user', 'salary_setting', 'staff__department'
+    )
+
+    # Apply search filter if provided
+    if search_query:
+        structures = structures.filter(
+            Q(staff__first_name__icontains=search_query) |
+            Q(staff__last_name__icontains=search_query)
+        )
+
+    # Order by department name, then by staff name
+    structures = structures.order_by('staff__department__name', 'staff__first_name', 'staff__last_name')
 
     # Check which structures have been processed for the selected month
     processed_ids = SalaryRecord.objects.filter(
@@ -5762,6 +5773,7 @@ def payroll_view(request):
         'current_month': current_month,
         'month_name': calendar.month_name[current_month],
         'status_filter': status_filter,
+        'search_query': search_query,  # Add search query to context
         'years': range(2020, today.year + 2),
         'months': [(i, calendar.month_name[i]) for i in range(1, 13)],
         'page_title': f'Payroll - {calendar.month_name[current_month]} {current_year}'
@@ -6608,3 +6620,342 @@ def payroll_dashboard_view(request):
     }
 
     return render(request, 'finance/payroll/dashboard.html', context)
+
+
+@login_required
+@permission_required('finance.view_salaryrecord', raise_exception=True)
+def bulk_payroll_view(request):
+    """Bulk payroll processing page"""
+    from datetime import datetime
+    import calendar
+
+    today = datetime.now()
+    current_year = int(request.GET.get('year', today.year))
+    current_month = int(request.GET.get('month', today.month))
+
+    # Get all active salary structures with staff and setting
+    structures = SalaryStructure.objects.filter(
+        is_active=True
+    ).select_related(
+        'staff',
+        'salary_setting'
+    ).order_by(
+        'staff__department',  # Sort by department first
+        'staff__first_name',  # Then by first name
+        'staff__last_name'  # Then by last name
+    )
+
+    # Get salary setting for this month (use the active one)
+    active_setting = SalarySetting.objects.filter(is_active=True).first()
+
+    if not active_setting:
+        messages.error(request, 'No active salary setting found. Please activate a salary setting first.')
+        return redirect('finance_payroll_dashboard')
+
+    # Prepare staff data with calculations
+    staff_data = []
+
+    for structure in structures:
+        # Check if already processed
+        existing_record = SalaryRecord.objects.filter(
+            staff=structure.staff,
+            month=current_month,
+            year=current_year
+        ).first()
+
+        # Calculate salary breakdown
+        calculator = SalaryCalculator(structure, current_month, current_year)
+        salary_calc = calculator.calculate_complete_salary()
+
+        # Parse existing deductions and allowances if record exists
+        existing_deductions = {}
+        existing_allowances = {}
+        bonus = Decimal('0.00')
+        amount_paid = Decimal('0.00')
+        is_paid = False
+
+        if existing_record:
+            # Parse JSON fields
+            if existing_record.other_deductions:
+                if isinstance(existing_record.other_deductions, str):
+                    existing_deductions = json.loads(existing_record.other_deductions)
+                else:
+                    existing_deductions = existing_record.other_deductions
+
+            if existing_record.additional_income:
+                if isinstance(existing_record.additional_income, str):
+                    existing_allowances = json.loads(existing_record.additional_income)
+                else:
+                    existing_allowances = existing_record.additional_income
+
+            bonus = existing_record.bonus
+            amount_paid = existing_record.amount_paid
+            is_paid = existing_record.payment_status == SalaryRecord.PaymentStatus.PAID
+
+        staff_data.append({
+            'structure': structure,
+            'staff': structure.staff,
+            'monthly_salary': structure.monthly_salary,
+            'statutory_deductions': salary_calc['total_statutory_deductions'],
+            'paye_tax': salary_calc['monthly_tax'],
+            'net_monthly': salary_calc['net_salary'],
+            'bonus': bonus,
+            'existing_deductions': existing_deductions,
+            'existing_allowances': existing_allowances,
+            'amount_paid': amount_paid,
+            'is_paid': is_paid,
+            'has_record': existing_record is not None,
+            'record_id': existing_record.id if existing_record else None,
+        })
+
+    # Get deduction and allowance configurations from active setting
+    deduction_configs = active_setting.other_deductions_config or []
+    allowance_configs = active_setting.income_items or []
+
+    # Filter only manual deductions (not linked to external systems)
+    manual_deduction_configs = [
+        d for d in deduction_configs
+        if not d.get('linked_to')
+    ]
+
+    context = {
+        'staff_data': staff_data,
+        'current_year': current_year,
+        'current_month': current_month,
+        'month_name': calendar.month_name[current_month],
+        'years': range(2020, today.year + 2),
+        'months': [(i, calendar.month_name[i]) for i in range(1, 13)],
+        'deduction_configs': manual_deduction_configs,
+        'allowance_configs': allowance_configs,
+        'active_setting': active_setting,
+        'page_title': f'Bulk Payroll - {calendar.month_name[current_month]} {current_year}'
+    }
+
+    return render(request, 'finance/payroll/bulk_payroll.html', context)
+
+
+@login_required
+@permission_required('finance.add_salaryrecord', raise_exception=True)
+@require_http_methods(["POST"])
+def bulk_payroll_save(request):
+    """AJAX endpoint to save bulk payroll data"""
+    import json
+    from decimal import Decimal
+    try:
+        data = json.loads(request.body)
+        staff_records = data.get('staff_records', [])
+        current_year = int(data.get('year'))
+        current_month = int(data.get('month'))
+
+        results = []
+
+        for record_data in staff_records:
+            try:
+                structure_id = record_data.get('structure_id')
+                structure = SalaryStructure.objects.get(id=structure_id)
+
+                # Get or create salary record
+                salary_record, created = SalaryRecord.objects.get_or_create(
+                    staff=structure.staff,
+                    month=current_month,
+                    year=current_year,
+                    defaults={
+                        'salary_structure': structure,
+                        'salary_setting': structure.salary_setting,
+                        'monthly_salary': structure.monthly_salary,
+                        'annual_salary': structure.annual_salary,
+                        'created_by': request.user,
+                    }
+                )
+
+                # Parse deductions and allowances
+                deductions = record_data.get('deductions', {})
+                allowances = record_data.get('allowances', {})
+                bonus = Decimal(str(record_data.get('bonus', '0')))
+                amount_paid = Decimal(str(record_data.get('amount_paid', '0')))
+                mark_as_paid = record_data.get('mark_as_paid', False)
+
+                # Calculate complete salary
+                calculator = SalaryCalculator(structure, current_month, current_year)
+                salary_calc = calculator.calculate_complete_salary(
+                    bonus=bonus,
+                    custom_deductions=deductions,
+                    additional_income=allowances
+                )
+
+                # Helper to convert Decimals in nested structures
+                def convert_decimals(obj):
+                    if isinstance(obj, Decimal):
+                        return str(obj)
+                    elif isinstance(obj, dict):
+                        return {k: convert_decimals(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [convert_decimals(item) for item in obj]
+                    return obj
+
+                # Update salary record
+                salary_record.bonus = bonus
+                salary_record.additional_income = convert_decimals(allowances)
+                salary_record.other_deductions = convert_decimals(deductions)
+                salary_record.basic_components_breakdown = convert_decimals(
+                    salary_calc.get('basic_components_breakdown', {}))
+                salary_record.allowances_breakdown = convert_decimals(salary_calc.get('allowances_breakdown', {}))
+                salary_record.total_income = Decimal(str(salary_calc['total_income']))
+                salary_record.gross_salary = Decimal(str(salary_calc['total_income']))
+                salary_record.statutory_deductions = convert_decimals(salary_calc.get('statutory_deductions', {}))
+                salary_record.total_statutory_deductions = Decimal(str(salary_calc['total_statutory_deductions']))
+                salary_record.total_other_deductions = Decimal(str(salary_calc['total_other_deductions']))
+                salary_record.annual_gross_income = Decimal(str(salary_calc['annual_gross_income']))
+                salary_record.total_reliefs = Decimal(str(salary_calc['total_reliefs']))
+                salary_record.taxable_income = Decimal(str(salary_calc['taxable_income']))
+                salary_record.annual_tax = Decimal(str(salary_calc['annual_tax']))
+                salary_record.monthly_tax = Decimal(str(salary_calc['monthly_tax']))
+                salary_record.total_taxation = Decimal(str(salary_calc['total_taxation']))
+                salary_record.effective_tax_rate = Decimal(str(salary_calc['effective_tax_rate']))
+                salary_record.net_salary = Decimal(str(salary_calc['net_salary']))
+                salary_record.amount_paid = amount_paid
+
+                # Calculate actual take home (net salary - other deductions + allowances + bonus)
+                total_allowances = sum(Decimal(str(v)) for v in allowances.values() if v)
+                actual_take_home = (
+                        salary_record.net_salary -
+                        salary_record.total_other_deductions +
+                        total_allowances +
+                        bonus
+                )
+
+                # Update payment status based on actual take home
+                if mark_as_paid and round(amount_paid) >= round(actual_take_home):
+                    salary_record.payment_status = SalaryRecord.PaymentStatus.PAID
+                    salary_record.paid_date = date.today()
+                    salary_record.paid_by = request.user
+                elif amount_paid > 0:
+                    salary_record.payment_status = SalaryRecord.PaymentStatus.PARTIALLY_PAID
+                else:
+                    salary_record.payment_status = SalaryRecord.PaymentStatus.PENDING
+
+                salary_record.save()
+
+                results.append({
+                    'success': True,
+                    'staff_name': str(structure.staff),
+                    'record_id': salary_record.id
+                })
+
+            except Exception as e:
+                results.append({
+                    'success': False,
+                    'staff_name': record_data.get('staff_name', 'Unknown'),
+                    'error': str(e)
+                })
+
+        return JsonResponse({
+            'success': True,
+            'results': results,
+            'total': len(staff_records),
+            'successful': sum(1 for r in results if r['success']),
+            'failed': sum(1 for r in results if not r['success'])
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+@permission_required('finance.add_salaryrecord', raise_exception=True)
+@require_http_methods(["POST"])
+def auto_save_payroll_row(request):
+    """AJAX endpoint to auto-save individual payroll row"""
+    import json
+    from decimal import Decimal
+
+    try:
+        data = json.loads(request.body)
+        structure_id = data.get('structure_id')
+        current_year = int(data.get('year'))
+        current_month = int(data.get('month'))
+
+        structure = SalaryStructure.objects.get(id=structure_id)
+
+        # Get or create salary record
+        salary_record, created = SalaryRecord.objects.get_or_create(
+            staff=structure.staff,
+            month=current_month,
+            year=current_year,
+            defaults={
+                'salary_structure': structure,
+                'salary_setting': structure.salary_setting,
+                'monthly_salary': structure.monthly_salary,
+                'annual_salary': structure.annual_salary,
+                'created_by': request.user,
+            }
+        )
+
+        # Parse data
+        deductions = data.get('deductions', {})
+        allowances = data.get('allowances', {})
+        bonus = Decimal(str(data.get('bonus', '0')))
+        amount_paid = Decimal(str(data.get('amount_paid', '0')))
+
+        # Calculate salary
+        calculator = SalaryCalculator(structure, current_month, current_year)
+        salary_calc = calculator.calculate_complete_salary(
+            bonus=bonus,
+            custom_deductions=deductions,
+            additional_income=allowances
+        )
+
+        # Helper to convert Decimals
+        def convert_decimals(obj):
+            if isinstance(obj, Decimal):
+                return str(obj)
+            elif isinstance(obj, dict):
+                return {k: convert_decimals(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_decimals(item) for item in obj]
+            return obj
+
+        # Update record
+        salary_record.bonus = bonus
+        salary_record.additional_income = convert_decimals(allowances)
+        salary_record.other_deductions = convert_decimals(deductions)
+        salary_record.amount_paid = amount_paid
+        salary_record.net_salary = Decimal(str(salary_calc['net_salary']))
+        salary_record.total_other_deductions = Decimal(str(salary_calc['total_other_deductions']))
+
+        # Calculate actual take home and update payment status
+        total_allowances = sum(Decimal(str(v)) for v in allowances.values() if v)
+        actual_take_home = (
+                salary_record.net_salary -
+                salary_record.total_other_deductions +
+                total_allowances +
+                bonus
+        )
+
+        # Update payment status based on actual take home
+        if amount_paid >= actual_take_home:
+            salary_record.payment_status = SalaryRecord.PaymentStatus.PAID
+            salary_record.paid_date = date.today()
+            salary_record.paid_by = request.user
+        elif amount_paid > 0:
+            salary_record.payment_status = SalaryRecord.PaymentStatus.PARTIALLY_PAID
+        else:
+            salary_record.payment_status = SalaryRecord.PaymentStatus.PENDING
+
+        salary_record.save()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Auto-saved for {structure.staff}',
+            'record_id': salary_record.id
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
