@@ -1,0 +1,158 @@
+{% extends "parent_portal/layout.html" %}
+{% load humanize %}
+
+{% block title %}Other Payments - {{ selected_ward.first_name }}{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+    <h1>Other Payments & Debts</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Home</a></li>
+            <li class="breadcrumb-item active">Other Payments for {{ selected_ward.first_name }}</li>
+        </ol>
+    </nav>
+</div>
+
+<!-- Summary Card -->
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Summary</h5>
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Total Debts</small>
+                        <strong class="fs-5">₦{{ total_amount|floatformat:2|intcomma }}</strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Total Paid</small>
+                        <strong class="fs-5 text-success">₦{{ total_paid|floatformat:2|intcomma }}</strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Outstanding Balance</small>
+                        <strong class="fs-5 text-danger">₦{{ total_balance|floatformat:2|intcomma }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Other Payments List -->
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Other Payments & Debts</h5>
+                
+                {% if other_payments %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Session/Term</th>
+                                <th>Category</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Paid</th>
+                                <th class="text-end">Balance</th>
+                                <th>Status</th>
+                                <th>History</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in other_payments %}
+                            <tr>
+                                <td>
+                                    <strong>{{ payment.description }}</strong>
+                                    {% if payment.notes %}
+                                    <br><small class="text-muted">{{ payment.notes|truncatewords:10 }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if payment.session and payment.term %}
+                                        {{ payment.session }} / {{ payment.term.name }}
+                                    {% else %}
+                                        <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="badge bg-secondary">{{ payment.get_category_display }}</span></td>
+                                <td class="text-end">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-success">₦{{ payment.amount_paid|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-danger">₦{{ payment.balance|floatformat:2|intcomma }}</td>
+                                <td>
+                                    {% if payment.status == 'paid' %}
+                                        <span class="badge bg-success">{{ payment.get_status_display }}</span>
+                                    {% elif payment.status == 'partially_paid' %}
+                                        <span class="badge bg-warning text-dark">{{ payment.get_status_display }}</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">{{ payment.get_status_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if payment.clearances.exists %}
+                                    <button type="button" class="btn btn-sm btn-outline-info" 
+                                            data-bs-toggle="collapse" 
+                                            data-bs-target="#history-{{ payment.pk }}">
+                                        <i class="bi bi-clock-history"></i> View
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted small">No payments yet</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            
+                            <!-- Collapsible Payment History -->
+                            {% if payment.clearances.exists %}
+                            <tr class="collapse" id="history-{{ payment.pk }}">
+                                <td colspan="8" class="bg-light">
+                                    <div class="p-3">
+                                        <h6 class="mb-3">Payment History</h6>
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Amount</th>
+                                                    <th>Mode</th>
+                                                    <th>Reference</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for clearance in payment.clearances.all %}
+                                                <tr>
+                                                    <td>{{ clearance.date|date:"d M, Y" }}</td>
+                                                    <td>₦{{ clearance.amount|floatformat:2|intcomma }}</td>
+                                                    <td>{{ clearance.get_payment_mode_display }}</td>
+                                                    <td>{{ clearance.reference|default:"—" }}</td>
+                                                    <td>
+                                                        {% if clearance.status == 'confirmed' %}
+                                                            <span class="badge bg-success">Confirmed</span>
+                                                        {% else %}
+                                                            <span class="badge bg-danger">Reverted</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info text-center">
+                    <p class="mb-0">No other payments or debts recorded for {{ selected_ward.first_name }}.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

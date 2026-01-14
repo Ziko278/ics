@@ -18,7 +18,7 @@ from admin_site.models import SchoolSettingModel
 # Import models from other apps (adjust paths as needed)
 from student.models import StudentModel, ParentProfileModel
 from finance.models import InvoiceModel, InvoiceItemModel, StudentFundingModel, SchoolBankDetail, FeePaymentModel, \
-    StudentDiscountModel
+    StudentDiscountModel, OtherPaymentModel
 from inventory.models import InventoryAssignmentModel, InventoryCollectionModel, SaleModel, SaleItemModel
 from cafeteria.models import MealCollectionModel
 
@@ -161,6 +161,12 @@ class DashboardView(ParentPortalMixin, TemplateView):
         ).order_by('issue_date')
         context['total_due'] = sum(inv.balance for inv in context['pending_invoices'])
         context['total_discount'] = sum(inv.total_discount for inv in context['pending_invoices'])
+
+        other_payments = OtherPaymentModel.objects.filter(
+            student=ward
+        ).exclude(status='paid')
+        context['other_payments'] = other_payments
+        context['total_other_payment_balance'] = sum(op.balance for op in other_payments)
 
         # Recent Shop Spending
         context['recent_sales'] = SaleModel.objects.filter(
@@ -391,6 +397,27 @@ class FeeUploadView(ParentPortalMixin, FormView):
             for error in errors:
                 messages.error(self.request, f"{field_label}: {error}")
         return self.render_to_response(self.get_context_data(form=form))
+
+
+class ParentOtherPaymentListView(ParentPortalMixin, ListView):
+    """View all other payments for the selected ward"""
+    model = OtherPaymentModel
+    template_name = 'parent_portal/other_payment_list.html'
+    context_object_name = 'other_payments'
+
+    def get_queryset(self):
+        ward = self.selected_ward
+        return OtherPaymentModel.objects.filter(student=ward).select_related(
+            'session', 'term'
+        ).prefetch_related('clearances').order_by('-created_at')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        other_payments = self.get_queryset()
+        context['total_amount'] = sum(op.amount for op in other_payments)
+        context['total_paid'] = sum(op.amount_paid for op in other_payments)
+        context['total_balance'] = sum(op.balance for op in other_payments)
+        return context
 
 
 class FeeUploadHistoryView(ParentPortalMixin, ListView):

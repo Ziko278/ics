@@ -1,7 +1,7 @@
 # parent_portal/urls.py
 from django.urls import path
 from . import views
-from .views import parent_change_password_view
+from .views import parent_change_password_view, ParentOtherPaymentListView
 
 urlpatterns = [
     # --- Auth & Ward Selection ---
@@ -17,6 +17,7 @@ urlpatterns = [
     path('fees/invoice/<int:pk>/', views.FeeInvoiceDetailView.as_view(), name='parent_fee_invoice_detail'), # Added detail view
     path('fees/upload/', views.FeeUploadView.as_view(), name='parent_fee_upload'),
     path('fees/history/', views.FeeUploadHistoryView.as_view(), name='parent_fee_history'),
+    path('other-payments/', ParentOtherPaymentListView.as_view(), name='parent_other_payment_list'),
 
     # --- Shop ---
     path('shop/', views.ShopHistoryView.as_view(), name='parent_shop_history'),
