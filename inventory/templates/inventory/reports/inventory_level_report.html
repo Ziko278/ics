@@ -20,7 +20,7 @@
                     <label class="form-label small">To Date</label>
                     <input type="date" name="date_to" class="form-control" value="{{ date_to }}" required>
                 </div>
-                
+
                 <!-- Location Filter -->
                 <div class="col-md-2">
                     <label class="form-label small">Location</label>
@@ -30,7 +30,7 @@
                         <option value="store" {% if location_filter == 'store' %}selected{% endif %}>Store</option>
                     </select>
                 </div>
-                
+
                 <!-- Sort By -->
                 <div class="col-md-2">
                     <label class="form-label small">Sort By</label>
@@ -39,7 +39,7 @@
                         <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name Only</option>
                     </select>
                 </div>
-                
+
                 <!-- Apply Button -->
                 <div class="col-md-2">
                     <label class="form-label small">&nbsp;</label>
@@ -53,24 +53,24 @@
             <div class="row g-3 mt-2">
                 <div class="col-md-12">
                     <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="skip_zero" id="skipZero" 
-                               {% if skip_zero %}checked{% endif %}>
+                        <input class="form-check-input" type="checkbox" name="skip_zero" id="skipZero"
+                               value="on" {% if skip_zero %}checked{% endif %}>
                         <label class="form-check-label" for="skipZero">
                             Skip items with no activity
                         </label>
                     </div>
-                    
+
                     <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="show_optional" id="showOptional" 
-                               {% if show_optional %}checked{% endif %}>
+                        <input class="form-check-input" type="checkbox" name="show_optional" id="showOptional"
+                               value="on" {% if show_optional %}checked{% endif %}>
                         <label class="form-check-label" for="showOptional">
                             Show Qty Sold & Stocked Out
                         </label>
                     </div>
-                    
+
                     <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="include_school_info" id="includeSchoolInfo" 
-                               {% if include_school_info %}checked{% endif %}>
+                        <input class="form-check-input" type="checkbox" name="include_school_info" id="includeSchoolInfo"
+                               value="on" {% if include_school_info %}checked{% endif %}>
                         <label class="form-check-label" for="includeSchoolInfo">
                             Include school info in PDF
                         </label>
@@ -90,7 +90,7 @@
         <div class="text-center mb-4">
             <h5 class="text-primary">{{ report_title }}</h5>
             <p class="text-muted mb-0">
-                Location: <strong>{{ location_filter|title }}</strong> | 
+                Location: <strong>{{ location_filter|title }}</strong> |
                 Sorted by: <strong>{% if sort_by == 'category' %}Category & Name{% else %}Name Only{% endif %}</strong>
             </p>
         </div>
@@ -109,7 +109,6 @@
                         <th class="text-end">Qty Stocked Out</th>
                         {% endif %}
                         <th class="text-end">Qty Left</th>
-                        <th class="text-end">Total Qty Left</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -131,15 +130,12 @@
                         <td class="text-end text-warning">{{ data.qty_stocked_out|floatformat:2 }}</td>
                         {% endif %}
                         <td class="text-end">
-                            <strong>{{ data.qty_left_from_period|floatformat:2 }}</strong>
-                        </td>
-                        <td class="text-end">
-                            <strong class="text-primary">{{ data.total_qty_left|floatformat:2 }}</strong>
+                            <strong class="text-primary">{{ data.qty_left|floatformat:2 }}</strong>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="{% if show_optional %}8{% else %}6{% endif %}" class="text-center py-4">
+                        <td colspan="{% if show_optional %}7{% else %}5{% endif %}" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="fas fa-box-open fa-2x mb-2"></i>
                                 <br>
@@ -162,13 +158,12 @@
             <i class="fas fa-info-circle"></i>
             <strong>Legend:</strong>
             <ul class="mb-0 mt-2">
-                <li><strong>Qty Stocked In:</strong> New stock received during the period</li>
+                <li><strong>Qty Stocked In:</strong> New stock received during the selected period</li>
                 {% if show_optional %}
-                <li><strong>Qty Sold:</strong> Quantity sold during the period</li>
-                <li><strong>Qty Stocked Out:</strong> Quantity removed (damage, wastage, etc.) during the period</li>
+                <li><strong>Qty Sold:</strong> Quantity sold during the selected period</li>
+                <li><strong>Qty Stocked Out:</strong> Quantity removed (damage, wastage, etc.) during the selected period</li>
                 {% endif %}
-                <li><strong>Qty Left:</strong> Stock remaining from this period (Stocked In - Sold - Stocked Out)</li>
-                <li><strong>Total Qty Left:</strong> Current stock level in the system</li>
+                <li><strong>Qty Left:</strong> Current stock level in the system (as of today)</li>
             </ul>
         </div>
         {% endif %}
@@ -178,21 +173,21 @@
 <script>
 function downloadPDF() {
     const form = document.getElementById('reportForm');
-    const currentAction = form.action;
-    const currentMethod = form.method;
-    
+
     // Add download parameter
     const downloadInput = document.createElement('input');
     downloadInput.type = 'hidden';
     downloadInput.name = 'download';
     downloadInput.value = 'pdf';
     form.appendChild(downloadInput);
-    
+
     // Submit form
     form.submit();
-    
-    // Remove download parameter
-    form.removeChild(downloadInput);
+
+    // Remove download parameter after a brief delay
+    setTimeout(() => {
+        form.removeChild(downloadInput);
+    }, 100);
 }
 </script>
 

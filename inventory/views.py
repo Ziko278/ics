@@ -2672,7 +2672,6 @@ def view_staff_collections(request):
 
     return render(request, 'inventory/inventory/staff_collection_index.html', context)
 
-
 @login_required
 @permission_required("inventory.view_itemmodel", raise_exception=True)
 def inventory_level_report(request):
@@ -2688,7 +2687,7 @@ def inventory_level_report(request):
     date_to = request.GET.get('date_to', '').strip() or str(last_day)
     location_filter = request.GET.get('location', 'all')
     sort_by = request.GET.get('sort_by', 'category')  # 'category' or 'name'
-    skip_zero = request.GET.get('skip_zero', 'on') == 'on'
+    skip_zero = request.GET.get('skip_zero', '') == 'on'  # FIXED: Changed default from 'on' to ''
     show_optional = request.GET.get('show_optional', '') == 'on'
     download_pdf = request.GET.get('download', '') == 'pdf'
     include_school_info = request.GET.get('include_school_info', 'on') == 'on'
@@ -2714,23 +2713,24 @@ def inventory_level_report(request):
     # Base queryset - active items
     items_qs = ItemModel.objects.filter(is_active=True).select_related('category')
 
-    # Filter by location
+    # FIXED: Filter by location - properly handle 'both'
     if location_filter == 'shop':
         items_qs = items_qs.filter(Q(location='shop') | Q(location='both'))
     elif location_filter == 'store':
         items_qs = items_qs.filter(Q(location='store') | Q(location='both'))
+    # else 'all' - no filter needed
 
     # Build inventory data
     inventory_data = []
 
     for item in items_qs:
-        # Determine which quantity to use for "Total Quantity Left"
+        # Determine which quantity to use for "Qty Left" (current stock)
         if location_filter == 'shop':
-            total_qty_left = item.shop_quantity
+            qty_left = item.shop_quantity
         elif location_filter == 'store':
-            total_qty_left = item.store_quantity
+            qty_left = item.store_quantity
         else:  # all
-            total_qty_left = item.shop_quantity + item.store_quantity
+            qty_left = item.shop_quantity + item.store_quantity
 
         # Get stocked in quantity (filtered by location and date)
         stock_in_filter = Q(
@@ -2738,25 +2738,23 @@ def inventory_level_report(request):
             stock_in__date_received__lte=to_date
         )
 
+        # FIXED: Handle 'both' location for stock in
         if location_filter == 'shop':
-            stock_in_filter &= Q(stock_in__location='shop')
+            stock_in_filter &= Q(stock_in__location__in=['shop', 'both'])
         elif location_filter == 'store':
-            stock_in_filter &= Q(stock_in__location='store')
+            stock_in_filter &= Q(stock_in__location__in=['store', 'both'])
 
         qty_stocked_in = item.stock_ins.filter(stock_in_filter).aggregate(
             total=Coalesce(Sum('quantity_received'), Decimal('0.00'), output_field=DecimalField())
         )['total']
 
-        # Get sold quantity (filtered by location and date)
+        # Get sold quantity (filtered by date)
         sale_filter = Q(
             sale__sale_date__date__gte=from_date,
             sale__sale_date__date__lte=to_date,
             sale__status='completed'
         )
 
-        # Note: Sales don't have location, but we can infer from shop_quantity changes
-        # For now, we'll count all sales when location='all'
-        # For shop/store specific, we assume sales come from that location
         qty_sold = item.saleitemmodel_set.filter(sale_filter).aggregate(
             total=Coalesce(Sum('quantity'), Decimal('0.00'), output_field=DecimalField())
         )['total']
@@ -2767,6 +2765,7 @@ def inventory_level_report(request):
             date_removed__lte=to_date
         )
 
+        # FIXED: Handle 'both' location for stock out
         if location_filter == 'shop':
             stock_out_filter &= Q(location='shop')
         elif location_filter == 'store':
@@ -2776,10 +2775,8 @@ def inventory_level_report(request):
             total=Coalesce(Sum('quantity_removed'), Decimal('0.00'), output_field=DecimalField())
         )['total']
 
-        # Calculate "Quantity Left" from the period's stock
-        qty_left_from_period = qty_stocked_in - qty_sold - qty_stocked_out
-
-        # Skip items with zero activity if option is enabled
+        # FIXED: Skip items with zero activity if option is enabled
+        # Check this BEFORE adding to the list
         if skip_zero:
             if (qty_stocked_in == 0 and qty_sold == 0 and qty_stocked_out == 0):
                 continue
@@ -2790,8 +2787,7 @@ def inventory_level_report(request):
             'qty_stocked_in': qty_stocked_in,
             'qty_sold': qty_sold,
             'qty_stocked_out': qty_stocked_out,
-            'qty_left_from_period': qty_left_from_period,
-            'total_qty_left': total_qty_left,
+            'qty_left': qty_left,  # FIXED: Renamed from total_qty_left
         })
 
     # Sort data
@@ -2887,13 +2883,12 @@ def generate_inventory_pdf(context, from_date, to_date, location_filter):
         elements.append(Paragraph(f"{context['report_title']} | {location_text}", subtitle_style))
         elements.append(Spacer(1, 0.2 * inch))
 
-        # Prepare table data
+        # FIXED: Prepare table data - removed confusing "Qty Left from Period" column
         if context['show_optional']:
             headers = ['S/N', 'Product Name', 'Category', 'Qty Stocked In',
-                       'Qty Sold', 'Qty Stocked Out', 'Qty Left', 'Total Qty Left']
+                       'Qty Sold', 'Qty Stocked Out', 'Qty Left']
         else:
-            headers = ['S/N', 'Product Name', 'Category', 'Qty Stocked In',
-                       'Qty Left', 'Total Qty Left']
+            headers = ['S/N', 'Product Name', 'Category', 'Qty Stocked In', 'Qty Left']
 
         table_data = [headers]
 
@@ -2906,8 +2901,7 @@ def generate_inventory_pdf(context, from_date, to_date, location_filter):
                     f"{data['qty_stocked_in']:.2f}",
                     f"{data['qty_sold']:.2f}",
                     f"{data['qty_stocked_out']:.2f}",
-                    f"{data['qty_left_from_period']:.2f}",
-                    f"{data['total_qty_left']:.2f}",
+                    f"{data['qty_left']:.2f}",  # FIXED: Only one qty_left column
                 ]
             else:
                 row = [
@@ -2915,22 +2909,21 @@ def generate_inventory_pdf(context, from_date, to_date, location_filter):
                     data['item'].name,
                     data['category'],
                     f"{data['qty_stocked_in']:.2f}",
-                    f"{data['qty_left_from_period']:.2f}",
-                    f"{data['total_qty_left']:.2f}",
+                    f"{data['qty_left']:.2f}",  # FIXED: Only one qty_left column
                 ]
             table_data.append(row)
 
         if not context['inventory_data']:
             if context['show_optional']:
-                table_data.append(['', 'No data available for the selected period', '', '', '', '', '', ''])
+                table_data.append(['', 'No data available for the selected period', '', '', '', '', ''])
             else:
-                table_data.append(['', 'No data available for the selected period', '', '', '', ''])
+                table_data.append(['', 'No data available for the selected period', '', '', ''])
 
-        # Create table with dynamic column widths
+        # FIXED: Create table with updated column widths
         if context['show_optional']:
-            col_widths = [0.5 * inch, 2.5 * inch, 1.5 * inch, 1 * inch, 1 * inch, 1 * inch, 1 * inch, 1 * inch]
+            col_widths = [0.5 * inch, 2.8 * inch, 1.5 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch]
         else:
-            col_widths = [0.5 * inch, 3 * inch, 2 * inch, 1.5 * inch, 1.5 * inch, 1.5 * inch]
+            col_widths = [0.5 * inch, 3.5 * inch, 2 * inch, 1.5 * inch, 1.5 * inch]
 
         table = Table(table_data, colWidths=col_widths, repeatRows=1)
 
