@@ -1,0 +1,184 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="card-title">Bonus Report</h4>
+        <div class="btn-group">
+          <a href="{% url 'finance_bonus_report_pdf' %}{% if request.GET.month %}?month={{ request.GET.month }}{% endif %}{% if request.GET.year %}{% if request.GET.month %}&{% else %}?{% endif %}year={{ request.GET.year }}{% endif %}{% if request.GET.search %}{% if request.GET.month or request.GET.year %}&{% else %}?{% endif %}search={{ request.GET.search }}{% endif %}" 
+             class="btn btn-success">
+            <i class="bi bi-file-earmark-pdf"></i> Download PDF
+          </a>
+          <a href="{% url 'finance_bonus_list' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to List
+          </a>
+        </div>
+      </div>
+
+      <!-- Filter Controls -->
+      <div class="row mb-4">
+        <div class="col-md-3">
+          <label class="form-label">Month</label>
+          {{ filter_form.month }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Year</label>
+          {{ filter_form.year }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Search</label>
+          {{ filter_form.search }}
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-outline-secondary w-100" type="button" id="filterButton">
+            <i class="bi bi-funnel"></i> Apply
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="row mb-4">
+        <div class="col-md-3">
+          <div class="card bg-primary text-white">
+            <div class="card-body">
+              <h5 class="card-title">Total Amount</h5>
+              <h3>₦{{ total_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-success text-white">
+            <div class="card-body">
+              <h5 class="card-title">Paid Amount</h5>
+              <h3>₦{{ paid_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-warning text-white">
+            <div class="card-body">
+              <h5 class="card-title">Unpaid Amount</h5>
+              <h3>₦{{ unpaid_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-info text-white">
+            <div class="card-body">
+              <h5 class="card-title">Total Count</h5>
+              <h3>{{ bonuses|length }}</h3>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Breakdown -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h6>Category Breakdown</h6>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Count</th>
+                  <th>Total Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cat_key, cat_data in category_breakdown.items %}
+                <tr>
+                  <td>{{ cat_data.label }}</td>
+                  <td>{{ cat_data.count }}</td>
+                  <td>₦{{ cat_data.total|floatformat:2|intcomma }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recipient Breakdown -->
+      <div class="card">
+        <div class="card-header">
+          <h6>Recipient Breakdown</h6>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Recipient Name</th>
+                  <th>Type</th>
+                  <th>Total Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for name, data in recipient_breakdown.items %}
+                <tr>
+                  <td>{{ name }}</td>
+                  <td>
+                    {% if data.type == 'staff' %}
+                      <span class="badge bg-info">Staff</span>
+                    {% else %}
+                      <span class="badge bg-secondary">Volunteer</span>
+                    {% endif %}
+                  </td>
+                  <td>₦{{ data.total|floatformat:2|intcomma }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const filterButton = document.getElementById('filterButton');
+  
+  // Function to apply filters
+  function applyFilters() {
+    const url = new URL(window.location);
+    
+    // Get form values
+    const month = document.getElementById('id_month').value;
+    const year = document.getElementById('id_year').value;
+    const search = document.getElementById('id_search').value;
+    
+    // Update URL parameters
+    if (month) url.searchParams.set('month', month);
+    else url.searchParams.delete('month');
+    
+    if (year) url.searchParams.set('year', year);
+    else url.searchParams.delete('year');
+    
+    if (search) url.searchParams.set('search', search);
+    else url.searchParams.delete('search');
+    
+    // Navigate to the new URL
+    window.location = url;
+  }
+  
+  // Add event listener
+  filterButton.addEventListener('click', applyFilters);
+  
+  // Add event listeners for Enter key on search field
+  document.getElementById('id_search').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      applyFilters();
+    }
+  });
+});
+</script>
+{% endblock %}

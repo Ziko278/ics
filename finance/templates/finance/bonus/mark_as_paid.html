@@ -1,0 +1,57 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <h4 class="card-title mb-4">{{ page_title }}</h4>
+      
+      <div class="card mb-4">
+        <div class="card-body">
+          <p><strong>Type:</strong> 
+            {% if bonus.type == 'staff' %}
+              <span class="badge bg-info">Staff</span>
+            {% else %}
+              <span class="badge bg-secondary">Volunteer</span>
+            {% endif %}
+          </p>
+          
+          <p><strong>Category:</strong> {{ bonus.get_category_display }}</p>
+          
+          {% if bonus.type == 'staff' %}
+            <p><strong>Name:</strong> {{ bonus.staff }}</p>
+          {% else %}
+            <p><strong>Name:</strong> {{ bonus.volunteer_name }}</p>
+          {% endif %}
+          
+          <p><strong>Amount:</strong> ₦{{ bonus.amount|floatformat:2|intcomma }}</p>
+          <p><strong>Period:</strong> {{ bonus.get_month_display }} {{ bonus.year }}</p>
+          <p><strong>Due Date:</strong> {{ bonus.due_date|date:"M d, Y" }}</p>
+          <p><strong>Current Status:</strong> 
+            <span class="badge bg-warning">Unpaid</span>
+          </p>
+        </div>
+      </div>
+      
+      <div class="alert alert-success">
+        <h5>Mark as Paid?</h5>
+        <p>This will change the status of this bonus from "Unpaid" to "Paid".</p>
+      </div>
+      
+      <form method="post">
+        {% csrf_token %}
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'finance_bonus_detail' bonus.pk %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Cancel
+          </a>
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-check-circle"></i> Mark as Paid
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

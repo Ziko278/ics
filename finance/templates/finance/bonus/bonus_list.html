@@ -1,0 +1,264 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="card-title">Bonus Management</h4>
+        <div class="btn-group">
+          <a href="{% url 'finance_bonus_report' %}" class="btn btn-info">
+            <i class="bi bi-file-earmark-text"></i> Generate Report
+          </a>
+          <a href="{% url 'finance_bonus_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Add New Bonus
+          </a>
+        </div>
+      </div>
+
+      <!-- Filter Controls -->
+      <div class="row mb-4">
+        <div class="col-md-2">
+          <label class="form-label">Month</label>
+          {{ filter_form.month }}
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Year</label>
+          {{ filter_form.year }}
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Category</label>
+          {{ filter_form.category }}
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Status</label>
+          {{ filter_form.status }}
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Search</label>
+          {{ filter_form.search }}
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-outline-secondary w-100" type="button" id="filterButton">
+            <i class="bi bi-funnel"></i> Apply
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="row mb-4">
+        <div class="col-md-3">
+          <div class="card bg-primary text-white">
+            <div class="card-body">
+              <h5 class="card-title">Total Amount</h5>
+              <h3>₦{{ total_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-success text-white">
+            <div class="card-body">
+              <h5 class="card-title">Paid Amount</h5>
+              <h3>₦{{ paid_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-warning text-white">
+            <div class="card-body">
+              <h5 class="card-title">Unpaid Amount</h5>
+              <h3>₦{{ unpaid_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-info text-white">
+            <div class="card-body">
+              <h5 class="card-title">Total Count</h5>
+              <h3>{{ bonuses|length }}</h3>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Breakdown -->
+      <div class="row mb-4">
+        <div class="col-md-12">
+          <div class="card">
+            <div class="card-header">
+              <h6>Category Breakdown</h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                {% for cat_key, cat_data in category_breakdown.items %}
+                <div class="col-md-2">
+                  <div class="text-center">
+                    <h6>{{ cat_data.label }}</h6>
+                    <h5>₦{{ cat_data.total|floatformat:2|intcomma }}</h5>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bonus List -->
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Recipient</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th>Amount</th>
+              <th>Period</th>
+              <th>Due Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for bonus in bonuses %}
+            <tr>
+              <td>
+                {% if bonus.type == 'staff' %}
+                  {{ bonus.staff }}
+                {% else %}
+                  {{ bonus.volunteer_name }}
+                {% endif %}
+              </td>
+              <td>
+                {% if bonus.type == 'staff' %}
+                  <span class="badge bg-info">Staff</span>
+                {% else %}
+                  <span class="badge bg-secondary">Volunteer</span>
+                {% endif %}
+              </td>
+              <td>{{ bonus.get_category_display }}</td>
+              <td>₦{{ bonus.amount|floatformat:2|intcomma }}</td>
+              <td>{{ bonus.month }}/{{ bonus.year }}</td>
+              <td>{{ bonus.due_date|date:"M d, Y" }}</td>
+              <td>
+                {% if bonus.status == 'paid' %}
+                  <span class="badge bg-success">Paid</span>
+                {% else %}
+                  <span class="badge bg-warning">Unpaid</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{% url 'finance_bonus_detail' bonus.pk %}" class="btn btn-sm btn-primary">
+                  <i class="bi bi-eye"></i>
+                </a>
+                <a href="{% url 'finance_bonus_update' bonus.pk %}" class="btn btn-sm btn-warning">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                {% if bonus.status == 'unpaid' %}
+                <a href="{% url 'finance_bonus_mark_as_paid' bonus.pk %}" class="btn btn-sm btn-success">
+                  <i class="bi bi-check-circle"></i>
+                </a>
+                {% endif %}
+                <a href="{% url 'finance_bonus_delete' bonus.pk %}" class="btn btn-sm btn-danger">
+                  <i class="bi bi-trash"></i>
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="8" class="text-center">No bonuses found with the selected criteria.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      {% if is_paginated %}
+      <nav aria-label="Page navigation">
+        <ul class="pagination justify-content-center">
+          {% if page_obj.has_previous %}
+            <li class="page-item">
+              <a class="page-link" href="?page=1{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">First</a>
+            </li>
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">Previous</a>
+            </li>
+          {% endif %}
+
+          {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+              <li class="page-item active">
+                <span class="page-link">{{ num }}</span>
+              </li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+              <li class="page-item">
+                <a class="page-link" href="?page={{ num }}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">{{ num }}</a>
+              </li>
+            {% endif %}
+          {% endfor %}
+
+          {% if page_obj.has_next %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">Next</a>
+            </li>
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">Last</a>
+            </li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const filterButton = document.getElementById('filterButton');
+  
+  // Function to apply filters
+  function applyFilters() {
+    const url = new URL(window.location);
+    
+    // Get form values
+    const month = document.getElementById('id_month').value;
+    const year = document.getElementById('id_year').value;
+    const search = document.getElementById('id_search').value;
+    const category = document.getElementById('id_category').value;
+    const status = document.getElementById('id_status').value;
+    
+    // Update URL parameters
+    if (month) url.searchParams.set('month', month);
+    else url.searchParams.delete('month');
+    
+    if (year) url.searchParams.set('year', year);
+    else url.searchParams.delete('year');
+    
+    if (search) url.searchParams.set('search', search);
+    else url.searchParams.delete('search');
+    
+    if (category) url.searchParams.set('category', category);
+    else url.searchParams.delete('category');
+    
+    if (status) url.searchParams.set('status', status);
+    else url.searchParams.delete('status');
+    
+    // Navigate to the new URL
+    window.location = url;
+  }
+  
+  // Add event listener
+  filterButton.addEventListener('click', applyFilters);
+  
+  // Add event listeners for Enter key on search field
+  document.getElementById('id_search').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      applyFilters();
+    }
+  });
+});
+</script>
+{% endblock %}

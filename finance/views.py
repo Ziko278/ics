@@ -47,13 +47,14 @@ from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePa
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryRecord, SalaryAdvance, \
     SalaryStructure, StudentFundingModel, InvoiceItemModel, AdvanceSettlementModel, \
     SchoolBankDetail, StaffLoan, StaffLoanRepayment, StaffFundingModel, DiscountModel, DiscountApplicationModel, \
-    StudentDiscountModel, OtherPaymentClearanceModel, OtherPaymentModel, SalarySetting
+    StudentDiscountModel, OtherPaymentClearanceModel, OtherPaymentModel, SalarySetting, Bonus
 from .forms import FinanceSettingForm, SupplierPaymentForm, PurchaseAdvancePaymentForm, FeeForm, FeeGroupForm, \
     InvoiceGenerationForm, FeePaymentForm, ExpenseCategoryForm, ExpenseForm, IncomeCategoryForm, \
     IncomeForm, TermlyFeeAmountFormSet, FeeMasterCreateForm, BulkPaymentForm, StaffBankDetailForm, PaysheetRowForm, \
     SalaryAdvanceForm, SalaryStructureForm, StudentFundingForm, SchoolBankDetailForm, \
     StaffLoanForm, StaffLoanRepaymentForm, StaffFundingForm, DiscountForm, DiscountApplicationForm, \
-    StudentDiscountAssignForm, OtherPaymentClearanceForm, OtherPaymentCreateForm, SalarySettingForm
+    StudentDiscountAssignForm, OtherPaymentClearanceForm, OtherPaymentCreateForm, SalarySettingForm, BonusForm, \
+    BonusFilterForm
 from finance.tasks import generate_invoices_task
 from pytz import timezone as pytz_timezone
 
@@ -6958,4 +6959,459 @@ def auto_save_payroll_row(request):
             'success': False,
             'error': str(e)
         }, status=400)
+
+
+class BonusListView(LoginRequiredMixin, ListView):
+    """List all bonuses with filtering options"""
+    model = Bonus
+    template_name = 'finance/bonus/bonus_list.html'
+    context_object_name = 'bonuses'
+    paginate_by = 20
+
+    def get_queryset(self):
+        queryset = Bonus.objects.all()
+
+        # Get filter parameters
+        month = self.request.GET.get('month')
+        year = self.request.GET.get('year')
+        search_query = self.request.GET.get('search', '')
+        category_filter = self.request.GET.get('category', '')
+        status_filter = self.request.GET.get('status', '')
+
+        # Apply filters
+        if month:
+            queryset = queryset.filter(month=month)
+
+        if year:
+            queryset = queryset.filter(year=year)
+
+        if category_filter:
+            queryset = queryset.filter(category=category_filter)
+
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        if search_query:
+            queryset = queryset.filter(
+                Q(volunteer_name__icontains=search_query) |
+                Q(staff__first_name__icontains=search_query) |
+                Q(staff__last_name__icontains=search_query) |
+                Q(staff__staff_id__icontains=search_query) |
+                Q(notes__icontains=search_query)
+            )
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Get filter parameters
+        month = self.request.GET.get('month')
+        year = self.request.GET.get('year')
+        search_query = self.request.GET.get('search', '')
+        category_filter = self.request.GET.get('category', '')
+        status_filter = self.request.GET.get('status', '')
+
+        # Initialize filter form with current values
+        filter_data = {
+            'month': month,
+            'year': year,
+            'search': search_query,
+            'category': category_filter,
+            'status': status_filter,
+        }
+        context['filter_form'] = BonusFilterForm(filter_data)
+
+        # Set page title
+        context['page_title'] = 'Bonus Management'
+
+        # Calculate summary statistics
+        queryset = self.get_queryset()
+        context['total_amount'] = queryset.aggregate(total=Sum('amount'))['total'] or 0
+        context['paid_amount'] = queryset.filter(status='paid').aggregate(total=Sum('amount'))['total'] or 0
+        context['unpaid_amount'] = queryset.filter(status='unpaid').aggregate(total=Sum('amount'))['total'] or 0
+
+        # Calculate category breakdown
+        category_breakdown = {}
+        for category in Bonus.BonusCategory.choices:
+            cat_value = category[0]
+            cat_label = category[1]
+            total = queryset.filter(category=cat_value).aggregate(total=Sum('amount'))['total'] or 0
+            category_breakdown[cat_value] = {
+                'label': cat_label,
+                'total': total
+            }
+        context['category_breakdown'] = category_breakdown
+
+        return context
+
+
+class BonusDetailView(LoginRequiredMixin, DetailView):
+    """View bonus details"""
+    model = Bonus
+    template_name = 'finance/bonus/bonus_detail.html'
+    context_object_name = 'bonus'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['page_title'] = f'Bonus Details - {self.object}'
+        return context
+
+
+class BonusCreateView(LoginRequiredMixin, CreateView):
+    """Create a new bonus"""
+    model = Bonus
+    form_class = BonusForm
+    template_name = 'finance/bonus/bonus_form.html'
+    success_url = reverse_lazy('finance_bonus_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['page_title'] = 'Create New Bonus'
+        context['action'] = 'Create'
+        return context
+
+    def form_valid(self, form):
+        form.instance.created_by = self.request.user
+        messages.success(self.request, 'Bonus created successfully!')
+        return super().form_valid(form)
+
+
+class BonusUpdateView(LoginRequiredMixin, UpdateView):
+    """Update an existing bonus"""
+    model = Bonus
+    form_class = BonusForm
+    template_name = 'finance/bonus/bonus_form.html'
+    success_url = reverse_lazy('finance_bonus_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['page_title'] = f'Edit Bonus - {self.object}'
+        context['action'] = 'Update'
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Bonus updated successfully!')
+        return super().form_valid(form)
+
+
+class BonusDeleteView(LoginRequiredMixin, DeleteView):
+    """Delete a bonus"""
+    model = Bonus
+    template_name = 'finance/bonus/bonus_confirm_delete.html'
+    success_url = reverse_lazy('finance_bonus_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['page_title'] = f'Delete Bonus - {self.object}'
+        return context
+
+    def delete(self, request, *args, **kwargs):
+        messages.success(request, 'Bonus deleted successfully!')
+        return super().delete(request, *args, **kwargs)
+
+
+@login_required
+def mark_bonus_as_paid_view(request, pk):
+    """Mark a bonus as paid"""
+    bonus = get_object_or_404(Bonus, pk=pk)
+
+    if request.method == 'POST':
+        bonus.status = Bonus.Status.PAID
+        bonus.save()
+        messages.success(request, f'Bonus for {bonus} marked as paid!')
+        return redirect('finance_bonus_detail', pk=pk)
+
+    return render(request, 'finance/bonus/mark_as_paid.html', {
+        'bonus': bonus,
+        'page_title': f'Mark as Paid - {bonus}'
+    })
+
+
+@login_required
+def staff_search_view(request):
+    """AJAX endpoint for searching staff"""
+    query = request.GET.get('q', '')
+
+    if len(query) < 2:
+        return JsonResponse({'results': []})
+
+    staff_list = StaffModel.objects.filter(
+        Q(first_name__icontains=query) |
+        Q(last_name__icontains=query) |
+        Q(staff_id__icontains=query)
+    ).values('id', 'first_name', 'last_name', 'staff_id')
+
+    results = []
+    for staff in staff_list:
+        results.append({
+            'id': staff['id'],
+            'text': f"{staff['first_name']} {staff['last_name']} ({staff['staff_id']})"
+        })
+
+    return JsonResponse({'results': results})
+
+
+@login_required
+def bonus_report_view(request):
+    """Generate a report of bonuses with category breakdown"""
+    # Get filter parameters
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+    search_query = request.GET.get('search', '')
+
+    # Initialize filter form with current values
+    filter_data = {
+        'month': month,
+        'year': year,
+        'search': search_query,
+    }
+    filter_form = BonusFilterForm(filter_data)
+
+    # Start with all bonuses
+    queryset = Bonus.objects.all()
+
+    # Apply filters
+    if month:
+        queryset = queryset.filter(month=month)
+
+    if year:
+        queryset = queryset.filter(year=year)
+
+    if search_query:
+        queryset = queryset.filter(
+            Q(volunteer_name__icontains=search_query) |
+            Q(staff__first_name__icontains=search_query) |
+            Q(staff__last_name__icontains=search_query) |
+            Q(staff__staff_id__icontains=search_query)
+        )
+
+    # Calculate summary statistics
+    total_amount = queryset.aggregate(total=Sum('amount'))['total'] or 0
+    paid_amount = queryset.filter(status='paid').aggregate(total=Sum('amount'))['total'] or 0
+    unpaid_amount = queryset.filter(status='unpaid').aggregate(total=Sum('amount'))['total'] or 0
+
+    # Calculate category breakdown
+    category_breakdown = {}
+    for category in Bonus.BonusCategory.choices:
+        cat_value = category[0]
+        cat_label = category[1]
+        total = queryset.filter(category=cat_value).aggregate(total=Sum('amount'))['total'] or 0
+        category_breakdown[cat_value] = {
+            'label': cat_label,
+            'total': total,
+            'count': queryset.filter(category=cat_value).count()
+        }
+
+    # Group bonuses by recipient for detailed breakdown
+    recipient_breakdown = {}
+    for bonus in queryset:
+        recipient_name = bonus.staff.__str__() if bonus.type == 'staff' else bonus.volunteer_name
+        recipient_type = bonus.type
+
+        if recipient_name not in recipient_breakdown:
+            recipient_breakdown[recipient_name] = {
+                'type': recipient_type,
+                'categories': {},
+                'total': 0
+            }
+
+        category = bonus.category
+        if category not in recipient_breakdown[recipient_name]['categories']:
+            recipient_breakdown[recipient_name]['categories'][category] = 0
+
+        recipient_breakdown[recipient_name]['categories'][category] += bonus.amount
+        recipient_breakdown[recipient_name]['total'] += bonus.amount
+
+    context = {
+        'page_title': 'Bonus Report',
+        'filter_form': filter_form,
+        'bonuses': queryset,
+        'total_amount': total_amount,
+        'paid_amount': paid_amount,
+        'unpaid_amount': unpaid_amount,
+        'category_breakdown': category_breakdown,
+        'recipient_breakdown': recipient_breakdown,
+        'month': month,
+        'year': year,
+        'search_query': search_query,
+    }
+
+    return render(request, 'finance/bonus/bonus_report.html', context)
+
+
+@login_required
+def bonus_report_pdf_view(request):
+    """Generate and download bonus report as PDF"""
+    # Get filter parameters
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+    search_query = request.GET.get('search', '')
+
+    # Start with all bonuses
+    queryset = Bonus.objects.all()
+
+    # Apply filters
+    if month:
+        queryset = queryset.filter(month=month)
+
+    if year:
+        queryset = queryset.filter(year=year)
+
+    if search_query:
+        queryset = queryset.filter(
+            Q(volunteer_name__icontains=search_query) |
+            Q(staff__first_name__icontains=search_query) |
+            Q(staff__last_name__icontains=search_query) |
+            Q(staff__staff_id__icontains=search_query)
+        )
+
+    # Calculate summary statistics
+    total_amount = queryset.aggregate(total=Sum('amount'))['total'] or 0
+    paid_amount = queryset.filter(status='paid').aggregate(total=Sum('amount'))['total'] or 0
+    unpaid_amount = queryset.filter(status='unpaid').aggregate(total=Sum('amount'))['total'] or 0
+
+    # Calculate category breakdown
+    category_breakdown = []
+    for category in Bonus.BonusCategory.choices:
+        cat_value = category[0]
+        cat_label = category[1]
+        total = queryset.filter(category=cat_value).aggregate(total=Sum('amount'))['total'] or 0
+        count = queryset.filter(category=cat_value).count()
+        category_breakdown.append([cat_label, count, f"₦{total:,.2f}"])
+
+    # Group bonuses by recipient for detailed breakdown
+    recipient_breakdown = []
+    recipient_data = {}
+
+    for bonus in queryset:
+        recipient_name = bonus.staff.__str__() if bonus.type == 'staff' else bonus.volunteer_name
+        recipient_type = bonus.type
+
+        if recipient_name not in recipient_data:
+            recipient_data[recipient_name] = {
+                'type': recipient_type,
+                'categories': {},
+                'total': 0
+            }
+
+        category = bonus.category
+        if category not in recipient_data[recipient_name]['categories']:
+            recipient_data[recipient_name]['categories'][category] = 0
+
+        recipient_data[recipient_name]['categories'][category] += bonus.amount
+        recipient_data[recipient_name]['total'] += bonus.amount
+
+    # Convert to list for table
+    for name, data in recipient_data.items():
+        recipient_breakdown.append([name, data['type'], f"₦{data['total']:,.2f}"])
+
+    # Create the HttpResponse object with PDF headers
+    response = HttpResponse(content_type='application/pdf')
+    filename = f"bonus_report_{year}_{month}.pdf" if month and year else "bonus_report.pdf"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # Create the PDF object
+    doc = SimpleDocTemplate(response, pagesize=A4, topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+    elements = []
+
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#1a237e'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#1a237e'),
+        spaceAfter=12,
+        spaceBefore=20
+    )
+
+    # Title
+    title = "BONUS REPORT"
+    if month and year:
+        title += f" - {calendar.month_name[int(month)]} {year}"
+    elements.append(Paragraph(title, title_style))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # Summary section
+    elements.append(Paragraph("Summary", heading_style))
+
+    summary_data = [
+        ['Total Amount', f"₦{total_amount:,.2f}"],
+        ['Paid Amount', f"₦{paid_amount:,.2f}"],
+        ['Unpaid Amount', f"₦{unpaid_amount:,.2f}"],
+    ]
+
+    summary_table = Table(summary_data, colWidths=[3 * inch, 3 * inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Category breakdown section
+    elements.append(Paragraph("Category Breakdown", heading_style))
+
+    category_data = [['Category', 'Count', 'Total Amount']]
+    category_data.extend(category_breakdown)
+
+    category_table = Table(category_data, colWidths=[3 * inch, 1.5 * inch, 1.5 * inch])
+    category_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+    ]))
+    elements.append(category_table)
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Recipient breakdown section
+    elements.append(Paragraph("Recipient Breakdown", heading_style))
+
+    recipient_data = [['Recipient Name', 'Type', 'Total Amount']]
+    recipient_data.extend(recipient_breakdown)
+
+    recipient_table = Table(recipient_data, colWidths=[3 * inch, 1.5 * inch, 1.5 * inch])
+    recipient_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+    ]))
+    elements.append(recipient_table)
+
+    # Build PDF
+    doc.build(elements)
+
+    return response
 

@@ -1821,3 +1821,137 @@ class SalaryRecordHistory(models.Model):
 
     def __str__(self):
         return f"{self.action} - {self.salary_record} - {self.timestamp}"
+
+
+class Bonus(models.Model):
+    """
+    Model for tracking special bonuses for staff or volunteers
+    """
+
+    class BonusType(models.TextChoices):
+        STAFF = 'staff', 'Staff'
+        VOLUNTEER = 'volunteer', 'Volunteer'
+
+    class BonusCategory(models.TextChoices):
+        VOL_CORP = 'vol_corp', 'Vol. Corp'
+        CONTRACTORS = 'contractors', 'Contractors'
+        STAFF_MONTHLY = 'staff_monthly', 'Staff Monthly Bonus'
+        TRANSPORTATION = 'transportation', 'Transportation'
+        OTHERS = 'others', 'Others'
+
+    class Status(models.TextChoices):
+        PAID = 'paid', 'Paid'
+        UNPAID = 'unpaid', 'Unpaid'
+
+    type = models.CharField(
+        max_length=10,
+        choices=BonusType.choices,
+        default=BonusType.STAFF,
+        help_text="Select whether this bonus is for a staff member or volunteer"
+    )
+
+    category = models.CharField(
+        max_length=20,
+        choices=BonusCategory.choices,
+        default=BonusCategory.OTHERS,
+        help_text="Select the category of this bonus"
+    )
+
+    staff = models.ForeignKey(
+        StaffModel,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='bonuses',
+        help_text="Select staff member if type is 'Staff'"
+    )
+
+    volunteer_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="Enter volunteer name if type is 'Volunteer'"
+    )
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text="Bonus amount"
+    )
+
+    month = models.PositiveIntegerField(
+        editable=False,  # Not editable by user, will be auto-populated
+        help_text="Month extracted from due date (1-12)"
+    )
+
+    year = models.PositiveIntegerField(
+        editable=False,  # Not editable by user, will be auto-populated
+        help_text="Year extracted from due date"
+    )
+
+    due_date = models.DateField(
+        default=timezone.now,
+        help_text="Due date for payment (month and year will be extracted from this)"
+    )
+
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.UNPAID,
+        help_text="Payment status"
+    )
+
+    notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Additional notes about this bonus"
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_bonuses'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-year', '-month', '-created_at']
+        verbose_name = "Bonus"
+        verbose_name_plural = "Bonuses"
+        indexes = [
+            models.Index(fields=['year', 'month']),
+            models.Index(fields=['type']),
+            models.Index(fields=['category']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        if self.type == self.BonusType.STAFF:
+            return f"{self.get_category_display()} - {self.staff} - {self.month}/{self.year} - ₦{self.amount:,.2f}"
+        else:
+            return f"{self.get_category_display()} - {self.volunteer_name} - {self.month}/{self.year} - ₦{self.amount:,.2f}"
+
+    def clean(self):
+        """Validate that either staff or volunteer_name is provided based on type"""
+        if self.type == self.BonusType.STAFF and not self.staff:
+            raise ValidationError({
+                'staff': 'Please select a staff member when type is "Staff"'
+            })
+
+        if self.type == self.BonusType.VOLUNTEER and not self.volunteer_name:
+            raise ValidationError({
+                'volunteer_name': 'Please enter a volunteer name when type is "Volunteer"'
+            })
+
+    def save(self, *args, **kwargs):
+        # Automatically extract month and year from due_date
+        if self.due_date:
+            self.month = self.due_date.month
+            self.year = self.due_date.year
+
+        self.clean()
+        super().save(*args, **kwargs)

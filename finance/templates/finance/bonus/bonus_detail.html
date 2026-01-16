@@ -1,0 +1,92 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="card-title">{{ page_title }}</h4>
+        <div class="btn-group">
+          <a href="{% url 'finance_bonus_list' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to List
+          </a>
+          <a href="{% url 'finance_bonus_update' bonus.pk %}" class="btn btn-warning">
+            <i class="bi bi-pencil"></i> Edit
+          </a>
+          {% if bonus.status == 'unpaid' %}
+          <a href="{% url 'finance_bonus_mark_as_paid' bonus.pk %}" class="btn btn-success">
+            <i class="bi bi-check-circle"></i> Mark as Paid
+          </a>
+          {% endif %}
+          <a href="{% url 'finance_bonus_delete' bonus.pk %}" class="btn btn-danger">
+            <i class="bi bi-trash"></i> Delete
+          </a>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header">
+              <h6>Recipient Information</h6>
+            </div>
+            <div class="card-body">
+              <p><strong>Type:</strong> 
+                {% if bonus.type == 'staff' %}
+                  <span class="badge bg-info">Staff</span>
+                {% else %}
+                  <span class="badge bg-secondary">Volunteer</span>
+                {% endif %}
+              </p>
+              
+              <p><strong>Category:</strong> {{ bonus.get_category_display }}</p>
+              
+              {% if bonus.type == 'staff' %}
+                <p><strong>Name:</strong> {{ bonus.staff }}</p>
+                <p><strong>Staff ID:</strong> {{ bonus.staff.staff_id }}</p>
+                <p><strong>Department:</strong> {{ bonus.staff.department|default:"N/A" }}</p>
+              {% else %}
+                <p><strong>Name:</strong> {{ bonus.volunteer_name }}</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header">
+              <h6>Payment Information</h6>
+            </div>
+            <div class="card-body">
+              <p><strong>Amount:</strong> ₦{{ bonus.amount|floatformat:2|intcomma }}</p>
+              <p><strong>Period:</strong> {{ bonus.get_month_display }} {{ bonus.year }}</p>
+              <p><strong>Due Date:</strong> {{ bonus.due_date|date:"M d, Y" }}</p>
+              <p><strong>Status:</strong> 
+                {% if bonus.status == 'paid' %}
+                  <span class="badge bg-success">Paid</span>
+                {% else %}
+                  <span class="badge bg-warning">Unpaid</span>
+                {% endif %}
+              </p>
+              <p><strong>Created:</strong> {{ bonus.created_at|date:"M d, Y" }} by {{ bonus.created_by|default:"System" }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {% if bonus.notes %}
+      <div class="card mt-4">
+        <div class="card-header">
+          <h6>Notes</h6>
+        </div>
+        <div class="card-body">
+          <p>{{ bonus.notes|linebreaks }}</p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

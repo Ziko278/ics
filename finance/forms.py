@@ -1,8 +1,9 @@
+import calendar
 import json
 import re
 from datetime import date
 from decimal import Decimal
-
+from datetime import datetime
 from django import forms
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -16,7 +17,7 @@ from finance.models import FinanceSettingModel, SupplierPaymentModel, PurchaseAd
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryStructure, SalaryAdvance, \
     SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan, StaffFundingModel, \
     DiscountModel, DiscountApplicationModel, StudentDiscountModel, InvoiceModel, OtherPaymentClearanceModel, \
-    OtherPaymentModel, SalarySetting
+    OtherPaymentModel, SalarySetting, Bonus
 from human_resource.models import StaffModel
 from inventory.models import PurchaseOrderModel
 from student.models import StudentModel
@@ -1551,6 +1552,7 @@ class BulkProcessForm(forms.Form):
             (y, y) for y in range(current_year - 1, current_year + 2)
         ]
 
+
 class PayrollGridRowForm(forms.ModelForm):
     """Form for single row in payroll grid"""
 
@@ -1619,3 +1621,68 @@ class MonthYearFilterForm(forms.Form):
         self.fields['year'].choices = [
             (y, y) for y in range(2020, current_year + 2)
         ]
+
+
+class BonusForm(forms.ModelForm):
+    """Form for creating and editing bonuses"""
+
+    class Meta:
+        model = Bonus
+        fields = [
+            'type', 'category', 'staff', 'volunteer_name', 'amount',
+            'due_date', 'status', 'notes'  # Removed 'month' and 'year'
+        ]
+        widgets = {
+            'type': forms.Select(attrs={'class': 'form-select', 'id': 'bonus_type'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'staff': forms.Select(attrs={'class': 'form-select', 'id': 'staff_select'}),
+            'volunteer_name': forms.TextInput(attrs={'class': 'form-control', 'id': 'volunteer_name'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
+            'due_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'status': forms.Select(attrs={'class': 'form-select'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['staff'].queryset = StaffModel.objects.filter(status='active')
+
+        # Removed month choices initialization since we're not using month field anymore
+        # Removed default year initialization since we're not using year field anymore
+
+
+class BonusFilterForm(forms.Form):
+    """Form for filtering bonuses"""
+
+    month = forms.ChoiceField(
+        required=False,
+        choices=[('', 'All Months')] + [(i, calendar.month_name[i]) for i in range(1, 13)],
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    year = forms.IntegerField(
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+        initial=lambda: datetime.now().year
+    )
+
+    search = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Search by name...'
+        })
+    )
+
+    category = forms.ChoiceField(
+        required=False,
+        choices=[('', 'All Categories')] + Bonus.BonusCategory.choices,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    status = forms.ChoiceField(
+        required=False,
+        choices=[('', 'All Statuses')] + Bonus.Status.choices,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )

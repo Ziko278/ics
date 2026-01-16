@@ -228,4 +228,15 @@ urlpatterns = [
     path('payroll/bulk/', bulk_payroll_view, name='finance_bulk_payroll'),
     path('payroll/bulk/save/', bulk_payroll_save, name='finance_bulk_payroll_save'),
     path('payroll/auto-save-row/', auto_save_payroll_row, name='finance_auto_save_payroll_row'),
+
+
+    path('bonus/', BonusListView.as_view(), name='finance_bonus_list'),
+    path('bonus/create/', BonusCreateView.as_view(), name='finance_bonus_create'),
+    path('bonus/<int:pk>/', BonusDetailView.as_view(), name='finance_bonus_detail'),
+    path('bonus/<int:pk>/edit/', BonusUpdateView.as_view(), name='finance_bonus_update'),
+    path('bonus/<int:pk>/delete/', BonusDeleteView.as_view(), name='finance_bonus_delete'),
+    path('bonus/<int:pk>/mark-paid/', mark_bonus_as_paid_view, name='finance_bonus_mark_as_paid'),
+    path('bonus/report/', bonus_report_view, name='finance_bonus_report'),
+    path('bonus/report/pdf/', bonus_report_pdf_view, name='finance_bonus_report_pdf'),
+    path('bonus/staff-search/', staff_search_view, name='finance_bonus_staff_search'),
 ]
