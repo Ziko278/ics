@@ -305,6 +305,11 @@
                         <i class="bi bi-circle"></i><span>Sales Report</span>
                     </a>
                 </li>
+                <li>
+                    <a href="{% url 'inventory_level_report' %}">
+                        <i class="bi bi-circle"></i><span>Inventory Report</span>
+                    </a>
+                </li>
                 {% endif %}
                 {% if 'inventory.view_itemmodel' in perms %}
                 <li>

@@ -3,9 +3,9 @@ import logging
 import tempfile
 from datetime import date
 from decimal import Decimal
-
+from django.db.models.functions import Coalesce
 from django.template.loader import render_to_string
-
+from calendar import monthrange
 from .tasks import generate_collections_task
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.messages.views import SuccessMessageMixin
@@ -23,7 +23,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from django.shortcuts import redirect, render, get_object_or_404
 
 from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ActivityLogModel, ClassesModel, \
-    ClassSectionModel
+    ClassSectionModel, SchoolInfoModel
 from human_resource.models import StaffProfileModel, StaffModel, StaffWalletModel
 from student.models import StudentModel, StudentWalletModel
 from .models import CategoryModel, SupplierModel, ItemModel, PurchaseOrderModel, StockInModel, StockInItemModel, \
@@ -2672,3 +2672,307 @@ def view_staff_collections(request):
 
     return render(request, 'inventory/inventory/staff_collection_index.html', context)
 
+
+@login_required
+@permission_required("inventory.view_itemmodel", raise_exception=True)
+def inventory_level_report(request):
+    """Display inventory level report with stock movements."""
+
+    # Get current month's first and last day
+    today = date.today()
+    first_day = date(today.year, today.month, 1)
+    last_day = date(today.year, today.month, monthrange(today.year, today.month)[1])
+
+    # Get filter parameters
+    date_from = request.GET.get('date_from', '').strip() or str(first_day)
+    date_to = request.GET.get('date_to', '').strip() or str(last_day)
+    location_filter = request.GET.get('location', 'all')
+    sort_by = request.GET.get('sort_by', 'category')  # 'category' or 'name'
+    skip_zero = request.GET.get('skip_zero', 'on') == 'on'
+    show_optional = request.GET.get('show_optional', '') == 'on'
+    download_pdf = request.GET.get('download', '') == 'pdf'
+    include_school_info = request.GET.get('include_school_info', 'on') == 'on'
+
+    # Validate dates
+    try:
+        from_date = date.fromisoformat(date_from)
+        to_date = date.fromisoformat(date_to)
+
+        if from_date > to_date:
+            from_date, to_date = to_date, from_date
+            date_from, date_to = date_to, date_from
+    except ValueError:
+        from_date, to_date = first_day, last_day
+        date_from, date_to = str(first_day), str(last_day)
+
+    # Generate report title
+    if date_from == date_to:
+        report_title = from_date.strftime("%B %d, %Y")
+    else:
+        report_title = f"{from_date.strftime('%B %d, %Y')} - {to_date.strftime('%B %d, %Y')}"
+
+    # Base queryset - active items
+    items_qs = ItemModel.objects.filter(is_active=True).select_related('category')
+
+    # Filter by location
+    if location_filter == 'shop':
+        items_qs = items_qs.filter(Q(location='shop') | Q(location='both'))
+    elif location_filter == 'store':
+        items_qs = items_qs.filter(Q(location='store') | Q(location='both'))
+
+    # Build inventory data
+    inventory_data = []
+
+    for item in items_qs:
+        # Determine which quantity to use for "Total Quantity Left"
+        if location_filter == 'shop':
+            total_qty_left = item.shop_quantity
+        elif location_filter == 'store':
+            total_qty_left = item.store_quantity
+        else:  # all
+            total_qty_left = item.shop_quantity + item.store_quantity
+
+        # Get stocked in quantity (filtered by location and date)
+        stock_in_filter = Q(
+            stock_in__date_received__gte=from_date,
+            stock_in__date_received__lte=to_date
+        )
+
+        if location_filter == 'shop':
+            stock_in_filter &= Q(stock_in__location='shop')
+        elif location_filter == 'store':
+            stock_in_filter &= Q(stock_in__location='store')
+
+        qty_stocked_in = item.stock_ins.filter(stock_in_filter).aggregate(
+            total=Coalesce(Sum('quantity_received'), Decimal('0.00'), output_field=DecimalField())
+        )['total']
+
+        # Get sold quantity (filtered by location and date)
+        sale_filter = Q(
+            sale__sale_date__date__gte=from_date,
+            sale__sale_date__date__lte=to_date,
+            sale__status='completed'
+        )
+
+        # Note: Sales don't have location, but we can infer from shop_quantity changes
+        # For now, we'll count all sales when location='all'
+        # For shop/store specific, we assume sales come from that location
+        qty_sold = item.saleitemmodel_set.filter(sale_filter).aggregate(
+            total=Coalesce(Sum('quantity'), Decimal('0.00'), output_field=DecimalField())
+        )['total']
+
+        # Get stocked out quantity (filtered by location and date)
+        stock_out_filter = Q(
+            date_removed__gte=from_date,
+            date_removed__lte=to_date
+        )
+
+        if location_filter == 'shop':
+            stock_out_filter &= Q(location='shop')
+        elif location_filter == 'store':
+            stock_out_filter &= Q(location='store')
+
+        qty_stocked_out = item.stock_outs.filter(stock_out_filter).aggregate(
+            total=Coalesce(Sum('quantity_removed'), Decimal('0.00'), output_field=DecimalField())
+        )['total']
+
+        # Calculate "Quantity Left" from the period's stock
+        qty_left_from_period = qty_stocked_in - qty_sold - qty_stocked_out
+
+        # Skip items with zero activity if option is enabled
+        if skip_zero:
+            if (qty_stocked_in == 0 and qty_sold == 0 and qty_stocked_out == 0):
+                continue
+
+        inventory_data.append({
+            'item': item,
+            'category': item.category.name,
+            'qty_stocked_in': qty_stocked_in,
+            'qty_sold': qty_sold,
+            'qty_stocked_out': qty_stocked_out,
+            'qty_left_from_period': qty_left_from_period,
+            'total_qty_left': total_qty_left,
+        })
+
+    # Sort data
+    if sort_by == 'category':
+        inventory_data.sort(key=lambda x: (x['category'], x['item'].name))
+    else:  # sort by name only
+        inventory_data.sort(key=lambda x: x['item'].name)
+
+    # Get school info
+    school_info = SchoolInfoModel.objects.first()
+
+    context = {
+        'inventory_data': inventory_data,
+        'report_title': report_title,
+        'date_from': date_from,
+        'date_to': date_to,
+        'location_filter': location_filter,
+        'sort_by': sort_by,
+        'skip_zero': skip_zero,
+        'show_optional': show_optional,
+        'include_school_info': include_school_info,
+        'school_info': school_info,
+        'request': request,
+    }
+
+    # Generate PDF if requested
+    if download_pdf:
+        return generate_inventory_pdf(context, from_date, to_date, location_filter)
+
+    return render(request, 'inventory/reports/inventory_level_report.html', context)
+
+
+def generate_inventory_pdf(context, from_date, to_date, location_filter):
+    """Generate PDF for inventory level report."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from io import BytesIO
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=landscape(A4),
+            topMargin=0.5 * inch,
+            bottomMargin=0.5 * inch,
+            leftMargin=0.5 * inch,
+            rightMargin=0.5 * inch
+        )
+        elements = []
+        styles = getSampleStyleSheet()
+
+        # School Info (if included)
+        if context['include_school_info'] and context['school_info']:
+            school = context['school_info']
+            school_style = ParagraphStyle(
+                'SchoolInfo',
+                parent=styles['Normal'],
+                fontSize=12,
+                textColor=colors.HexColor('#2c3e50'),
+                alignment=TA_CENTER,
+                spaceAfter=5
+            )
+            elements.append(Paragraph(f"<b>{school.name}</b>", school_style))
+            elements.append(Paragraph(f"{school.mobile} | {school.email}", school_style))
+            elements.append(Paragraph(f"{school.address}", school_style))
+            elements.append(Spacer(1, 0.2 * inch))
+
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            textColor=colors.HexColor('#2c3e50'),
+            spaceAfter=10,
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph("Inventory Level Report", title_style))
+
+        # Subtitle with date range and location
+        location_text = location_filter.title() if location_filter != 'all' else 'All Locations'
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Normal'],
+            fontSize=12,
+            textColor=colors.HexColor('#3498db'),
+            spaceAfter=20,
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph(f"{context['report_title']} | {location_text}", subtitle_style))
+        elements.append(Spacer(1, 0.2 * inch))
+
+        # Prepare table data
+        if context['show_optional']:
+            headers = ['S/N', 'Product Name', 'Category', 'Qty Stocked In',
+                       'Qty Sold', 'Qty Stocked Out', 'Qty Left', 'Total Qty Left']
+        else:
+            headers = ['S/N', 'Product Name', 'Category', 'Qty Stocked In',
+                       'Qty Left', 'Total Qty Left']
+
+        table_data = [headers]
+
+        for idx, data in enumerate(context['inventory_data'], 1):
+            if context['show_optional']:
+                row = [
+                    str(idx),
+                    data['item'].name,
+                    data['category'],
+                    f"{data['qty_stocked_in']:.2f}",
+                    f"{data['qty_sold']:.2f}",
+                    f"{data['qty_stocked_out']:.2f}",
+                    f"{data['qty_left_from_period']:.2f}",
+                    f"{data['total_qty_left']:.2f}",
+                ]
+            else:
+                row = [
+                    str(idx),
+                    data['item'].name,
+                    data['category'],
+                    f"{data['qty_stocked_in']:.2f}",
+                    f"{data['qty_left_from_period']:.2f}",
+                    f"{data['total_qty_left']:.2f}",
+                ]
+            table_data.append(row)
+
+        if not context['inventory_data']:
+            if context['show_optional']:
+                table_data.append(['', 'No data available for the selected period', '', '', '', '', '', ''])
+            else:
+                table_data.append(['', 'No data available for the selected period', '', '', '', ''])
+
+        # Create table with dynamic column widths
+        if context['show_optional']:
+            col_widths = [0.5 * inch, 2.5 * inch, 1.5 * inch, 1 * inch, 1 * inch, 1 * inch, 1 * inch, 1 * inch]
+        else:
+            col_widths = [0.5 * inch, 3 * inch, 2 * inch, 1.5 * inch, 1.5 * inch, 1.5 * inch]
+
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+        # Table styling
+        table_style = [
+            # Header
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+
+            # Data rows
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+            ('ALIGN', (0, 1), (0, -1), 'CENTER'),  # S/N center
+            ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),  # Numbers right-aligned
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]
+
+        table.setStyle(TableStyle(table_style))
+        elements.append(table)
+
+        # Build PDF
+        doc.build(elements)
+
+        # Return response
+        pdf_content = buffer.getvalue()
+        buffer.close()
+
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        filename = f"inventory_level_report_{from_date}_{to_date}_{location_filter}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    except ImportError:
+        from django.contrib import messages
+        from django.shortcuts import redirect
+        messages.error(context.request, 'PDF generation is not available. Please contact administrator.')
+        return redirect('inventory_level_report')

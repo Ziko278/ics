@@ -17,7 +17,7 @@ from .views import (
     student_collection_dashboard_view, process_collection_view, create_direct_collection_view, create_assignment_view,
     delete_assignment_view, edit_assignment_view, api_person_search, staff_sales_report, class_collection_search_view,
     class_collection_dashboard_view, view_student_collections, view_class_collections, process_class_collection_view,
-    view_staff_collections,
+    view_staff_collections, inventory_level_report,
 )
 
 
@@ -132,4 +132,6 @@ urlpatterns = [
     path('collections/students/all/', view_student_collections, name='view_student_collections'),
     path('collections/classes/all/', view_class_collections, name='view_class_collections'),
     path('collections/staff/all/', view_staff_collections, name='view_staff_collections'),
+    path('reports/inventory-level/', inventory_level_report, name='inventory_level_report'),
+
 ]
