@@ -2672,6 +2672,7 @@ def view_staff_collections(request):
 
     return render(request, 'inventory/inventory/staff_collection_index.html', context)
 
+
 @login_required
 @permission_required("inventory.view_itemmodel", raise_exception=True)
 def inventory_level_report(request):

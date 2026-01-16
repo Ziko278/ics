@@ -36,7 +36,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import json
 
-from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ActivityLogModel
+from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ActivityLogModel, \
+    SchoolInfoModel
 from admin_site.views import FlashFormErrorsMixin
 from human_resource.models import StaffModel, StaffProfileModel, StaffWalletModel
 from inventory.models import PurchaseOrderModel, PurchaseAdvanceModel, SaleModel, SaleItemModel
@@ -6103,8 +6104,8 @@ def salary_record_detail_view(request, pk):
 @login_required
 @permission_required('finance.view_salaryrecord', raise_exception=True)
 def download_payslip_pdf(request, pk):
-    """Generate and download payslip as PDF"""
-    from .models import SalaryRecord
+    """Generate and download payslip as PDF - Optimized for single page"""
+    import json
 
     # Get the salary record
     record = get_object_or_404(
@@ -6117,6 +6118,9 @@ def download_payslip_pdf(request, pk):
     )
 
     structure = record.salary_structure
+
+    # Get school info
+    school_info = SchoolInfoModel.objects.first()
 
     # Parse JSON fields
     def parse_json_field(field):
@@ -6143,35 +6147,48 @@ def download_payslip_pdf(request, pk):
     response[
         'Content-Disposition'] = f'attachment; filename="payslip_{record.staff.staff_id}_{record.month}_{record.year}.pdf"'
 
-    # Create the PDF object
-    doc = SimpleDocTemplate(response, pagesize=A4, topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+    # Create the PDF object with tighter margins
+    doc = SimpleDocTemplate(
+        response,
+        pagesize=A4,
+        topMargin=0.4 * inch,
+        bottomMargin=0.4 * inch,
+        leftMargin=0.5 * inch,
+        rightMargin=0.5 * inch
+    )
     elements = []
 
     # Styles
     styles = getSampleStyleSheet()
+
+    # School Info at the top (if available)
+    if school_info:
+        school_style = ParagraphStyle(
+            'SchoolInfo',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#2c3e50'),
+            alignment=TA_CENTER,
+            spaceAfter=3
+        )
+        elements.append(Paragraph(f"<b>{school_info.name}</b>", school_style))
+        elements.append(Paragraph(f"{school_info.mobile} | {school_info.email}", school_style))
+        elements.append(Paragraph(f"{school_info.address}", school_style))
+        elements.append(Spacer(1, 0.1 * inch))
+
+    # Title
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=24,
+        fontSize=18,
         textColor=colors.HexColor('#1a237e'),
-        spaceAfter=30,
+        spaceAfter=8,
         alignment=TA_CENTER
     )
-
-    heading_style = ParagraphStyle(
-        'CustomHeading',
-        parent=styles['Heading2'],
-        fontSize=14,
-        textColor=colors.HexColor('#1a237e'),
-        spaceAfter=12,
-        spaceBefore=20
-    )
-
-    # Title
     elements.append(Paragraph("PAYSLIP", title_style))
-    elements.append(Spacer(1, 0.2 * inch))
+    elements.append(Spacer(1, 0.1 * inch))
 
-    # Staff Information
+    # Staff Information (Compact)
     staff_data = [
         ['Staff Information', '', 'Payment Details', ''],
         ['Name:', str(record.staff), 'Period:', f'{record.month_name} {record.year}'],
@@ -6179,301 +6196,252 @@ def download_payslip_pdf(request, pk):
         ['Department:', 'N/A', 'Status:', record.get_payment_status_display()],
     ]
 
-    staff_table = Table(staff_data, colWidths=[1.5 * inch, 2 * inch, 1.5 * inch, 2 * inch])
+    staff_table = Table(staff_data, colWidths=[1.3 * inch, 2 * inch, 1.3 * inch, 2 * inch])
     staff_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (1, 0), colors.HexColor('#e3f2fd')),
         ('BACKGROUND', (2, 0), (3, 0), colors.HexColor('#e3f2fd')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
         ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
         ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
     ]))
     elements.append(staff_table)
-    elements.append(Spacer(1, 0.3 * inch))
+    elements.append(Spacer(1, 0.1 * inch))
 
-    # Bank Details (if available)
+    # Bank Details (if available) - Compact
     if structure.bank_name:
-        elements.append(Paragraph("Bank Details", heading_style))
         bank_data = [[
             f"Bank: {structure.bank_name} | Account: {structure.account_number} | Name: {structure.account_name}"
         ]]
-        bank_table = Table(bank_data, colWidths=[7 * inch])
+        bank_table = Table(bank_data, colWidths=[6.6 * inch])
         bank_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
         elements.append(bank_table)
-        elements.append(Spacer(1, 0.2 * inch))
+        elements.append(Spacer(1, 0.1 * inch))
+
+    # ONE BIG COMPREHENSIVE TABLE
+    # Build all rows for the unified table
+    table_data = []
+
+    # Header
+    table_data.append(['Description', 'Details', 'Amount (N)'])
+
+    # INCOME SECTION
+    table_data.append(['INCOME', '', ''])
 
     # Basic Salary Components
-    elements.append(Paragraph("Basic Salary Components", heading_style))
-    basic_data = [['Component', 'Percentage', 'Amount (₦)']]
-
     basic_components = salary_data.get('basic_components_breakdown', {})
     for code, component in basic_components.items():
         if isinstance(component, dict):
-            basic_data.append([
-                component.get('name', code),
-                f"{component.get('percentage', 0):.2f}%",
-                f"₦{float(component.get('amount', 0)):,.2f}"
+            percentage = component.get('percentage', 0)
+            amount = float(component.get('amount', 0))
+            table_data.append([
+                f"  {component.get('name', code)}",
+                f"{percentage:.2f}%",
+                f"{amount:,.2f}"
             ])
 
-    basic_table = Table(basic_data, colWidths=[3 * inch, 2 * inch, 2 * inch])
-    basic_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-        ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 11),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-    ]))
-    elements.append(basic_table)
-    elements.append(Spacer(1, 0.2 * inch))
+    # Allowances (from additional income breakdown)
+    allowances = salary_data.get('allowances_breakdown', {})
+    if allowances:
+        for allowance_name, allowance_data in allowances.items():
+            if isinstance(allowance_data, dict):
+                amount = float(allowance_data.get('amount', 0))
+                if amount > 0:
+                    table_data.append([
+                        f"  {allowance_name}",
+                        'Allowance',
+                        f"{amount:,.2f}"
+                    ])
+
+    # Bonus
+    if record.bonus > 0:
+        table_data.append([
+            '  Bonus',
+            '',
+            f"{float(record.bonus):,.2f}"
+        ])
 
     # Additional Income
-    if additional_income or record.bonus > 0:
-        elements.append(Paragraph("Additional Income", heading_style))
-        income_data = [['Description', 'Amount (₦)']]
-
-        if record.bonus > 0:
-            income_data.append(['Bonus', f"₦{float(record.bonus):,.2f}"])
-
+    if additional_income:
         for name, amount in additional_income.items():
-            if float(amount) > 0:
-                income_data.append([name, f"₦{float(amount):,.2f}"])
+            amount_val = float(amount) if amount else 0
+            if amount_val > 0:
+                table_data.append([
+                    f"  {name}",
+                    'Additional',
+                    f"{amount_val:,.2f}"
+                ])
 
-        income_table = Table(income_data, colWidths=[5 * inch, 2 * inch])
-        income_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('TOPPADDING', (0, 1), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ]))
-        elements.append(income_table)
-        elements.append(Spacer(1, 0.2 * inch))
+    # Total Income Row
+    table_data.append([
+        'TOTAL INCOME (A)',
+        '',
+        f"{float(salary_data['total_income']):,.2f}"
+    ])
 
-    # Total Payable
-    total_payable_data = [['Total Payable (A)', f"₦{float(salary_data['total_income']):,.2f}"]]
-    total_payable_table = Table(total_payable_data, colWidths=[5 * inch, 2 * inch])
-    total_payable_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e3f2fd')),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 12),
-        ('TOPPADDING', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-        ('BOX', (0, 0), (-1, -1), 1.5, colors.HexColor('#1a237e')),
-    ]))
-    elements.append(total_payable_table)
-    elements.append(Spacer(1, 0.3 * inch))
-
-    # Deductions Section
-    elements.append(Paragraph("Deductions", heading_style))
+    # DEDUCTIONS SECTION
+    table_data.append(['DEDUCTIONS', '', ''])
 
     # Statutory Deductions
-    statutory_data = [['Statutory Deductions', 'Amount (₦)']]
     statutory_deductions = salary_data.get('statutory_deductions', {})
     for name, deduction in statutory_deductions.items():
         if isinstance(deduction, dict):
             percentage = deduction.get('percentage', 0)
             based_on = deduction.get('based_on', '')
-            desc = f"{name}"
+            amount = float(deduction.get('amount', 0))
+
+            details = ''
             if percentage > 0:
-                desc += f" ({percentage:.2f}% of {based_on})"
-            statutory_data.append([desc, f"₦{float(deduction.get('amount', 0)):,.2f}"])
+                details = f"{percentage:.2f}% of {based_on}"
 
-    statutory_table = Table(statutory_data, colWidths=[5 * inch, 2 * inch])
-    statutory_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 11),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-    ]))
-    elements.append(statutory_table)
-
-    # Statutory Sub-total
-    statutory_total_data = [['Sub-Total (B)', f"₦{float(salary_data['total_statutory_deductions']):,.2f}"]]
-    statutory_total_table = Table(statutory_total_data, colWidths=[5 * inch, 2 * inch])
-    statutory_total_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    elements.append(statutory_total_table)
-    elements.append(Spacer(1, 0.15 * inch))
+            table_data.append([
+                f"  {name}",
+                details,
+                f"{amount:,.2f}"
+            ])
 
     # Other Deductions
     if other_deductions:
-        other_ded_data = [['Other Deductions', 'Amount (₦)']]
         for name, amount in other_deductions.items():
-            if float(amount) > 0:
-                other_ded_data.append([name, f"₦{float(amount):,.2f}"])
-
-        if len(other_ded_data) > 1:
-            other_ded_table = Table(other_ded_data, colWidths=[5 * inch, 2 * inch])
-            other_ded_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 11),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('TOPPADDING', (0, 1), (-1, -1), 6),
-                ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ]))
-            elements.append(other_ded_table)
-
-            # Other Deductions Sub-total
-            other_total_data = [['Sub-Total (C)', f"₦{float(salary_data['total_other_deductions']):,.2f}"]]
-            other_total_table = Table(other_total_data, colWidths=[5 * inch, 2 * inch])
-            other_total_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
-                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-                ('TOPPADDING', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ]))
-            elements.append(other_total_table)
-            elements.append(Spacer(1, 0.15 * inch))
+            amount_val = float(amount) if amount else 0
+            if amount_val > 0:
+                table_data.append([
+                    f"  {name}",
+                    'Other Deduction',
+                    f"{amount_val:,.2f}"
+                ])
 
     # Taxation
-    tax_data = [
-        ['Taxation', 'Amount (₦)'],
-        ['PAYE', f"₦{float(record.monthly_tax):,.2f}"]
-    ]
+    table_data.append([
+        '  PAYE Tax',
+        'Monthly Tax',
+        f"{float(record.monthly_tax):,.2f}"
+    ])
 
     if record.other_taxes > 0:
-        tax_data.append(['Other Taxes', f"₦{float(record.other_taxes):,.2f}"])
+        table_data.append([
+            '  Other Taxes',
+            '',
+            f"{float(record.other_taxes):,.2f}"
+        ])
 
-    tax_table = Table(tax_data, colWidths=[5 * inch, 2 * inch])
-    tax_table.setStyle(TableStyle([
+    # Total Deductions Row
+    total_deductions = (
+            float(salary_data['total_statutory_deductions']) +
+            float(salary_data['total_other_deductions']) +
+            float(salary_data['total_taxation'])
+    )
+    table_data.append([
+        'TOTAL DEDUCTIONS (B)',
+        '',
+        f"{total_deductions:,.2f}"
+    ])
+
+    # NET SALARY ROW (Final)
+    table_data.append([
+        'NET SALARY (A - B)',
+        '',
+        f"{float(salary_data['net_salary']):,.2f}"
+    ])
+
+    # Create the unified table
+    unified_table = Table(table_data, colWidths=[3.2 * inch, 2 * inch, 1.4 * inch])
+
+    # Apply comprehensive styling
+    table_style = [
+        # Header row
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 11),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('ALIGN', (0, 0), (1, 0), 'LEFT'),
+        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+
+        # All content
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ALIGN', (0, 1), (1, -1), 'LEFT'),
+        ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-    ]))
-    elements.append(tax_table)
-
-    # Tax Sub-total
-    tax_total_data = [['Sub-Total (D)', f"₦{float(salary_data['total_taxation']):,.2f}"]]
-    tax_total_table = Table(tax_total_data, colWidths=[5 * inch, 2 * inch])
-    tax_total_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    elements.append(tax_total_table)
-    elements.append(Spacer(1, 0.3 * inch))
-
-    # Take Home Pay
-    take_home_style = ParagraphStyle(
-        'TakeHome',
-        parent=styles['Heading1'],
-        fontSize=18,
-        textColor=colors.white,
-        alignment=TA_CENTER
-    )
-
-    take_home_data = [
-        [Paragraph("Take Home Pay", take_home_style)],
-        [Paragraph("A - B - C - D", styles['Normal'])],
-        [Paragraph(f"₦{float(salary_data['net_salary']):,.2f}", title_style)]
-    ]
-
-    take_home_table = Table(take_home_data, colWidths=[7 * inch])
-    take_home_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#667eea')),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 15),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 15),
-        ('LINEBELOW', (0, 1), (-1, 1), 1, colors.white),
-    ]))
-    elements.append(take_home_table)
-    elements.append(Spacer(1, 0.3 * inch))
-
-    # Tax Information
-    elements.append(Paragraph("Tax Information", heading_style))
-    tax_info_data = [
-        ['Annual Gross Income:', f"₦{float(record.annual_gross_income):,.2f}"],
-        ['Total Reliefs:', f"₦{float(record.total_reliefs):,.2f}"],
-        ['Taxable Income:', f"₦{float(record.taxable_income):,.2f}"],
-        ['Effective Tax Rate:', f"{float(record.effective_tax_rate):.2f}%"],
     ]
 
-    tax_info_table = Table(tax_info_data, colWidths=[3.5 * inch, 3.5 * inch])
-    tax_info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-    ]))
-    elements.append(tax_info_table)
+    # Find section headers and total rows for special styling
+    income_row = None
+    deductions_row = None
+    total_income_row = None
+    total_deductions_row = None
+    net_salary_row = None
 
-    # Notes
+    for idx, row in enumerate(table_data):
+        if row[0] == 'INCOME':
+            income_row = idx
+            table_style.extend([
+                ('BACKGROUND', (0, idx), (-1, idx), colors.HexColor('#e3f2fd')),
+                ('FONTNAME', (0, idx), (-1, idx), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, idx), (-1, idx), 9),
+            ])
+        elif row[0] == 'DEDUCTIONS':
+            deductions_row = idx
+            table_style.extend([
+                ('BACKGROUND', (0, idx), (-1, idx), colors.HexColor('#ffe0e0')),
+                ('FONTNAME', (0, idx), (-1, idx), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, idx), (-1, idx), 9),
+            ])
+        elif row[0] == 'TOTAL INCOME (A)':
+            total_income_row = idx
+            table_style.extend([
+                ('BACKGROUND', (0, idx), (-1, idx), colors.HexColor('#b3d9ff')),
+                ('FONTNAME', (0, idx), (-1, idx), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, idx), (-1, idx), 9),
+            ])
+        elif row[0] == 'TOTAL DEDUCTIONS (B)':
+            total_deductions_row = idx
+            table_style.extend([
+                ('BACKGROUND', (0, idx), (-1, idx), colors.HexColor('#ffb3b3')),
+                ('FONTNAME', (0, idx), (-1, idx), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, idx), (-1, idx), 9),
+            ])
+        elif row[0] == 'NET SALARY (A - B)':
+            net_salary_row = idx
+            table_style.extend([
+                ('BACKGROUND', (0, idx), (-1, idx), colors.HexColor('#4CAF50')),
+                ('TEXTCOLOR', (0, idx), (-1, idx), colors.white),
+                ('FONTNAME', (0, idx), (-1, idx), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, idx), (-1, idx), 10),
+            ])
+
+    unified_table.setStyle(TableStyle(table_style))
+    elements.append(unified_table)
+
+    # Notes (if any) - Compact
     if record.notes:
-        elements.append(Spacer(1, 0.3 * inch))
-        elements.append(Paragraph("Notes", heading_style))
+        elements.append(Spacer(1, 0.1 * inch))
         notes_style = ParagraphStyle(
             'Notes',
             parent=styles['Normal'],
-            fontSize=10,
-            leading=14
+            fontSize=8,
+            leading=10
         )
-        elements.append(Paragraph(record.notes, notes_style))
+        elements.append(Paragraph(f"<b>Notes:</b> {record.notes}", notes_style))
 
     # Build PDF
     doc.build(elements)
 
     return response
-
 
 @login_required
 @permission_required('finance.change_salaryrecord', raise_exception=True)
