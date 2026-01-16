@@ -1,5 +1,5 @@
 from django.contrib import admin
-from inventory.models import ItemModel,StockOutModel, StockTransferModel, PurchaseOrderItemModel, InventoryCollectionModel, PurchaseOrderModel, StockInModel, StockInItemModel,InventoryAssignmentModel, SaleModel, SaleItemModel
+from inventory.models import ItemModel,StockOutModel, StockTransferItemModel, StockTransferModel, PurchaseOrderItemModel, InventoryCollectionModel, PurchaseOrderModel, StockInModel, StockInItemModel,InventoryAssignmentModel, SaleModel, SaleItemModel
 
 
 admin.site.register(PurchaseOrderItemModel)
@@ -13,4 +13,5 @@ admin.site.register(SaleModel)
 admin.site.register(ItemModel)
 admin.site.register(StockOutModel)
 admin.site.register(StockTransferModel)
+admin.site.register(StockTransferItemModel)
 
