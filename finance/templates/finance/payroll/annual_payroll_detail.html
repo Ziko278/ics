@@ -1,0 +1,237 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <!-- Header with Back Button -->
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h4 class="card-title mb-1">Annual Payroll - {{ structure.staff }}</h4>
+          <p class="text-muted mb-0">Staff ID: {{ structure.staff.staff_id }} | Year: {{ selected_year }}</p>
+        </div>
+        <div>
+          <a href="{% url 'finance_annual_payroll_list' %}?year={{ selected_year }}"
+             class="btn btn-outline-secondary me-2">
+            <i class="bi bi-arrow-left"></i> Back to List
+          </a>
+          <a href="{% url 'finance_annual_payslip_pdf' structure.id %}?year={{ selected_year }}"
+             class="btn btn-success">
+            <i class="bi bi-download"></i> Download PDF
+          </a>
+        </div>
+      </div>
+
+      <!-- Year Selector -->
+      <div class="row mb-4">
+        <div class="col-md-3">
+          <label class="form-label">Select Year</label>
+          <select name="year" class="form-select" onchange="changeYear(this.value)">
+            {% for year in years %}
+            <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>
+              {{ year }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Staff Information Card -->
+      <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">Staff Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <table class="table table-sm">
+                <tr>
+                  <th width="40%">Name:</th>
+                  <td>{{ structure.staff }}</td>
+                </tr>
+                <tr>
+                  <th>Staff ID:</th>
+                  <td>{{ structure.staff.staff_id }}</td>
+                </tr>
+                <tr>
+                  <th>Department:</th>
+                  <td>{{ structure.staff.department.name|default:"N/A" }}</td>
+                </tr>
+              </table>
+            </div>
+            <div class="col-md-6">
+              <table class="table table-sm">
+                <tr>
+                  <th width="40%">Year:</th>
+                  <td>{{ selected_year }}</td>
+                </tr>
+                <tr>
+                  <th>Months Covered:</th>
+                  <td>
+                    <span class="badge bg-success">{{ annual_data.months_count }} month{{ annual_data.months_count|pluralize }}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Periods:</th>
+                  <td>{{ annual_data.months_covered|join:", " }}</td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          {% if structure.bank_name %}
+          <div class="row mt-3">
+            <div class="col-12">
+              <div class="alert alert-info mb-0">
+                <strong>Bank Details:</strong>
+                {{ structure.bank_name }} |
+                Account: {{ structure.account_number }} |
+                Name: {{ structure.account_name }}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Annual Summary -->
+      <div class="row">
+        <!-- Income Breakdown -->
+        <div class="col-md-6 mb-4">
+          <div class="card h-100">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">Total Income</h5>
+            </div>
+            <div class="card-body">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Component</th>
+                    <th class="text-end">Amount (N)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Basic Salary Components -->
+                  {% for code, component in annual_data.basic_components_breakdown.items %}
+                  <tr>
+                    <td>{{ component.name }}</td>
+                    <td class="text-end">{{ component.amount|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% endfor %}
+
+                  <!-- Allowances -->
+                  {% for name, amount in annual_data.allowances_breakdown.items %}
+                  {% if amount > 0 %}
+                  <tr>
+                    <td>{{ name }}</td>
+                    <td class="text-end">{{ amount|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% endif %}
+                  {% endfor %}
+
+                  <!-- Bonus -->
+                  {% if annual_data.total_bonus > 0 %}
+                  <tr>
+                    <td>Total Bonus</td>
+                    <td class="text-end">{{ annual_data.total_bonus|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% endif %}
+
+                  <!-- Additional Income -->
+                  {% if annual_data.total_additional_income > 0 %}
+                  <tr>
+                    <td>Additional Income</td>
+                    <td class="text-end">{{ annual_data.total_additional_income|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% endif %}
+
+                  <tr class="table-success fw-bold">
+                    <td>TOTAL GROSS INCOME</td>
+                    <td class="text-end">{{ annual_data.total_gross_income|floatformat:2|intcomma }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deductions Breakdown -->
+        <div class="col-md-6 mb-4">
+          <div class="card h-100">
+            <div class="card-header bg-danger text-white">
+              <h5 class="mb-0">Total Deductions</h5>
+            </div>
+            <div class="card-body">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Component</th>
+                    <th class="text-end">Amount (N)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Statutory Deductions -->
+                  {% for name, amount in annual_data.statutory_breakdown.items %}
+                  <tr>
+                    <td>{{ name }}</td>
+                    <td class="text-end">{{ amount|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% endfor %}
+
+                  <!-- Other Deductions -->
+                  {% for name, amount in annual_data.other_deductions_breakdown.items %}
+                  {% if amount > 0 %}
+                  <tr>
+                    <td>{{ name }}</td>
+                    <td class="text-end">{{ amount|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% endif %}
+                  {% endfor %}
+
+                  <!-- Taxation -->
+                  <tr>
+                    <td>PAYE Tax</td>
+                    <td class="text-end">{{ annual_data.total_paye|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% if annual_data.total_other_taxes > 0 %}
+                  <tr>
+                    <td>Other Taxes</td>
+                    <td class="text-end">{{ annual_data.total_other_taxes|floatformat:2|intcomma }}</td>
+                  </tr>
+                  {% endif %}
+
+                  <tr class="table-danger fw-bold">
+                    <td>TOTAL DEDUCTIONS</td>
+                    <td class="text-end">
+                      {{ annual_data.total_statutory_deductions|add:annual_data.total_other_deductions|add:annual_data.total_paye|add:annual_data.total_other_taxes|floatformat:2|intcomma }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Net Salary Card -->
+      <div class="card bg-primary text-white">
+        <div class="card-body text-center py-4">
+          <h3 class="mb-2">Total Annual Net Salary</h3>
+          <h1 class="display-4 fw-bold">N {{ annual_data.total_net_salary|floatformat:2|intcomma }}</h1>
+          <p class="mb-0">For {{ annual_data.months_count }} month{{ annual_data.months_count|pluralize }} in {{ selected_year }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function changeYear(value) {
+  const url = new URL(window.location);
+  url.searchParams.set('year', value);
+  window.location = url;
+}
+</script>
+{% endblock %}

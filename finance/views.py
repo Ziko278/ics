@@ -7383,3 +7383,691 @@ def bonus_report_pdf_view(request):
 
     return response
 
+
+@login_required
+@permission_required('finance.view_salaryrecord', raise_exception=True)
+def annual_payroll_list_view(request):
+    """View all staff annual payroll for a selected year"""
+    from datetime import datetime
+    import calendar
+
+    today = datetime.now()
+    selected_year = int(request.GET.get('year', today.year))
+    search_query = request.GET.get('search', '')
+
+    # Get all salary records for the selected year
+    records = SalaryRecord.objects.filter(
+        year=selected_year
+    ).select_related(
+        'staff__staff_profile__user',
+        'salary_structure',
+        'staff__department'
+    ).order_by('staff__first_name', 'staff__last_name')
+
+    # Group records by staff
+    from collections import defaultdict
+    staff_annual_data = defaultdict(lambda: {
+        'staff': None,
+        'structure': None,
+        'department': None,
+        'records': [],
+        'months_covered': [],
+        'total_income': 0,
+        'total_deductions': 0,
+        'total_net': 0,
+        'months_count': 0
+    })
+
+    for record in records:
+        staff_id = record.staff.id
+        data = staff_annual_data[staff_id]
+
+        data['staff'] = record.staff
+        data['structure'] = record.salary_structure
+        data['department'] = record.staff.department.name if record.staff.department else 'N/A'
+        data['records'].append(record)
+        data['months_covered'].append(calendar.month_abbr[record.month])
+        data['total_income'] += float(record.gross_salary)
+        # Fix: Calculate total deductions by summing statutory and other deductions
+        data['total_deductions'] += float(record.total_statutory_deductions + record.total_other_deductions)
+        data['total_net'] += float(record.net_salary)
+        data['months_count'] += 1
+
+    # Convert to list and sort
+    staff_list = list(staff_annual_data.values())
+
+    # Apply search filter if provided
+    if search_query:
+        staff_list = [
+            s for s in staff_list
+            if search_query.lower() in s['staff'].first_name.lower()
+               or search_query.lower() in s['staff'].last_name.lower()
+               or search_query.lower() in str(s['staff'].staff_id).lower()
+        ]
+
+    context = {
+        'staff_list': staff_list,
+        'selected_year': selected_year,
+        'search_query': search_query,
+        'years': range(2020, today.year + 2),
+        'page_title': f'Annual Payroll Reports - {selected_year}'
+    }
+
+    return render(request, 'finance/payroll/annual_payroll_list.html', context)
+
+
+@login_required
+@permission_required('finance.view_salaryrecord', raise_exception=True)
+def annual_payroll_detail_view(request, structure_id):
+    """View individual staff annual payroll for a selected year"""
+    from datetime import datetime
+    import calendar
+    import json
+
+    today = datetime.now()
+    selected_year = int(request.GET.get('year', today.year))
+
+    # Get salary structure
+    structure = get_object_or_404(
+        SalaryStructure.objects.select_related(
+            'staff__staff_profile__user',
+            'salary_setting',
+            'staff__department'
+        ),
+        pk=structure_id
+    )
+
+    # Get all salary records for this staff for the selected year
+    records = SalaryRecord.objects.filter(
+        salary_structure=structure,
+        year=selected_year
+    ).order_by('month')
+
+    if not records.exists():
+        from django.contrib import messages
+        messages.warning(request, f'No payroll records found for {structure.staff} in {selected_year}.')
+        return redirect('finance_annual_payroll_list')
+
+    # Helper function to parse JSON fields
+    def parse_json_field(field):
+        if field and isinstance(field, str):
+            try:
+                return json.loads(field)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return field or {}
+
+    # Aggregate annual data
+    annual_data = {
+        'months_covered': [],
+        'months_count': 0,
+        'total_gross_income': 0,
+        'total_basic_salary': 0,
+        'total_allowances': 0,
+        'total_bonus': 0,
+        'total_additional_income': 0,
+        'total_statutory_deductions': 0,
+        'total_other_deductions': 0,
+        'total_paye': 0,
+        'total_other_taxes': 0,
+        'total_net_salary': 0,
+        'basic_components_breakdown': {},
+        'allowances_breakdown': {},
+        'statutory_breakdown': {},
+        'other_deductions_breakdown': {},
+    }
+
+    for record in records:
+        # Track months
+        annual_data['months_covered'].append(calendar.month_name[record.month])
+        annual_data['months_count'] += 1
+
+        # Aggregate totals
+        annual_data['total_gross_income'] += float(record.gross_salary)
+        annual_data['total_bonus'] += float(record.bonus)
+        annual_data['total_paye'] += float(record.monthly_tax)
+        annual_data['total_other_taxes'] += float(record.other_taxes)
+        annual_data['total_net_salary'] += float(record.net_salary)
+
+        # Parse and aggregate additional income
+        additional_income = parse_json_field(record.additional_income)
+        for key, value in additional_income.items():
+            annual_data['total_additional_income'] += float(value or 0)
+
+        # Parse and aggregate other deductions
+        other_deductions = parse_json_field(record.other_deductions)
+        for key, value in other_deductions.items():
+            deduction_amount = float(value or 0)
+            annual_data['total_other_deductions'] += deduction_amount
+
+            # Track breakdown
+            if key not in annual_data['other_deductions_breakdown']:
+                annual_data['other_deductions_breakdown'][key] = 0
+            annual_data['other_deductions_breakdown'][key] += deduction_amount
+
+        # Recalculate using calculator to get component breakdowns
+        calculator = SalaryCalculator(structure, record.month, record.year)
+        salary_data = calculator.calculate_complete_salary(
+            bonus=record.bonus,
+            custom_deductions=other_deductions,
+            additional_income=additional_income
+        )
+
+        # Aggregate basic components
+        basic_components = salary_data.get('basic_components_breakdown', {})
+        for code, component in basic_components.items():
+            if isinstance(component, dict):
+                if code not in annual_data['basic_components_breakdown']:
+                    annual_data['basic_components_breakdown'][code] = {
+                        'name': component.get('name', code),
+                        'amount': 0
+                    }
+                annual_data['basic_components_breakdown'][code]['amount'] += float(component.get('amount', 0))
+
+        # Aggregate allowances
+        allowances = salary_data.get('allowances_breakdown', {})
+        for allowance_name, allowance_data in allowances.items():
+            if isinstance(allowance_data, dict):
+                amount = float(allowance_data.get('amount', 0))
+                if allowance_name not in annual_data['allowances_breakdown']:
+                    annual_data['allowances_breakdown'][allowance_name] = 0
+                annual_data['allowances_breakdown'][allowance_name] += amount
+
+        # Aggregate statutory deductions
+        statutory_deductions = salary_data.get('statutory_deductions', {})
+        for name, deduction in statutory_deductions.items():
+            if isinstance(deduction, dict):
+                amount = float(deduction.get('amount', 0))
+                if name not in annual_data['statutory_breakdown']:
+                    annual_data['statutory_breakdown'][name] = 0
+                annual_data['statutory_breakdown'][name] += amount
+                annual_data['total_statutory_deductions'] += amount
+
+    # Calculate total allowances from breakdown
+    annual_data['total_allowances'] = sum(annual_data['allowances_breakdown'].values())
+
+    # Calculate total basic salary from breakdown
+    annual_data['total_basic_salary'] = sum(
+        comp['amount'] for comp in annual_data['basic_components_breakdown'].values()
+    )
+
+    context = {
+        'structure': structure,
+        'selected_year': selected_year,
+        'annual_data': annual_data,
+        'years': range(2020, today.year + 2),
+        'page_title': f'Annual Payroll - {structure.staff} - {selected_year}'
+    }
+
+    return render(request, 'finance/payroll/annual_payroll_detail.html', context)
+
+
+@login_required
+@permission_required('finance.view_salaryrecord', raise_exception=True)
+def download_annual_payslip_pdf(request, structure_id):
+    """Generate and download annual payslip as PDF"""
+    from datetime import datetime
+    import calendar
+    import json
+
+    today = datetime.now()
+    selected_year = int(request.GET.get('year', today.year))
+
+    # Get salary structure
+    structure = get_object_or_404(
+        SalaryStructure.objects.select_related(
+            'staff__staff_profile__user',
+            'salary_setting',
+            'staff__department'
+        ),
+        pk=structure_id
+    )
+
+    # Get school info
+    school_info = SchoolInfoModel.objects.first()
+
+    # Get all salary records for this staff for the selected year
+    records = SalaryRecord.objects.filter(
+        salary_structure=structure,
+        year=selected_year
+    ).order_by('month')
+
+    if not records.exists():
+        from django.contrib import messages
+        messages.error(request, f'No payroll records found for {structure.staff} in {selected_year}.')
+        return redirect('finance_annual_payroll_detail', structure_id=structure_id)
+
+    # Helper function to parse JSON fields
+    def parse_json_field(field):
+        if field and isinstance(field, str):
+            try:
+                return json.loads(field)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return field or {}
+
+    # Aggregate annual data (same logic as detail view)
+    annual_data = {
+        'months_covered': [],
+        'months_count': 0,
+        'total_gross_income': 0,
+        'total_basic_salary': 0,
+        'total_allowances': 0,
+        'total_bonus': 0,
+        'total_additional_income': 0,
+        'total_statutory_deductions': 0,
+        'total_other_deductions': 0,
+        'total_paye': 0,
+        'total_other_taxes': 0,
+        'total_net_salary': 0,
+        'basic_components_breakdown': {},
+        'allowances_breakdown': {},
+        'statutory_breakdown': {},
+        'other_deductions_breakdown': {},
+    }
+
+    for record in records:
+        # Track months
+        annual_data['months_covered'].append(calendar.month_abbr[record.month])
+        annual_data['months_count'] += 1
+
+        # Aggregate totals
+        annual_data['total_gross_income'] += float(record.gross_salary)
+        annual_data['total_bonus'] += float(record.bonus)
+        annual_data['total_paye'] += float(record.monthly_tax)
+        annual_data['total_other_taxes'] += float(record.other_taxes)
+        annual_data['total_net_salary'] += float(record.net_salary)
+
+        # Parse and aggregate additional income
+        additional_income = parse_json_field(record.additional_income)
+        for key, value in additional_income.items():
+            annual_data['total_additional_income'] += float(value or 0)
+
+        # Parse and aggregate other deductions
+        other_deductions = parse_json_field(record.other_deductions)
+        for key, value in other_deductions.items():
+            deduction_amount = float(value or 0)
+            annual_data['total_other_deductions'] += deduction_amount
+
+            # Track breakdown
+            if key not in annual_data['other_deductions_breakdown']:
+                annual_data['other_deductions_breakdown'][key] = 0
+            annual_data['other_deductions_breakdown'][key] += deduction_amount
+
+        # Recalculate using calculator to get component breakdowns
+        calculator = SalaryCalculator(structure, record.month, record.year)
+        salary_data = calculator.calculate_complete_salary(
+            bonus=record.bonus,
+            custom_deductions=other_deductions,
+            additional_income=additional_income
+        )
+
+        # Aggregate basic components
+        basic_components = salary_data.get('basic_components_breakdown', {})
+        for code, component in basic_components.items():
+            if isinstance(component, dict):
+                if code not in annual_data['basic_components_breakdown']:
+                    annual_data['basic_components_breakdown'][code] = {
+                        'name': component.get('name', code),
+                        'amount': 0
+                    }
+                annual_data['basic_components_breakdown'][code]['amount'] += float(component.get('amount', 0))
+
+        # Aggregate allowances
+        allowances = salary_data.get('allowances_breakdown', {})
+        for allowance_name, allowance_data in allowances.items():
+            if isinstance(allowance_data, dict):
+                amount = float(allowance_data.get('amount', 0))
+                if allowance_name not in annual_data['allowances_breakdown']:
+                    annual_data['allowances_breakdown'][allowance_name] = 0
+                annual_data['allowances_breakdown'][allowance_name] += amount
+
+        # Aggregate statutory deductions
+        statutory_deductions = salary_data.get('statutory_deductions', {})
+        for name, deduction in statutory_deductions.items():
+            if isinstance(deduction, dict):
+                amount = float(deduction.get('amount', 0))
+                if name not in annual_data['statutory_breakdown']:
+                    annual_data['statutory_breakdown'][name] = 0
+                annual_data['statutory_breakdown'][name] += amount
+                annual_data['total_statutory_deductions'] += amount
+
+    # Calculate total allowances from breakdown
+    annual_data['total_allowances'] = sum(annual_data['allowances_breakdown'].values())
+
+    # Calculate total basic salary from breakdown
+    annual_data['total_basic_salary'] = sum(
+        comp['amount'] for comp in annual_data['basic_components_breakdown'].values()
+    )
+
+    # Create the HttpResponse object with PDF headers
+    response = HttpResponse(content_type='application/pdf')
+    response[
+        'Content-Disposition'] = f'attachment; filename="annual_payslip_{structure.staff.staff_id}_{selected_year}.pdf"'
+
+    # Create the PDF object
+    doc = SimpleDocTemplate(
+        response,
+        pagesize=A4,
+        topMargin=0.4 * inch,
+        bottomMargin=0.4 * inch,
+        leftMargin=0.5 * inch,
+        rightMargin=0.5 * inch
+    )
+    elements = []
+
+    # Styles
+    styles = getSampleStyleSheet()
+
+    # School Info at the top (if available)
+    if school_info:
+        school_style = ParagraphStyle(
+            'SchoolInfo',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#2c3e50'),
+            alignment=TA_CENTER,
+            spaceAfter=3
+        )
+        elements.append(Paragraph(f"<b>{school_info.name}</b>", school_style))
+        elements.append(Paragraph(f"{school_info.mobile} | {school_info.email}", school_style))
+        elements.append(Paragraph(f"{school_info.address}", school_style))
+        elements.append(Spacer(1, 0.15 * inch))
+
+    # Title
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=20,
+        textColor=colors.HexColor('#1a237e'),
+        spaceAfter=8,
+        alignment=TA_CENTER
+    )
+    elements.append(Paragraph(f"ANNUAL PAYSLIP - {selected_year}", title_style))
+    elements.append(Spacer(1, 0.15 * inch))
+
+    # Staff Information
+    staff_data = [
+        ['Staff Information', '', 'Annual Summary', ''],
+        ['Name:', str(structure.staff), 'Year:', str(selected_year)],
+        ['Staff ID:', structure.staff.staff_id, 'Months Covered:', f"{annual_data['months_count']} months"],
+        ['Department:', structure.staff.department.name if structure.staff.department else 'N/A',
+         'Months:', ', '.join(annual_data['months_covered'])],
+    ]
+
+    staff_table = Table(staff_data, colWidths=[1.3 * inch, 2 * inch, 1.3 * inch, 2 * inch])
+    staff_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (1, 0), colors.HexColor('#e3f2fd')),
+        ('BACKGROUND', (2, 0), (3, 0), colors.HexColor('#e3f2fd')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(staff_table)
+    elements.append(Spacer(1, 0.15 * inch))
+
+    # Bank Details (if available)
+    if structure.bank_name:
+        bank_data = [[
+            f"Bank: {structure.bank_name} | Account: {structure.account_number} | Name: {structure.account_name}"
+        ]]
+        bank_table = Table(bank_data, colWidths=[6.6 * inch])
+        bank_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(bank_table)
+        elements.append(Spacer(1, 0.15 * inch))
+
+    # Income Breakdown Section
+    income_title_style = ParagraphStyle(
+        'SectionTitle',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#1a237e'),
+        spaceAfter=6,
+        spaceBefore=10
+    )
+    elements.append(Paragraph("INCOME BREAKDOWN", income_title_style))
+
+    # Basic Salary Components
+    if annual_data['basic_components_breakdown']:
+        basic_data = [['Component', 'Amount (N)']]
+        for code, component in annual_data['basic_components_breakdown'].items():
+            basic_data.append([component['name'], f"{component['amount']:,.2f}"])
+        basic_data.append(['', ''])
+        basic_data.append(['Total Basic Salary', f"{annual_data['total_basic_salary']:,.2f}"])
+
+        basic_table = Table(basic_data, colWidths=[4.5 * inch, 2.1 * inch])
+        basic_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e3f2fd')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTSIZE', (0, 1), (-1, -3), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -3), 0.5, colors.grey),
+            ('LINEABOVE', (0, -2), (-1, -2), 1, colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e8f5e9')),
+        ]))
+        elements.append(basic_table)
+        elements.append(Spacer(1, 0.1 * inch))
+
+    # Allowances
+    if annual_data['allowances_breakdown']:
+        allowances_data = [['Allowance', 'Amount (N)']]
+        for name, amount in annual_data['allowances_breakdown'].items():
+            allowances_data.append([name, f"{amount:,.2f}"])
+        allowances_data.append(['', ''])
+        allowances_data.append(['Total Allowances', f"{annual_data['total_allowances']:,.2f}"])
+
+        allowances_table = Table(allowances_data, colWidths=[4.5 * inch, 2.1 * inch])
+        allowances_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e3f2fd')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTSIZE', (0, 1), (-1, -3), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -3), 0.5, colors.grey),
+            ('LINEABOVE', (0, -2), (-1, -2), 1, colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e8f5e9')),
+        ]))
+        elements.append(allowances_table)
+        elements.append(Spacer(1, 0.1 * inch))
+
+    # Bonus and Additional Income
+    if annual_data['total_bonus'] > 0 or annual_data['total_additional_income'] > 0:
+        other_income_data = [['Income Type', 'Amount (N)']]
+        if annual_data['total_bonus'] > 0:
+            other_income_data.append(['Bonus', f"{annual_data['total_bonus']:,.2f}"])
+        if annual_data['total_additional_income'] > 0:
+            other_income_data.append(['Additional Income', f"{annual_data['total_additional_income']:,.2f}"])
+        other_income_data.append(['', ''])
+        other_income_data.append(['Total Other Income',
+                                f"{annual_data['total_bonus'] + annual_data['total_additional_income']:,.2f}"])
+
+        other_income_table = Table(other_income_data, colWidths=[4.5 * inch, 2.1 * inch])
+        other_income_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e3f2fd')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTSIZE', (0, 1), (-1, -3), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -3), 0.5, colors.grey),
+            ('LINEABOVE', (0, -2), (-1, -2), 1, colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e8f5e9')),
+        ]))
+        elements.append(other_income_table)
+        elements.append(Spacer(1, 0.1 * inch))
+
+    # Deductions Breakdown Section
+    elements.append(Paragraph("DEDUCTIONS BREAKDOWN", income_title_style))
+
+    # Statutory Deductions
+    if annual_data['statutory_breakdown']:
+        statutory_data = [['Deduction', 'Amount (N)']]
+        for name, amount in annual_data['statutory_breakdown'].items():
+            statutory_data.append([name, f"{amount:,.2f}"])
+        statutory_data.append(['', ''])
+        statutory_data.append(['Total Statutory Deductions', f"{annual_data['total_statutory_deductions']:,.2f}"])
+
+        statutory_table = Table(statutory_data, colWidths=[4.5 * inch, 2.1 * inch])
+        statutory_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e3f2fd')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTSIZE', (0, 1), (-1, -3), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -3), 0.5, colors.grey),
+            ('LINEABOVE', (0, -2), (-1, -2), 1, colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffebee')),
+        ]))
+        elements.append(statutory_table)
+        elements.append(Spacer(1, 0.1 * inch))
+
+    # Other Deductions
+    if annual_data['other_deductions_breakdown']:
+        other_ded_data = [['Deduction', 'Amount (N)']]
+        for name, amount in annual_data['other_deductions_breakdown'].items():
+            other_ded_data.append([name, f"{amount:,.2f}"])
+        other_ded_data.append(['', ''])
+        other_ded_data.append(['Total Other Deductions', f"{annual_data['total_other_deductions']:,.2f}"])
+
+        other_ded_table = Table(other_ded_data, colWidths=[4.5 * inch, 2.1 * inch])
+        other_ded_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e3f2fd')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTSIZE', (0, 1), (-1, -3), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -3), 0.5, colors.grey),
+            ('LINEABOVE', (0, -2), (-1, -2), 1, colors.HexColor('#1a237e')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffebee')),
+        ]))
+        elements.append(other_ded_table)
+        elements.append(Spacer(1, 0.1 * inch))
+
+    # Tax Breakdown
+    tax_data = [['Tax Type', 'Amount (N)']]
+    tax_data.append(['PAYE Tax', f"{annual_data['total_paye']:,.2f}"])
+    if annual_data['total_other_taxes'] > 0:
+        tax_data.append(['Other Taxes', f"{annual_data['total_other_taxes']:,.2f}"])
+    tax_data.append(['', ''])
+    tax_data.append(['Total Tax', f"{annual_data['total_paye'] + annual_data['total_other_taxes']:,.2f}"])
+
+    tax_table = Table(tax_data, colWidths=[4.5 * inch, 2.1 * inch])
+    tax_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e3f2fd')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTSIZE', (0, 1), (-1, -3), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('GRID', (0, 0), (-1, -3), 0.5, colors.grey),
+        ('LINEABOVE', (0, -2), (-1, -2), 1, colors.HexColor('#1a237e')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffebee')),
+    ]))
+    elements.append(tax_table)
+    elements.append(Spacer(1, 0.15 * inch))
+
+    # Annual Summary Table
+    summary_data = [
+        ['Description', 'Amount (N)'],
+        ['Total Gross Income', f"{annual_data['total_gross_income']:,.2f}"],
+        ['Total Statutory Deductions', f"{annual_data['total_statutory_deductions']:,.2f}"],
+        ['Total Other Deductions', f"{annual_data['total_other_deductions']:,.2f}"],
+        ['Total PAYE Tax', f"{annual_data['total_paye']:,.2f}"],
+        ['Total Other Taxes', f"{annual_data['total_other_taxes']:,.2f}"],
+        ['', ''],
+        ['Total Net Salary', f"{annual_data['total_net_salary']:,.2f}"],
+    ]
+
+    summary_table = Table(summary_data, colWidths=[4.5 * inch, 2.1 * inch])
+
+    # Apply styling
+    summary_table.setStyle(TableStyle([
+        # Header
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a237e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+
+        # Content rows
+        ('FONTSIZE', (0, 1), (-1, -2), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('GRID', (0, 0), (-1, -2), 0.5, colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+
+        # Separator row
+        ('LINEABOVE', (0, -2), (-1, -2), 2, colors.HexColor('#1a237e')),
+
+        # Net Salary row (last row)
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#4CAF50')),
+        ('TEXTCOLOR', (0, -1), (-1, -1), colors.white),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 11),
+        ('BOX', (0, -1), (-1, -1), 1.5, colors.HexColor('#2e7d32')),
+    ]))
+
+    elements.append(summary_table)
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # Footer note
+    note_style = ParagraphStyle(
+        'Note',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+    elements.append(Paragraph(
+        f"This is an automatically generated annual payslip for the year {selected_year}. "
+        f"It represents the total of all {annual_data['months_count']} month(s) processed for this period.",
+        note_style
+    ))
+
+    # Build PDF
+    doc.build(elements)
+
+    return response

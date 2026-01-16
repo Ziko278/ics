@@ -229,6 +229,11 @@ urlpatterns = [
     path('payroll/bulk/save/', bulk_payroll_save, name='finance_bulk_payroll_save'),
     path('payroll/auto-save-row/', auto_save_payroll_row, name='finance_auto_save_payroll_row'),
 
+    path('payroll/annual/', annual_payroll_list_view, name='finance_annual_payroll_list'),
+    path('payroll/annual/<int:structure_id>/detail', annual_payroll_detail_view, name='finance_annual_payroll_detail'),
+    path('payroll/annual/<int:structure_id>/pdf/', download_annual_payslip_pdf,
+         name='finance_annual_payslip_pdf'),
+
 
     path('bonus/', BonusListView.as_view(), name='finance_bonus_list'),
     path('bonus/create/', BonusCreateView.as_view(), name='finance_bonus_create'),

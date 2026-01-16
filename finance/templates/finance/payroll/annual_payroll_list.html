@@ -1,0 +1,127 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <h4 class="card-title">Annual Payroll Reports</h4>
+
+      <!-- Filter Controls -->
+      <div class="row mb-4">
+        <div class="col-md-4">
+          <label class="form-label">Search Staff</label>
+          <div class="input-group">
+            <input type="text" name="search" class="form-control" value="{{ search_query }}"
+                   placeholder="Search by name or ID..." id="searchInput">
+            <button class="btn btn-outline-secondary" type="button" id="searchButton">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Year</label>
+          <select name="year" class="form-select" onchange="changeYear(this.value)">
+            {% for year in years %}
+            <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>
+              {{ year }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">&nbsp;</label>
+          <div>
+            <span class="badge bg-info">Total Staff: {{ staff_list|length }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Staff List -->
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Staff</th>
+              <th>Department</th>
+              <th>Months Covered</th>
+              <th>Total Income (N)</th>
+              <th>Total Deductions (N)</th>
+              <th>Total Net (N)</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for data in staff_list %}
+            <tr>
+              <td>
+                <strong>{{ data.staff }}</strong><br>
+                <small class="text-muted">{{ data.staff.staff_id }}</small>
+              </td>
+              <td>{{ data.department }}</td>
+              <td>
+                <span class="badge bg-primary">{{ data.months_count }} month{{ data.months_count|pluralize }}</span><br>
+                <small class="text-muted">{{ data.months_covered|join:", " }}</small>
+              </td>
+              <td>{{ data.total_income|floatformat:2|intcomma }}</td>
+              <td>{{ data.total_deductions|floatformat:2|intcomma }}</td>
+              <td><strong>{{ data.total_net|floatformat:2|intcomma }}</strong></td>
+              <td>
+                <a href="{% url 'finance_annual_payroll_detail' data.structure.id %}?year={{ selected_year }}"
+                   class="btn btn-sm btn-primary" title="View Details">
+                  <i class="bi bi-eye"></i> View
+                </a>
+                <a href="{% url 'finance_annual_payslip_pdf' data.structure.id %}?year={{ selected_year }}"
+                   class="btn btn-sm btn-success" title="Download PDF">
+                  <i class="bi bi-download"></i> PDF
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="text-center">No annual payroll records found for {{ selected_year }}.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function changeYear(value) {
+  const url = new URL(window.location);
+  url.searchParams.set('year', value);
+  window.location = url;
+}
+
+// Search functionality
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('searchInput');
+  const searchButton = document.getElementById('searchButton');
+
+  function performSearch() {
+    const url = new URL(window.location);
+    const searchValue = searchInput.value.trim();
+
+    if (searchValue) {
+      url.searchParams.set('search', searchValue);
+    } else {
+      url.searchParams.delete('search');
+    }
+
+    window.location = url;
+  }
+
+  searchButton.addEventListener('click', performSearch);
+
+  searchInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      performSearch();
+    }
+  });
+});
+</script>
+{% endblock %}
