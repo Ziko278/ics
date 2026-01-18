@@ -1,6 +1,7 @@
 {% extends 'admin_site/layout.html' %}
 {% load static %}
 {% block 'main' %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
 <div class="col-lg-12 grid-margin stretch-card">
   <div class="card">
@@ -70,7 +71,11 @@
             <div class="row g-3">
               <div class="col-md-4">
                 <label class="form-label">Bank Name</label>
-                {{ form.bank_name }}
+                <select name="bank_name" class="form-select" id="bankSelect">
+                  <option value="">Select Bank</option>
+                </select>
+                {{ form.bank_code }}
+                <small class="form-text text-muted" id="bankLoading" style="display:none;">Loading banks...</small>
                 {% for err in form.bank_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
 
@@ -84,6 +89,18 @@
                 <label class="form-label">Account Name</label>
                 {{ form.account_name }}
                 {% for err in form.account_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Beneficiary Code</label>
+                {{ form.beneficiary_code }}
+                {% for err in form.beneficiary_code.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Branch Sort Code</label>
+                {{ form.branch_sort_code }}
+                {% for err in form.branch_sort_code.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
             </div>
           </div>
@@ -775,8 +792,93 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+// Bank API Integration with Select2
+document.addEventListener('DOMContentLoaded', function() {
+  const bankSelect = document.getElementById('bankSelect');
+  const bankCodeInput = document.getElementById('bankCode');
+  const bankLoading = document.getElementById('bankLoading');
+
+  // Current values for edit mode
+  const currentBankName = "{{ form.bank_name.value|default:'' }}";
+  const currentBankCode = "{{ form.bank_code.value|default:'' }}";
+
+  // Fetch banks from API
+  if (bankSelect) {
+    bankLoading.style.display = 'block';
+
+    fetch('https://app.nuban.com.ng/bank_codes.json')
+      .then(response => response.json())
+      .then(banks => {
+        bankLoading.style.display = 'none';
+
+        // Clear existing options except the first
+        bankSelect.innerHTML = '<option value="">Select Bank</option>';
+
+        // Populate dropdown
+        banks.forEach(bank => {
+          const option = document.createElement('option');
+          option.value = bank.bank_name;
+          option.textContent = bank.bank_name;
+          option.setAttribute('data-code', bank.code);
+
+          // Select current bank if editing
+          if (bank.bank_name === currentBankName) {
+            option.selected = true;
+          }
+
+          bankSelect.appendChild(option);
+        });
+
+        // Initialize Select2 for searchable dropdown
+        $(bankSelect).select2({
+          placeholder: 'Select Bank',
+          allowClear: true,
+          width: '100%'
+        });
+
+        // Set current bank code if editing
+        if (currentBankCode && bankCodeInput) {
+          bankCodeInput.value = currentBankCode;
+        }
+      })
+      .catch(error => {
+        bankLoading.style.display = 'none';
+        console.error('Error loading banks:', error);
+        bankSelect.innerHTML = '<option value="">Failed to load banks</option>';
+      });
+
+    // Update bank code when selection changes
+    $(bankSelect).on('change', function() {
+      const selectedOption = this.options[this.selectedIndex];
+      const code = selectedOption.getAttribute('data-code');
+      if (bankCodeInput && code) {
+        bankCodeInput.value = code;
+      }
+    });
+  }
+});
 </script>
 
+<!-- 4. Add Select2 styling for consistency -->
+<style>
+.select2-container--default .select2-selection--single {
+    height: 38px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 36px;
+    padding-left: 12px;
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px;
+}
+</style>
 <style>
 .table th {
   border: 1px solid #dee2e6;

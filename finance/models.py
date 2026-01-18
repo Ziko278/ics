@@ -740,6 +740,12 @@ class ExpenseModel(models.Model):
         'human_resource.StaffModel', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='collected_expenses'
     )
+    collected_by_other = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Name of non-staff collector (if not selecting from staff list)"
+    )
 
     # Cheque Details (Optional - for manual completion)
     cheque_number = models.CharField(max_length=100, blank=True, null=True)
@@ -831,6 +837,12 @@ class ExpenseModel(models.Model):
             return f"{amount_str.title()} {currency_name} Only"
         except:
             return f"{self.amount} Only"
+
+    def get_collector_name(self):
+        """Returns the collector name - either staff or other"""
+        if self.collected_by:
+            return str(self.collected_by)
+        return self.collected_by_other or "—"
 
     def __str__(self):
         return f"{self.category.__str__()} ({self.amount})"
@@ -1557,7 +1569,19 @@ class SalaryStructure(models.Model):
     bank_name = models.CharField(max_length=200, blank=True, null=True)
     account_number = models.CharField(max_length=20, blank=True, null=True)
     account_name = models.CharField(max_length=200, blank=True, null=True)
+    # Add these NEW fields to the SalaryStructure model (no replacements)
 
+    bank_code = models.CharField(
+        max_length=10, blank=True, null=True, help_text="Bank code from NUBAN API"
+    )
+
+    beneficiary_code = models.CharField(
+        max_length=50, blank=True, null=True, help_text="Beneficiary code for bank transfer"
+    )
+
+    branch_sort_code = models.CharField(
+        max_length=20, blank=True, null=True, help_text="Branch sort code"
+    )
     effective_from = models.DateField(default=timezone.now)
     effective_to = models.DateField(blank=True, null=True)
     is_active = models.BooleanField(default=True)

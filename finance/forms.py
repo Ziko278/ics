@@ -394,7 +394,7 @@ class ExpenseForm(forms.ModelForm):
             "payment_method", "currency", "bank_account", "reference", "name",
             "description", "receipt", "notes",
             "vote_and_subhead",
-            "prepared_by", "authorised_by", "collected_by",
+            "prepared_by", "authorised_by", "collected_by", "collected_by_other",
             "cheque_number", "bank_name", "cheque_by", "cheque_prepared_date", "cheque_signed_date",
             "session", "term",
         ]
@@ -423,6 +423,10 @@ class ExpenseForm(forms.ModelForm):
             "prepared_by": forms.Select(attrs={"class": "form-control select2-staff"}),
             "authorised_by": forms.Select(attrs={"class": "form-control select2-staff"}),
             "collected_by": forms.Select(attrs={"class": "form-control select2-staff"}),
+            "collected_by_other": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Enter name if not selecting from staff"
+            }),
 
             # Cheque fields
             "cheque_number": forms.TextInput(attrs={"class": "form-control"}),
@@ -445,6 +449,7 @@ class ExpenseForm(forms.ModelForm):
         self.fields["prepared_by"].queryset = active_staff
         self.fields["authorised_by"].queryset = active_staff
         self.fields["collected_by"].queryset = active_staff
+        self.fields["collected_by_other"].required = False
 
         # Make staff fields not required
         self.fields["prepared_by"].required = False
@@ -568,6 +573,26 @@ class ExpenseForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+    def clean(self):
+        cleaned_data = super().clean()
+        collected_by = cleaned_data.get('collected_by')
+        collected_by_other = cleaned_data.get('collected_by_other')
+
+        # At least one must be provided
+        if not collected_by and not collected_by_other:
+            raise ValidationError({
+                'collected_by': 'Please either select a staff member or enter a name.',
+                'collected_by_other': 'Please either select a staff member or enter a name.'
+            })
+
+        # Both cannot be filled
+        if collected_by and collected_by_other:
+            raise ValidationError({
+                'collected_by_other': 'Please use either staff selection OR manual entry, not both.'
+            })
+
+        return cleaned_data
 
     
 # -------------------- INCOME CATEGORY FORM --------------------
@@ -1425,7 +1450,8 @@ class SalaryStructureForm(forms.ModelForm):
         model = SalaryStructure
         fields = [
             'staff', 'salary_setting', 'monthly_salary',
-            'bank_name', 'account_number', 'account_name',
+            'bank_name', 'bank_code', 'account_number', 'account_name',  # <- Add bank_code here
+            'beneficiary_code', 'branch_sort_code',  # <- Add these 2 new fields
             'effective_from', 'effective_to', 'is_active'
         ]
         widgets = {
@@ -1436,9 +1462,12 @@ class SalaryStructureForm(forms.ModelForm):
                 'step': '0.01',
                 'min': '0'
             }),
-            'bank_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'bank_name': forms.Select(attrs={'class': 'form-select', 'id': 'bankSelect'}),  # <- Change to Select
+            'bank_code': forms.HiddenInput(attrs={'id': 'bankCode'}),  # <- Add hidden field for code
             'account_number': forms.TextInput(attrs={'class': 'form-control'}),
             'account_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'beneficiary_code': forms.TextInput(attrs={'class': 'form-control'}),  # <- Add
+            'branch_sort_code': forms.TextInput(attrs={'class': 'form-control'}),  # <- Add
             'effective_from': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'effective_to': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -1451,11 +1480,13 @@ class SalaryStructureForm(forms.ModelForm):
         self.fields['salary_setting'].queryset = SalarySetting.objects.filter(is_active=True)
 
         # Set help texts
-        self.fields[
-            'monthly_salary'].help_text = 'Enter total monthly salary. Components will be calculated automatically.'
+        self.fields['monthly_salary'].help_text = 'Enter total monthly salary. Components will be calculated automatically.'
         self.fields['bank_name'].required = False
+        self.fields['bank_code'].required = False  # <- Add
         self.fields['account_number'].required = False
         self.fields['account_name'].required = False
+        self.fields['beneficiary_code'].required = False  # <- Add
+        self.fields['branch_sort_code'].required = False  # <- Add
 
 
 class SalaryRecordForm(forms.ModelForm):

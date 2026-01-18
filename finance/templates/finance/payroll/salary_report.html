@@ -1,0 +1,379 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<style>
+.report-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+.report-section {
+    background: white;
+    border-radius: 8px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.section-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+.data-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 15px;
+    border-bottom: 1px solid #e9ecef;
+}
+.data-row:last-child {
+    border-bottom: none;
+}
+.data-label {
+    color: #6c757d;
+    font-weight: 500;
+}
+.data-value {
+    color: #212529;
+    font-weight: 600;
+}
+.subsection {
+    margin-left: 20px;
+    padding-left: 15px;
+    border-left: 3px solid #e3f2fd;
+}
+.total-row {
+    background-color: #f8f9fa;
+    font-weight: 700;
+    font-size: 1.05rem;
+    padding: 12px 15px;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+.grand-total {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: white;
+    font-size: 1.2rem;
+    padding: 15px 20px;
+    border-radius: 8px;
+    text-align: center;
+}
+.filter-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.note-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-style: italic;
+    margin-top: 5px;
+}
+</style>
+
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">{{ page_title }}</h2>
+        <div class="btn-group">
+            <button type="button" class="btn btn-success" onclick="downloadPDF()">
+                <i class="bi bi-file-earmark-pdf"></i> Download PDF
+            </button>
+            <button type="button" class="btn btn-primary" onclick="window.print()">
+                <i class="bi bi-printer"></i> Print
+            </button>
+        </div>
+    </div>
+
+    <div class="report-container">
+        <!-- Filters -->
+        <div class="filter-section">
+            <h5 class="mb-3">Report Filters</h5>
+            <form method="get" id="filterForm">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Search Staff</label>
+                        <input type="text" name="search" class="form-control" value="{{ search_query }}" 
+                               placeholder="Search by name or ID...">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Report Type</label>
+                        <select name="report_type" class="form-select" onchange="toggleReportType(this.value)">
+                            <option value="single" {% if report_type == 'single' %}selected{% endif %}>Single Month</option>
+                            <option value="range" {% if report_type == 'range' %}selected{% endif %}>Date Range</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Single Month -->
+                <div class="row mb-3" id="singleMonthFilter" style="{% if report_type == 'range' %}display:none;{% endif %}">
+                    <div class="col-md-3">
+                        <label class="form-label">Month</label>
+                        <select name="month" class="form-select">
+                            {% for month_num, month_name in months %}
+                            <option value="{{ month_num }}" {% if month_num == single_month %}selected{% endif %}>
+                                {{ month_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Year</label>
+                        <select name="year" class="form-select">
+                            {% for year in years %}
+                            <option value="{{ year }}" {% if year == single_year %}selected{% endif %}>
+                                {{ year }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Date Range -->
+                <div class="row mb-3" id="dateRangeFilter" style="{% if report_type == 'single' %}display:none;{% endif %}">
+                    <div class="col-md-3">
+                        <label class="form-label">From Month</label>
+                        <select name="from_month" class="form-select">
+                            {% for month_num, month_name in months %}
+                            <option value="{{ month_num }}" {% if month_num == from_month %}selected{% endif %}>
+                                {{ month_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">From Year</label>
+                        <select name="from_year" class="form-select">
+                            {% for year in years %}
+                            <option value="{{ year }}" {% if year == from_year %}selected{% endif %}>
+                                {{ year }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">To Month</label>
+                        <select name="to_month" class="form-select">
+                            {% for month_num, month_name in months %}
+                            <option value="{{ month_num }}" {% if month_num == to_month %}selected{% endif %}>
+                                {{ month_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">To Year</label>
+                        <select name="to_year" class="form-select">
+                            {% for year in years %}
+                            <option value="{{ year }}" {% if year == to_year %}selected{% endif %}>
+                                {{ year }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-funnel"></i> Generate Report
+                        </button>
+                        <a href="{% url 'finance_salary_management_report' %}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-clockwise"></i> Reset
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- INCOME SECTION -->
+        <div class="report-section">
+            <div class="section-header">
+                <i class="bi bi-cash-stack"></i> INCOME
+            </div>
+            
+            <div class="data-row total-row">
+                <span>Total Gross Salary</span>
+                <span>₦{{ report_data.total_gross_salary|floatformat:2|intcomma }}</span>
+            </div>
+
+            <!-- Basic Components -->
+            {% if report_data.basic_components %}
+            <div class="subsection mt-3">
+                <h6 class="text-muted mb-2">Basic Components:</h6>
+                {% for name, amount in report_data.basic_components.items %}
+                <div class="data-row">
+                    <span class="data-label">{{ name }}</span>
+                    <span class="data-value">₦{{ amount|floatformat:2|intcomma }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Allowances -->
+            {% if report_data.allowances %}
+            <div class="subsection mt-3">
+                <h6 class="text-muted mb-2">Allowances:</h6>
+                {% for name, amount in report_data.allowances.items %}
+                <div class="data-row">
+                    <span class="data-label">{{ name }}</span>
+                    <span class="data-value">₦{{ amount|floatformat:2|intcomma }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Additional Income -->
+            {% if report_data.additional_income %}
+            <div class="subsection mt-3">
+                <h6 class="text-muted mb-2">Additional Income:</h6>
+                {% for name, amount in report_data.additional_income.items %}
+                <div class="data-row">
+                    <span class="data-label">{{ name }}</span>
+                    <span class="data-value">₦{{ amount|floatformat:2|intcomma }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- BONUSES SECTION -->
+        <div class="report-section">
+            <div class="section-header">
+                <i class="bi bi-gift"></i> BONUSES
+            </div>
+            
+            <div class="data-row">
+                <span class="data-label">Staff Bonuses Total</span>
+                <span class="data-value">₦{{ bonus_data.staff_total|floatformat:2|intcomma }}</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Volunteer Bonuses Total</span>
+                <span class="data-value">₦{{ bonus_data.volunteer_total|floatformat:2|intcomma }}</span>
+            </div>
+            <div class="data-row total-row">
+                <span>Total Bonuses</span>
+                <span>₦{{ bonus_data.total|floatformat:2|intcomma }}</span>
+            </div>
+
+            <!-- Bonus Categories -->
+            {% if bonus_data.categories %}
+            <div class="subsection mt-3">
+                <h6 class="text-muted mb-2">Breakdown by Category:</h6>
+                <p class="note-text">(Note: This is a breakdown of the total bonuses above, not additional amounts)</p>
+                {% for category, amount in bonus_data.categories.items %}
+                <div class="data-row">
+                    <span class="data-label">{{ category }}</span>
+                    <span class="data-value">₦{{ amount|floatformat:2|intcomma }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- DEDUCTIONS SECTION -->
+        <div class="report-section">
+            <div class="section-header">
+                <i class="bi bi-dash-circle"></i> DEDUCTIONS
+            </div>
+
+            <!-- Statutory Deductions -->
+            {% if report_data.statutory_deductions %}
+            <div class="subsection">
+                <h6 class="text-muted mb-2">Statutory Deductions:</h6>
+                {% for name, amount in report_data.statutory_deductions.items %}
+                <div class="data-row">
+                    <span class="data-label">{{ name }}</span>
+                    <span class="data-value">₦{{ amount|floatformat:2|intcomma }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Other Deductions -->
+            {% if report_data.other_deductions %}
+            <div class="subsection mt-3">
+                <h6 class="text-muted mb-2">Other Deductions:</h6>
+                {% for name, amount in report_data.other_deductions.items %}
+                <div class="data-row">
+                    <span class="data-label">{{ name }}</span>
+                    <span class="data-value">₦{{ amount|floatformat:2|intcomma }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Tax & Reliefs -->
+            <div class="mt-3">
+                <div class="data-row">
+                    <span class="data-label">Total PAYE Tax</span>
+                    <span class="data-value">₦{{ report_data.total_paye_tax|floatformat:2|intcomma }}</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Total Reliefs/Exemptions</span>
+                    <span class="data-value">₦{{ report_data.total_reliefs|floatformat:2|intcomma }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SUMMARY SECTION -->
+        <div class="report-section">
+            <div class="section-header">
+                <i class="bi bi-clipboard-data"></i> SUMMARY
+            </div>
+
+            <div class="data-row total-row">
+                <span>Total Take-Home Salary</span>
+                <span>₦{{ report_data.total_take_home|floatformat:2|intcomma }}</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Total Amount Paid</span>
+                <span class="data-value text-success">₦{{ report_data.total_paid|floatformat:2|intcomma }}</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Total Pending/Unpaid</span>
+                <span class="data-value text-danger">₦{{ report_data.total_pending|floatformat:2|intcomma }}</span>
+            </div>
+        </div>
+
+        <!-- GRAND TOTAL -->
+        <div class="grand-total">
+            <div class="mb-2">NET TAKE-HOME PAY</div>
+            <div style="font-size: 1.8rem; font-weight: 700;">
+                ₦{{ report_data.total_take_home|floatformat:2|intcomma }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleReportType(type) {
+    if (type === 'single') {
+        document.getElementById('singleMonthFilter').style.display = 'flex';
+        document.getElementById('dateRangeFilter').style.display = 'none';
+    } else {
+        document.getElementById('singleMonthFilter').style.display = 'none';
+        document.getElementById('dateRangeFilter').style.display = 'flex';
+    }
+}
+
+function downloadPDF() {
+    const form = document.getElementById('filterForm');
+    const url = new URL('{% url "finance_salary_report_pdf" %}', window.location.origin);
+    
+    // Add all form parameters to URL
+    const formData = new FormData(form);
+    for (let [key, value] of formData.entries()) {
+        url.searchParams.append(key, value);
+    }
+    
+    window.location.href = url.toString();
+}
+</script>
+{% endblock %}

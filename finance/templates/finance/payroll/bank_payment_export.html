@@ -1,0 +1,222 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<style>
+.export-container {
+    max-width: 100%;
+}
+.filter-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.data-table {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.summary-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+/* Select2 styling */
+.select2-container--default .select2-selection--single {
+    height: 38px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 36px;
+    padding-left: 12px;
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px;
+}
+</style>
+
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+<div class="container-fluid export-container">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">{{ page_title }}</h2>
+        <div class="btn-group">
+            <button type="button" class="btn btn-success" onclick="downloadExcel()">
+                <i class="bi bi-file-earmark-excel"></i> Download Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="summary-card">
+                <h5 class="mb-2">Total Staff</h5>
+                <h2 class="mb-0">{{ total_count }}</h2>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="summary-card">
+                <h5 class="mb-2">Total Amount</h5>
+                <h2 class="mb-0">₦{{ total_amount|floatformat:2|intcomma }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-card">
+        <h5 class="mb-3">Filters & Settings</h5>
+        <form method="get" id="filterForm">
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <label class="form-label">Month</label>
+                    <select name="month" class="form-select">
+                        {% for month_num, month_name in months %}
+                        <option value="{{ month_num }}" {% if month_num == selected_month %}selected{% endif %}>
+                            {{ month_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Year</label>
+                    <select name="year" class="form-select">
+                        {% for year in years %}
+                        <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>
+                            {{ year }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Search Staff</label>
+                    <input type="text" name="search" class="form-control" value="{{ search_query }}" 
+                           placeholder="Name or ID...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Filter by Bank</label>
+                    <select name="bank" class="form-select" id="bankFilterSelect">
+                        <option value="">All Banks</option>
+                        {% for bank in banks_list %}
+                        <option value="{{ bank }}" {% if bank == bank_filter %}selected{% endif %}>
+                            {{ bank }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <label class="form-label">Sort By</label>
+                    <select name="sort" class="form-select">
+                        <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name</option>
+                        <option value="bank" {% if sort_by == 'bank' %}selected{% endif %}>Bank</option>
+                        <option value="department" {% if sort_by == 'department' %}selected{% endif %}>Department</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Payment Due Date</label>
+                    <input type="date" name="due_date" class="form-control" value="{{ due_date }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Debit Account</label>
+                    <input type="text" name="debit_account" class="form-control" 
+                           value="{{ debit_account }}" placeholder="Enter debit account">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-funnel"></i> Apply Filters
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Data Table -->
+    <div class="data-table">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered">
+                <thead class="table-primary">
+                    <tr>
+                        <th>Staff Ref</th>
+                        <th>Beneficiary Name</th>
+                        <th>Amount</th>
+                        <th>Payment Due Date</th>
+                        <th>Beneficiary Code</th>
+                        <th>Account Number</th>
+                        <th>Branch Sort Code</th>
+                        <th>Debit Account</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in payment_data %}
+                    <tr>
+                        <td>{{ item.staff_ref }}</td>
+                        <td>{{ item.beneficiary_name }}</td>
+                        <td class="text-end">₦{{ item.amount|floatformat:2|intcomma }}</td>
+                        <td>{{ item.payment_due_date }}</td>
+                        <td>{{ item.beneficiary_code|default:"-" }}</td>
+                        <td>{{ item.beneficiary_account_number }}</td>
+                        <td>{{ item.branch_sort_code|default:"-" }}</td>
+                        <td>{{ item.debit_account|default:"-" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted">
+                            No payment data found for the selected criteria.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if payment_data %}
+                <tfoot class="table-secondary fw-bold">
+                    <tr>
+                        <td colspan="2" class="text-end">TOTAL:</td>
+                        <td class="text-end">₦{{ total_amount|floatformat:2|intcomma }}</td>
+                        <td colspan="5"></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Select2 for bank filter (searchable)
+    $('#bankFilterSelect').select2({
+        placeholder: 'All Banks',
+        allowClear: true,
+        width: '100%'
+    });
+
+    // Download Excel function
+    window.downloadExcel = function() {
+        const form = document.getElementById('filterForm');
+        const url = new URL('{% url "finance_bank_payment_download" %}', window.location.origin);
+        
+        // Add all form parameters to URL
+        const formData = new FormData(form);
+        for (let [key, value] of formData.entries()) {
+            url.searchParams.append(key, value);
+        }
+        
+        window.location.href = url.toString();
+    };
+});
+</script>
+{% endblock %}

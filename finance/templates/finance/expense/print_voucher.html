@@ -354,7 +354,7 @@
         <div class="bottom-section">
             <div class="field-inline">
                 <label>Collected By Name</label>
-                <span class="value">{{ expense.collected_by|default:"" }}</span>
+                <span class="value">{{ expense.get_collector_name }}</span>
             </div>
 
             <div class="two-column">

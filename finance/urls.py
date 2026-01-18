@@ -234,6 +234,10 @@ urlpatterns = [
     path('payroll/annual/<int:structure_id>/pdf/', download_annual_payslip_pdf,
          name='finance_annual_payslip_pdf'),
 
+    path('payroll/reports/', salary_management_report_view, name='finance_salary_management_report'),
+    path('payroll/reports/pdf/', download_salary_report_pdf, name='finance_salary_report_pdf'),
+    path('payroll/bank-payment-export/', bank_payment_export_view, name='finance_bank_payment_export'),
+    path('payroll/bank-payment-export/download/', download_bank_payment_excel, name='finance_bank_payment_download'),
 
     path('bonus/', BonusListView.as_view(), name='finance_bonus_list'),
     path('bonus/create/', BonusCreateView.as_view(), name='finance_bonus_create'),

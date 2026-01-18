@@ -172,9 +172,23 @@
 
                                     <!-- Collected By -->
                                     <div class="col-md-4 mb-3">
-                                        <label for="{{ form.collected_by.id_for_label }}" class="form-label">Collected By</label>
+                                        <label class="form-label">Collected By</label>
                                         {{ form.collected_by }}
+                                        <small class="form-text text-muted">Select from staff</small>
+                                        {% if form.collected_by.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.collected_by.errors|striptags }}</div>
+                                        {% endif %}
                                     </div>
+
+                                    <!-- Collected By Other -->
+                                    <div class="col-md-4 mb-3">
+                                        <label for="{{ form.collected_by_other.id_for_label }}" class="form-label">OR Enter Name</label>
+                                        {{ form.collected_by_other }}
+                                        <small class="form-text text-muted">If not in staff list</small>
+                                        {% if form.collected_by_other.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.collected_by_other.errors|striptags }}</div>
+                                        {% endif %}
+</div>
                                 </div>
 
                                 <hr>
