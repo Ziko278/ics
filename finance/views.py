@@ -675,28 +675,31 @@ class InvoiceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     paginate_by = 30
 
     def get_queryset(self):
-        """
-        This method builds the list of invoices based on the filters
-        and search query from the URL.
-        """
-        # Start with the base queryset and pre-fetch related models for performance
         queryset = super().get_queryset().select_related(
             'student', 'student__student_class', 'student__class_section', 'session', 'term'
         )
 
-        # Get filter values from the request's GET parameters
         search_query = self.request.GET.get('q', '').strip()
         session_id = self.request.GET.get('session')
         term_id = self.request.GET.get('term')
         status = self.request.GET.get('status', '')
 
-        # Apply session filter
+        # Get school setting for defaults
+        school_setting = SchoolSettingModel.objects.first()
+
+        # Apply session filter - use current if not specified
         if session_id:
             queryset = queryset.filter(session_id=session_id)
+        elif school_setting and school_setting.session:
+            # THIS IS KEY: Actually filter, don't just set context
+            queryset = queryset.filter(session=school_setting.session)
 
-        # Apply term filter
+        # Apply term filter - use current if not specified
         if term_id:
             queryset = queryset.filter(term_id=term_id)
+        elif school_setting and school_setting.term:
+            # THIS IS KEY: Actually filter, don't just set context
+            queryset = queryset.filter(term=school_setting.term)
 
         # Apply status filter
         if status:
@@ -704,7 +707,6 @@ class InvoiceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
         # Apply search query
         if search_query:
-            # Annotate the student's full name to make it searchable
             queryset = queryset.annotate(
                 student_full_name=Concat(
                     'student__first_name', Value(' '), 'student__last_name'
@@ -715,15 +717,16 @@ class InvoiceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
                 Q(invoice_number__icontains=search_query)
             )
 
+        # Order by parent, then student
         return queryset.order_by(
-            'student__parent__last_name',  # Family grouping by surname
-            'student__parent__first_name',  # Distinguish parents with same surname
-            'student__parent__id',  # Ensure same parent's kids stay together
-            'student__last_name',  # Order siblings by their surname
-            'student__first_name',  # Then by their first name
-            '-issue_date'  # Most recent invoice first for each student
+            'student__parent__last_name',
+            'student__parent__first_name',
+            'student__parent__id',
+            'student__last_name',
+            'student__first_name',
+            '-issue_date'
         )
-
+    
     def get_context_data(self, **kwargs):
         """
         This method adds the necessary data for the filter dropdowns and
