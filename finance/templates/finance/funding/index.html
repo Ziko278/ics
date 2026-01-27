@@ -9,9 +9,9 @@
     <div class="card">
         <div class="card-body">
             <h4 class="card-title">Filter and Search</h4>
-            <form>
+            <form id="filterForm">
                 <div class="row">
-                    <div class="col-3">
+                    <div class="col-2">
                         <label for="session">Session</label>
                         <select id="session" name="session" required class="form-control">
                             <option value="">-------------------</option>
@@ -21,7 +21,7 @@
                         </select>
                     </div>
 
-                    <div class="col-3">
+                    <div class="col-2">
                         <label for="term">Term</label>
                         <select id="term" name="term" required class="form-control">
                             <option value="">-------------------</option>
@@ -31,12 +31,22 @@
                         </select>
                     </div>
 
-                    <div class="col-4">
+                    <div class="col-3">
                         <label for="search">Search Student</label>
-                        <input type="text" id="search" name="search" class="form-control" value="{{ search_query }}" placeholder="Search by first or last name">
+                        <input type="text" id="search" name="search" class="form-control" value="{{ search_query }}" placeholder="Search by name">
                     </div>
 
                     <div class="col-2">
+                        <label for="date_from">Date From</label>
+                        <input type="date" id="date_from" name="date_from" class="form-control" value="{{ date_from }}">
+                    </div>
+
+                    <div class="col-2">
+                        <label for="date_to">Date To</label>
+                        <input type="date" id="date_to" name="date_to" class="form-control" value="{{ date_to }}">
+                    </div>
+
+                    <div class="col-1">
                         <label>&nbsp;</label>
                         <div>
                             <input type="submit" value="Filter" class="btn btn-success w-100">
@@ -52,9 +62,35 @@
     <div class="col-md-12">
         <div class="card">
             <div class="card-body pt-3" style="overflow-x:auto">
-                <h5 class="card-title">Student Wallet Funding for {{ current_session }} Session - {{ current_term }}
-                    {% if search_query %} (Search: "{{ search_query }}"){% endif %}
-                </h5>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">Student Wallet Funding for {{ current_session }} Session - {{ current_term }}
+                        {% if search_query %} (Search: "{{ search_query }}"){% endif %}
+                    </h5>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-download"></i> Download
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end">
+                            <button class="dropdown-item" onclick="downloadReport('excel')">
+                                <i class="bi bi-file-excel"></i> Download as Excel
+                            </button>
+                            <button class="dropdown-item" onclick="downloadReport('pdf')">
+                                <i class="bi bi-file-pdf"></i> Download as PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {% if date_from or date_to %}
+                <div class="mb-2">
+                    <small class="text-muted">
+                        Filtered by date:
+                        {% if date_from %}From {{ date_from }}{% endif %}
+                        {% if date_to %}To {{ date_to }}{% endif %}
+                    </small>
+                </div>
+                {% endif %}
+
                 <table class="table table-bordered" style="font-size:14px">
                     <thead>
                         <tr>
@@ -79,7 +115,6 @@
                                 <td scope="row" class="text-center">
                                     <a title="View Fee Payment Detail" style="font-size:12px" class="btn btn-primary" href="{% url 'deposit_detail' payment.id %}"><i class="bi bi-eye"></i> </a>
                                     {% if payment.status == 'confirmed' %}
-                                    <!-- Revert button - opens modal -->
                                     <button
                                         type="button"
                                         class="btn btn-warning btn-revert"
@@ -103,16 +138,15 @@
                     </tbody>
                 </table>
 
-                <!-- Pagination Controls -->
                 {% if fee_payment_list.has_other_pages %}
                 <nav aria-label="Page navigation">
                     <ul class="pagination justify-content-center">
                         {% if fee_payment_list.has_previous %}
                             <li class="page-item">
-                                <a class="page-link" href="?page=1&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}">First</a>
+                                <a class="page-link" href="?page=1&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}">First</a>
                             </li>
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ fee_payment_list.previous_page_number }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}">Previous</a>
+                                <a class="page-link" href="?page={{ fee_payment_list.previous_page_number }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}">Previous</a>
                             </li>
                         {% endif %}
 
@@ -122,10 +156,10 @@
 
                         {% if fee_payment_list.has_next %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ fee_payment_list.next_page_number }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}">Next</a>
+                                <a class="page-link" href="?page={{ fee_payment_list.next_page_number }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}">Next</a>
                             </li>
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ fee_payment_list.paginator.num_pages }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}">Last</a>
+                                <a class="page-link" href="?page={{ fee_payment_list.paginator.num_pages }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}">Last</a>
                             </li>
                         {% endif %}
                     </ul>
@@ -137,7 +171,6 @@
     </div>
 </div>
 
-<!-- Revert Modal -->
 <div class="modal fade" id="revertModal" tabindex="-1" role="dialog" aria-labelledby="revertModalLabel" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <form id="revertForm" method="post">
@@ -165,6 +198,21 @@
 </div>
 
 <script>
+function downloadReport(format) {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+
+    let url = window.location.pathname + '?download=' + format;
+
+    for (let [key, value] of formData.entries()) {
+        if (value) {
+            url += '&' + key + '=' + encodeURIComponent(value);
+        }
+    }
+
+    window.location.href = url;
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     const revertButtons = document.querySelectorAll('.btn-revert');
     const modalEl = document.getElementById('revertModal');
@@ -179,23 +227,18 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
     }
 
-    // Helper to show the modal for Bootstrap4 (jQuery) or Bootstrap5
     function showModal() {
-        // Bootstrap 4 + jQuery
         if (window.jQuery && typeof window.jQuery(modalEl).modal === 'function') {
             window.jQuery(modalEl).modal('show');
             return;
         }
 
-        // Bootstrap 5+
         if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-            // getOrCreate instance (Bootstrap 5)
             const inst = bootstrap.Modal.getOrCreateInstance(modalEl);
             inst.show();
             return;
         }
 
-        // Fallback (very basic): make modal visible (works only for very simple markup)
         modalEl.style.display = 'block';
         modalEl.classList.add('show');
     }
@@ -210,29 +253,22 @@ document.addEventListener('DOMContentLoaded', function () {
             if (revertAmountElem) revertAmountElem.textContent = fundingAmount ? ('₦' + Number(fundingAmount).toLocaleString()) : '';
             if (revertStudentElem) revertStudentElem.textContent = studentName || '';
 
-            // Set form action dynamically to deposit_revert URL (adjust if your URL is different)
             if (revertForm) {
                 try {
-                    // Django URL trick: replace placeholder 0 with actual id
                     revertForm.action = "{% url 'deposit_revert' 0 %}".replace('/0/', '/' + fundingId + '/');
                 } catch (err) {
-                    // If template tag not available or fails, just log
                     console.warn('Could not set form.action automatically:', err);
                 }
             }
 
-            // Clear reason from previous usage
             if (reasonInput) reasonInput.value = '';
 
-            // Finally show the modal
             showModal();
         });
     });
 
-    // Keep original behavior for submit (server handles everything)
     if (revertForm) {
         revertForm.addEventListener('submit', function (e) {
-            // you can add client-side checks here, e.g. ensure reason is present
             if (reasonInput && reasonInput.value.trim() === '') {
                 e.preventDefault();
                 alert('Please provide a reason for the revert.');

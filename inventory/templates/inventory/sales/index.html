@@ -6,13 +6,45 @@
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h4 class="card-title mb-0">All Orders</h4>
-            <a href="{% url 'place_order' %}" class="btn btn-primary">
-                <i class="fas fa-plus"></i> Place New Order
-            </a>
+            <div class="d-flex gap-2">
+                <!-- Download Dropdown -->
+                <div class="btn-group">
+                    <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end p-3" style="min-width: 280px;">
+                        <li>
+                            <h6 class="dropdown-header">Download Options</h6>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="px-2 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="includeDetailsCheck">
+                                <label class="form-check-label" for="includeDetailsCheck">
+                                    Include Items Details
+                                </label>
+                                <small class="d-block text-muted">Show detailed list of items in each order</small>
+                            </div>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="px-2">
+                            <button class="btn btn-sm btn-outline-success w-100 mb-2" onclick="downloadReport('excel')">
+                                <i class="fas fa-file-excel"></i> Download as Excel
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger w-100" onclick="downloadReport('pdf')">
+                                <i class="fas fa-file-pdf"></i> Download as PDF
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <a href="{% url 'place_order' %}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Place New Order
+                </a>
+            </div>
         </div>
 
         <!-- Search and Filter Form -->
-        <form method="GET" class="mb-4">
+        <form method="GET" class="mb-4" id="filterForm">
             <div class="row g-3">
                 <div class="col-md-4">
                     <input type="text" name="search" class="form-control"
@@ -242,6 +274,52 @@ function initiateRefund(orderId) {
     document.getElementById('refundForm').action = `/admin/inventory/orders/${orderId}/refund/`;
     refundModal.show();
 }
+
+function downloadReport(format) {
+    // Get current filter form values
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+
+    // Get include details checkbox
+    const includeDetails = document.getElementById('includeDetailsCheck').checked;
+
+    // Build URL with all filters
+    let url = window.location.pathname + '?download=' + format;
+
+    // Add all existing filters
+    for (let [key, value] of formData.entries()) {
+        if (value) {
+            url += '&' + key + '=' + encodeURIComponent(value);
+        }
+    }
+
+    // Add include_details parameter
+    if (includeDetails) {
+        url += '&include_details=on';
+    }
+
+    // Trigger download
+    window.location.href = url;
+}
 </script>
+
+<style>
+.dropdown-menu {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.dropdown-menu .form-check {
+    padding: 0.5rem 0;
+}
+
+.dropdown-menu .btn {
+    transition: all 0.2s;
+}
+
+.dropdown-menu .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+</style>
 
 {% endblock %}

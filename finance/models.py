@@ -1006,7 +1006,6 @@ class StaffLoanRepayment(models.Model):
         return f"Loan Repayment of {self.amount_paid} for {self.staff}"
 
 
-
 class SupplierPaymentModel(models.Model):
     """Records payments made to suppliers for purchase orders."""
 

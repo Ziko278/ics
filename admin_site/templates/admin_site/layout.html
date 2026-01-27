@@ -721,7 +721,25 @@
                         </a>
                     </li>
 
+
+
                     {% endif %}
+                    <li>
+                        <a href="{% url 'staff_monthly_payroll' %}">
+                            <i class="bi bi-circle"></i><span>My Payslip</span>
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="{% url 'staff_annual_payroll' %}">
+                            <i class="bi bi-circle"></i><span>My Annual PaySlip</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{% url 'staff_bonus_list' %}">
+                            <i class="bi bi-circle"></i><span>My Special Bonus</span>
+                        </a>
+                    </li>
 
 <!--                    {% if request.user.staff_profile.staff %}-->
 <!--                    <li>-->

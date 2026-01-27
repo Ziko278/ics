@@ -36,6 +36,17 @@ from .forms import CategoryForm, SupplierForm, ItemUpdateForm, ItemCreateForm, M
 from .services import perform_stock_out, perform_stock_transfer
 from pytz import timezone as pytz_timezone
 from django.http import HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from io import BytesIO
+from datetime import datetime
+
 
 logger = logging.getLogger(__name__)
 
@@ -1338,98 +1349,6 @@ def place_order_view(request):
 
     messages.success(request, f'Sale #{sale.id} recorded successfully.')
     return redirect(reverse('place_order'))
-
-
-@login_required
-@permission_required("inventory.view_salemodel", raise_exception=True)
-def view_orders(request):
-    # Get search parameters
-    search_query = request.GET.get('search', '').strip()
-    status_filter = request.GET.get('status', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
-    staff_filter = request.GET.get('staff', '').strip()
-
-    # Base queryset: include related customer + created_by for fewer queries
-    orders_qs = SaleModel.objects.select_related('customer', 'created_by').all()
-
-    # --- Determine related accessor name for sale items dynamically ---
-    # This makes the code robust regardless of related_name used on the FK from SaleItemModel -> SaleModel
-    related_accessor = None
-    for rel in SaleModel._meta.related_objects:
-        # related_model is the model on the other side (SaleItemModel)
-        try:
-            rel_model = rel.related_model
-        except AttributeError:
-            continue
-        # Heuristic: look for a model that has 'unit_price' and 'quantity' fields
-        field_names = {f.name for f in rel_model._meta.get_fields()}
-        if {'quantity', 'unit_price'}.issubset(field_names):
-            related_accessor = rel.get_accessor_name()
-            break
-
-    # Fallback to 'items' if autodetect failed (common pattern)
-    if not related_accessor:
-        related_accessor = 'items'
-
-    qty_field = f"{related_accessor}__quantity"
-    price_field = f"{related_accessor}__unit_price"
-
-    # Annotate totals: line_total is sum(quantity * unit_price) for each sale, total_quantity is sum(quantity)
-    # Use ExpressionWrapper to multiply fields
-    try:
-        line_expr = ExpressionWrapper(F(qty_field) * F(price_field), output_field=DecimalField())
-        orders_qs = orders_qs.annotate(
-            line_total=Sum(line_expr),
-            total_quantity=Sum(qty_field)
-        )
-    except Exception:
-        # If annotation fails (unexpected related name), still continue without totals
-        orders_qs = orders_qs.annotate(total_quantity=Sum(qty_field))
-
-    # Apply filters: search (transaction id or customer fields)
-    if search_query:
-        orders_qs = orders_qs.filter(
-            Q(transaction_id__icontains=search_query) |
-            Q(customer__first_name__icontains=search_query) |
-            Q(customer__last_name__icontains=search_query) |
-            Q(customer__registration_number__icontains=search_query)
-        )
-
-    if status_filter:
-        orders_qs = orders_qs.filter(status=status_filter)
-
-    if staff_filter:
-        orders_qs = orders_qs.filter(created_by_id=staff_filter)
-
-    # Date filtering: prefer sale_date if present, else use created_at
-    date_field = 'sale_date' if 'sale_date' in {f.name for f in SaleModel._meta.get_fields()} else 'created_at'
-
-    if date_from:
-        orders_qs = orders_qs.filter(**{f"{date_field}__date__gte": date_from})
-    if date_to:
-        orders_qs = orders_qs.filter(**{f"{date_field}__date__lte": date_to})
-
-    # Pagination
-    paginator = Paginator(orders_qs.order_by('-id'), 20)  # show latest first
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-
-    context = {
-        'page_obj': page_obj,
-        'search_query': search_query,
-        'status_filter': status_filter,
-        'date_from': date_from,
-        'date_to': date_to,
-        'status_choices': SaleModel.Status.choices,
-        'staff_filter': staff_filter,
-        'staff_list': StaffModel.objects.filter(
-            status='active',
-            salemodel__isnull=False  # Has at least one sale
-        ).distinct().order_by('first_name', 'last_name'),
-    }
-
-    return render(request, 'inventory/sales/index.html', context)
 
 
 @login_required
@@ -2970,3 +2889,390 @@ def generate_inventory_pdf(context, from_date, to_date, location_filter):
         from django.shortcuts import redirect
         messages.error(context.request, 'PDF generation is not available. Please contact administrator.')
         return redirect('inventory_level_report')
+
+
+@login_required
+@permission_required("inventory.view_salemodel", raise_exception=True)
+def view_orders(request):
+    # Get search parameters
+    search_query = request.GET.get('search', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    staff_filter = request.GET.get('staff', '').strip()
+
+    # Base queryset: include related customer + created_by for fewer queries
+    orders_qs = SaleModel.objects.select_related('customer', 'staff_customer', 'created_by').all()
+
+    # --- Determine related accessor name for sale items dynamically ---
+    related_accessor = None
+    for rel in SaleModel._meta.related_objects:
+        try:
+            rel_model = rel.related_model
+        except AttributeError:
+            continue
+        field_names = {f.name for f in rel_model._meta.get_fields()}
+        if {'quantity', 'unit_price'}.issubset(field_names):
+            related_accessor = rel.get_accessor_name()
+            break
+
+    if not related_accessor:
+        related_accessor = 'items'
+
+    qty_field = f"{related_accessor}__quantity"
+    price_field = f"{related_accessor}__unit_price"
+
+    # Annotate totals
+    try:
+        line_expr = ExpressionWrapper(F(qty_field) * F(price_field), output_field=DecimalField())
+        orders_qs = orders_qs.annotate(
+            line_total=Sum(line_expr),
+            total_quantity=Sum(qty_field)
+        )
+    except Exception:
+        orders_qs = orders_qs.annotate(total_quantity=Sum(qty_field))
+
+    # Apply filters
+    if search_query:
+        orders_qs = orders_qs.filter(
+            Q(transaction_id__icontains=search_query) |
+            Q(customer__first_name__icontains=search_query) |
+            Q(customer__last_name__icontains=search_query) |
+            Q(customer__registration_number__icontains=search_query) |
+            Q(staff_customer__first_name__icontains=search_query) |
+            Q(staff_customer__last_name__icontains=search_query) |
+            Q(staff_customer__staff_id__icontains=search_query)
+        )
+
+    if status_filter:
+        orders_qs = orders_qs.filter(status=status_filter)
+
+    if staff_filter:
+        orders_qs = orders_qs.filter(created_by_id=staff_filter)
+
+    date_field = 'sale_date' if 'sale_date' in {f.name for f in SaleModel._meta.get_fields()} else 'created_at'
+
+    if date_from:
+        orders_qs = orders_qs.filter(**{f"{date_field}__date__gte": date_from})
+    if date_to:
+        orders_qs = orders_qs.filter(**{f"{date_field}__date__lte": date_to})
+
+    # Handle downloads
+    if 'download' in request.GET:
+        download_format = request.GET.get('download')
+        include_details = request.GET.get('include_details') == 'on'
+
+        if download_format == 'excel':
+            return download_orders_excel(orders_qs, include_details, related_accessor)
+        elif download_format == 'pdf':
+            return download_orders_pdf(orders_qs, include_details, related_accessor)
+
+    # Pagination
+    paginator = Paginator(orders_qs.order_by('-id'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'page_obj': page_obj,
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+        'status_choices': SaleModel.Status.choices,
+        'staff_filter': staff_filter,
+        'staff_list': StaffModel.objects.filter(
+            status='active',
+            salemodel__isnull=False
+        ).distinct().order_by('first_name', 'last_name'),
+    }
+
+    return render(request, 'inventory/sales/index.html', context)
+
+
+def download_orders_excel(orders_qs, include_details, related_accessor):
+    """Generate Excel file of orders"""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Orders Report"
+
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    border_side = Side(style='thin', color='000000')
+    border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+
+    center_align = Alignment(horizontal="center", vertical="center")
+    right_align = Alignment(horizontal="right", vertical="center")
+
+    # Headers
+    headers = ['Transaction ID', 'Date', 'Customer Type', 'Customer Name', 'Customer ID',
+               'Total (₦)', 'Status', 'Processed By']
+
+    if include_details:
+        headers.append('Items Details')
+
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = border
+
+    # Column widths
+    ws.column_dimensions['A'].width = 30  # Transaction ID
+    ws.column_dimensions['B'].width = 18  # Date
+    ws.column_dimensions['C'].width = 15  # Customer Type
+    ws.column_dimensions['D'].width = 25  # Customer Name
+    ws.column_dimensions['E'].width = 18  # Customer ID
+    ws.column_dimensions['F'].width = 15  # Total
+    ws.column_dimensions['G'].width = 12  # Status
+    ws.column_dimensions['H'].width = 20  # Processed By
+    if include_details:
+        ws.column_dimensions['I'].width = 50  # Items Details
+
+    # Data rows
+    for row_num, order in enumerate(orders_qs, 2):
+        # Transaction ID
+        cell = ws.cell(row=row_num, column=1, value=order.transaction_id)
+        cell.border = border
+        cell.alignment = center_align
+
+        # Date
+        sale_date = getattr(order, 'sale_date', getattr(order, 'created_at', None))
+        date_str = sale_date.strftime("%b %d, %Y %H:%M") if sale_date else ""
+        cell = ws.cell(row=row_num, column=2, value=date_str)
+        cell.border = border
+        cell.alignment = center_align
+
+        # Customer Type and Info
+        if order.customer:
+            customer_type = "Student"
+            customer_name = f"{order.customer.first_name} {order.customer.last_name}"
+            customer_id = order.customer.registration_number
+        elif order.staff_customer:
+            customer_type = "Staff"
+            customer_name = f"{order.staff_customer.first_name} {order.staff_customer.last_name}"
+            customer_id = order.staff_customer.staff_id
+        else:
+            customer_type = "Walk-in"
+            customer_name = "Walk-in Customer"
+            customer_id = "N/A"
+
+        cell = ws.cell(row=row_num, column=3, value=customer_type)
+        cell.border = border
+        cell.alignment = center_align
+
+        cell = ws.cell(row=row_num, column=4, value=customer_name)
+        cell.border = border
+
+        cell = ws.cell(row=row_num, column=5, value=customer_id)
+        cell.border = border
+        cell.alignment = center_align
+
+        # Total Amount
+        cell = ws.cell(row=row_num, column=6, value=float(order.total_amount))
+        cell.number_format = '#,##0.00'
+        cell.border = border
+        cell.alignment = right_align
+
+        # Status
+        cell = ws.cell(row=row_num, column=7, value=order.get_status_display())
+        cell.border = border
+        cell.alignment = center_align
+
+        # Processed By
+        processed_by = f"{order.created_by.first_name} {order.created_by.last_name}" if order.created_by else ""
+        cell = ws.cell(row=row_num, column=8, value=processed_by)
+        cell.border = border
+
+        # Items Details (if included)
+        if include_details:
+            items = getattr(order, related_accessor).all()
+            items_text = ", ".join([
+                f"{item.item.name} ({int(item.quantity)})"
+                for item in items
+            ])
+            cell = ws.cell(row=row_num, column=9, value=items_text)
+            cell.border = border
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    # Freeze top row
+    ws.freeze_panes = 'A2'
+
+    # Save to BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    # Create response
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"orders_report_{timestamp}.xlsx"
+
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response
+
+
+def download_orders_pdf(orders_qs, include_details, related_accessor):
+    """Generate PDF file of orders"""
+    buffer = BytesIO()
+
+    # Use landscape for better layout
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30
+    )
+
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Title
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#366092'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+
+    title = Paragraph("Orders Report", title_style)
+    elements.append(title)
+
+    # Generation info
+    info_style = ParagraphStyle(
+        'Info',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+
+    generation_date = datetime.now().strftime("%B %d, %Y at %H:%M")
+    info = Paragraph(f"Generated on {generation_date}", info_style)
+    elements.append(info)
+    elements.append(Spacer(1, 20))
+
+    # Prepare table data
+    if include_details:
+        headers = ['Transaction ID', 'Date', 'Customer', 'Total (₦)', 'Status', 'Items']
+        col_widths = [2.0 * inch, 1.2 * inch, 1.8 * inch, 0.9 * inch, 0.9 * inch, 3 * inch]
+    else:
+        headers = ['Transaction ID', 'Date', 'Customer', 'Total (₦)', 'Status', 'Processed By']
+        col_widths = [1.2 * inch, 1.2 * inch, 2 * inch, 1 * inch, 1 * inch, 1.6 * inch]
+
+    data = [headers]
+
+    # Add data rows
+    for order in orders_qs:
+        sale_date = getattr(order, 'sale_date', getattr(order, 'created_at', None))
+        date_str = sale_date.strftime("%b %d, %Y") if sale_date else ""
+
+        # Customer info
+        if order.customer:
+            customer_str = f"{order.customer.first_name} {order.customer.last_name}\n(Student)"
+        elif order.staff_customer:
+            customer_str = f"{order.staff_customer.first_name} {order.staff_customer.last_name}\n(Staff)"
+        else:
+            customer_str = "Walk-in"
+
+        row = [
+            order.transaction_id,
+            date_str,
+            customer_str,
+            f"₦{order.total_amount:,.2f}",
+            order.get_status_display(),
+        ]
+
+        if include_details:
+            items = getattr(order, related_accessor).all()
+            items_str = "\n".join([
+                f"{item.item.name} ({int(item.quantity)})"
+                for item in items[:5]  # Limit to first 5 items for space
+            ])
+            if items.count() > 5:
+                items_str += f"\n... +{items.count() - 5} more"
+            row.append(items_str)
+        else:
+            processed_by = f"{order.created_by.first_name} {order.created_by.last_name}" if order.created_by else ""
+            row.append(processed_by)
+
+        data.append(row)
+
+    # Create table
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+
+    # Table styling
+    table_style = TableStyle([
+        # Header style
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#366092')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 0), (-1, 0), 12),
+
+        # Body style
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ALIGN', (0, 1), (0, -1), 'LEFT'),  # Transaction ID
+        ('ALIGN', (1, 1), (1, -1), 'CENTER'),  # Date
+        ('ALIGN', (2, 1), (2, -1), 'LEFT'),  # Customer
+        ('ALIGN', (3, 1), (3, -1), 'RIGHT'),  # Total
+        ('ALIGN', (4, 1), (4, -1), 'CENTER'),  # Status
+        ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+
+        # Grid
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+
+        # Padding
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+    ])
+
+    table.setStyle(table_style)
+    elements.append(table)
+
+    # Footer
+    elements.append(Spacer(1, 20))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+    footer_text = f"Total Orders: {orders_qs.count()}"
+    footer = Paragraph(footer_text, footer_style)
+    elements.append(footer)
+
+    # Build PDF
+    doc.build(elements)
+
+    # Get the PDF data
+    buffer.seek(0)
+
+    # Create response
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"orders_report_{timestamp}.pdf"
+
+    response = HttpResponse(buffer.read(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response

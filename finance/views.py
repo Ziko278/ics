@@ -3,7 +3,8 @@ import json
 import traceback
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-
+from reportlab.lib.pagesizes import landscape, A4
+from io import BytesIO
 import openpyxl
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -35,7 +36,8 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import json
-
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl import Workbook
 from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ActivityLogModel, \
     SchoolInfoModel
 from admin_site.views import FlashFormErrorsMixin
@@ -726,7 +728,7 @@ class InvoiceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
             'student__first_name',
             '-issue_date'
         )
-    
+
     def get_context_data(self, **kwargs):
         """
         This method adds the necessary data for the filter dropdowns and
@@ -2318,6 +2320,8 @@ def deposit_payment_list_view(request):
     session_id = request.GET.get('session', None)
     term_id = request.GET.get('term', None)
     search_query = request.GET.get('search', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
     page = request.GET.get('page', 1)
 
     school_setting = SchoolSettingModel.objects.first()
@@ -2332,17 +2336,27 @@ def deposit_payment_list_view(request):
     session_list = SessionModel.objects.all()
     term_list = TermModel.objects.all()
 
-    # Base queryset
     queryset = StudentFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
 
-    # Apply search filter if search query is provided
     if search_query:
         queryset = queryset.filter(
             Q(student__first_name__icontains=search_query) |
             Q(student__last_name__icontains=search_query)
         )
 
-    # Apply pagination
+    if date_from:
+        queryset = queryset.filter(created_at__date__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(created_at__date__lte=date_to)
+
+    # Handle downloads
+    if 'download' in request.GET:
+        download_format = request.GET.get('download')
+        if download_format == 'excel':
+            return download_funding_excel(queryset, session, term)
+        elif download_format == 'pdf':
+            return download_funding_pdf(queryset, session, term)
+
     paginator = Paginator(queryset, 50)
     try:
         fee_payment_list = paginator.page(page)
@@ -2357,9 +2371,216 @@ def deposit_payment_list_view(request):
         'current_term': term,
         'session_list': session_list,
         'term_list': term_list,
-        'search_query': search_query  # Pass search query to template
+        'search_query': search_query,
+        'date_from': date_from,
+        'date_to': date_to,
     }
     return render(request, 'finance/funding/index.html', context)
+
+
+def download_funding_excel(queryset, session, term):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Student Funding"
+
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    border_side = Side(style='thin', color='000000')
+    border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+
+    center_align = Alignment(horizontal="center", vertical="center")
+    right_align = Alignment(horizontal="right", vertical="center")
+
+    headers = ['Student', 'Class', 'Amount Paid (₦)', 'Date', 'Method', 'Status']
+
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = border
+
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 18
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 20
+    ws.column_dimensions['F'].width = 12
+
+    for row_num, payment in enumerate(queryset, 2):
+        cell = ws.cell(row=row_num, column=1, value=f"{payment.student.first_name} {payment.student.last_name}")
+        cell.border = border
+
+        student_class = ""
+        if payment.student.student_class:
+            student_class = f"{payment.student.student_class} {payment.student.class_section or ''}"
+        cell = ws.cell(row=row_num, column=2, value=student_class)
+        cell.border = border
+        cell.alignment = center_align
+
+        cell = ws.cell(row=row_num, column=3, value=float(payment.amount))
+        cell.number_format = '#,##0.00'
+        cell.border = border
+        cell.alignment = right_align
+
+        date_str = payment.created_at.strftime("%b %d, %Y") if payment.created_at else ""
+        cell = ws.cell(row=row_num, column=4, value=date_str)
+        cell.border = border
+        cell.alignment = center_align
+
+        method = payment.mode
+        if payment.method:
+            method += f" ({payment.method})"
+        cell = ws.cell(row=row_num, column=5, value=method)
+        cell.border = border
+
+        cell = ws.cell(row=row_num, column=6, value=payment.status.title())
+        cell.border = border
+        cell.alignment = center_align
+
+    ws.freeze_panes = 'A2'
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"student_funding_{session.__str__()}_{term.name}_{timestamp}.xlsx"
+
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response
+
+
+def download_funding_pdf(queryset, session, term):
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30
+    )
+
+    elements = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#366092'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+
+    title = Paragraph(f"Student Wallet Funding - {session.__str__()} - {term.name}", title_style)
+    elements.append(title)
+
+    info_style = ParagraphStyle(
+        'Info',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+
+    generation_date = datetime.now().strftime("%B %d, %Y at %H:%M")
+    info = Paragraph(f"Generated on {generation_date}", info_style)
+    elements.append(info)
+    elements.append(Spacer(1, 20))
+
+    headers = ['Student', 'Class', 'Amount (₦)', 'Date', 'Method', 'Status']
+    col_widths = [2 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch, 1.5 * inch, 1 * inch]
+
+    data = [headers]
+
+    for payment in queryset:
+        student_name = f"{payment.student.first_name} {payment.student.last_name}"
+
+        student_class = ""
+        if payment.student.student_class:
+            student_class = f"{payment.student.student_class} {payment.student.class_section or ''}"
+
+        date_str = payment.created_at.strftime("%b %d, %Y") if payment.created_at else ""
+
+        method = payment.mode
+        if payment.method:
+            method += f"\n({payment.method})"
+
+        row = [
+            student_name,
+            student_class,
+            f"₦{payment.amount:,.2f}",
+            date_str,
+            method,
+            payment.status.title(),
+        ]
+
+        data.append(row)
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#366092')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+        ('ALIGN', (1, 1), (1, -1), 'CENTER'),
+        ('ALIGN', (3, 1), (3, -1), 'CENTER'),
+        ('ALIGN', (5, 1), (5, -1), 'CENTER'),
+        ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+    ])
+
+    table.setStyle(table_style)
+    elements.append(table)
+
+    elements.append(Spacer(1, 20))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+
+    total_amount = sum(p.amount for p in queryset)
+    footer_text = f"Total Records: {queryset.count()} | Total Amount: ₦{total_amount:,.2f}"
+    footer = Paragraph(footer_text, footer_style)
+    elements.append(footer)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"student_funding_{session.__str__()}_{term.name}_{timestamp}.pdf"
+
+    response = HttpResponse(buffer.read(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response
 
 
 @login_required
@@ -8897,3 +9118,323 @@ def download_bank_payment_excel(request):
 
     wb.save(response)
     return response
+
+
+@login_required
+def staff_monthly_payroll_view(request):
+    """
+    View for staff to see their own monthly payroll
+    """
+    today = datetime.now()
+    selected_year = int(request.GET.get('year', today.year))
+    selected_month = int(request.GET.get('month', today.month))
+
+    # Check if user has a staff profile
+    try:
+        staff_member = request.user.staff_profile.staff
+    except (StaffProfileModel.DoesNotExist, AttributeError):
+        messages.warning(request, "Your user account is not linked to a staff profile.")
+        return render(request, 'finance/payroll/staff_monthly.html', {
+            'page_title': 'My Monthly Payroll',
+            'no_profile': True,
+            'years': range(2020, today.year + 2),
+            'months': [(i, calendar.month_name[i]) for i in range(1, 13)],
+            'selected_year': selected_year,
+            'selected_month': selected_month,
+        })
+
+    # Check if staff has an active salary structure
+    try:
+        structure = SalaryStructure.objects.get(staff=staff_member, is_active=True)
+    except SalaryStructure.DoesNotExist:
+        messages.warning(request, "You do not have an active salary structure configured yet.")
+        return render(request, 'finance/staff_payroll/monthly.html', {
+            'page_title': 'My Monthly Payroll',
+            'no_structure': True,
+            'years': range(2020, today.year + 2),
+            'months': [(i, calendar.month_name[i]) for i in range(1, 13)],
+            'selected_year': selected_year,
+            'selected_month': selected_month,
+        })
+
+    # Try to get the salary record for the selected month
+    try:
+        record = SalaryRecord.objects.select_related(
+            'staff__staff_profile__user',
+            'salary_structure',
+            'salary_setting'
+        ).get(
+            staff=staff_member,
+            year=selected_year,
+            month=selected_month
+        )
+
+        # Build context similar to salary_record_detail_view
+        context = {
+            'record': record,
+            'structure': structure,
+            'page_title': f'My Payslip - {calendar.month_name[selected_month]} {selected_year}',
+            'years': range(2020, today.year + 2),
+            'months': [(i, calendar.month_name[i]) for i in range(1, 13)],
+            'selected_year': selected_year,
+            'selected_month': selected_month,
+            'has_record': True,
+        }
+
+    except SalaryRecord.DoesNotExist:
+        messages.info(
+            request,
+            f"No payroll record found for {calendar.month_name[selected_month]} {selected_year}. "
+            "Please check with HR or select a different period."
+        )
+        context = {
+            'structure': structure,
+            'page_title': 'My Monthly Payroll',
+            'years': range(2020, today.year + 2),
+            'months': [(i, calendar.month_name[i]) for i in range(1, 13)],
+            'selected_year': selected_year,
+            'selected_month': selected_month,
+            'has_record': False,
+        }
+
+    return render(request, 'finance/staff_payroll/monthly.html', context)
+
+
+@login_required
+def staff_annual_payroll_view(request):
+    """
+    View for staff to see their own annual payroll
+    """
+    today = datetime.now()
+    selected_year = int(request.GET.get('year', today.year))
+
+    # Check if user has a staff profile
+    try:
+        staff_member = request.user.staff_profile.staff
+    except (StaffProfileModel.DoesNotExist, AttributeError):
+        messages.warning(request, "Your user account is not linked to a staff profile.")
+        return render(request, 'finance/payroll/staff_annual.html', {
+            'page_title': 'My Annual Payroll',
+            'no_profile': True,
+            'years': range(2020, today.year + 2),
+            'selected_year': selected_year,
+        })
+
+    # Check if staff has an active salary structure
+    try:
+        structure = SalaryStructure.objects.select_related(
+            'staff__staff_profile__user',
+            'salary_setting',
+            'staff__department'
+        ).get(staff=staff_member, is_active=True)
+    except SalaryStructure.DoesNotExist:
+        messages.warning(request, "You do not have an active salary structure configured yet.")
+        return render(request, 'finance/staff_payroll/annual.html', {
+            'page_title': 'My Annual Payroll',
+            'no_structure': True,
+            'years': range(2020, today.year + 2),
+            'selected_year': selected_year,
+        })
+
+    # Get all salary records for this staff for the selected year
+    records = SalaryRecord.objects.filter(
+        staff=staff_member,
+        year=selected_year
+    ).order_by('month')
+
+    if not records.exists():
+        messages.info(
+            request,
+            f"No payroll records found for {selected_year}. "
+            "Please check with HR or select a different year."
+        )
+        return render(request, 'finance/staff_payroll/annual.html', {
+            'structure': structure,
+            'page_title': 'My Annual Payroll',
+            'years': range(2020, today.year + 2),
+            'selected_year': selected_year,
+            'has_records': False,
+        })
+
+    # Calculate annual data (reuse logic from annual_payroll_detail_view)
+    import json
+    from decimal import Decimal
+
+    def parse_json_field(field):
+        if field and isinstance(field, str):
+            try:
+                return json.loads(field)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return field or {}
+
+    annual_data = {
+        'months_covered': [],
+        'months_count': 0,
+        'total_gross_income': 0,
+        'total_basic_salary': 0,
+        'total_allowances': 0,
+        'total_bonus': 0,
+        'total_additional_income': 0,
+        'total_statutory_deductions': 0,
+        'total_other_deductions': 0,
+        'total_paye': 0,
+        'total_other_taxes': 0,
+        'total_net_salary': 0,
+        'basic_components_breakdown': {},
+        'allowances_breakdown': {},
+        'statutory_breakdown': {},
+        'other_deductions_breakdown': {},
+    }
+
+    for record in records:
+        # Track months
+        annual_data['months_covered'].append(calendar.month_name[record.month])
+        annual_data['months_count'] += 1
+
+        # Aggregate totals
+        annual_data['total_gross_income'] += float(record.gross_salary)
+        annual_data['total_bonus'] += float(record.bonus)
+        annual_data['total_paye'] += float(record.monthly_tax)
+        annual_data['total_other_taxes'] += float(record.other_taxes)
+        annual_data['total_net_salary'] += float(record.net_salary)
+
+        # Parse and aggregate additional income
+        additional_income = parse_json_field(record.additional_income)
+        for key, value in additional_income.items():
+            annual_data['total_additional_income'] += float(value or 0)
+
+        # Parse and aggregate other deductions
+        other_deductions = parse_json_field(record.other_deductions)
+        for key, value in other_deductions.items():
+            deduction_amount = float(value or 0)
+            annual_data['total_other_deductions'] += deduction_amount
+
+            # Track breakdown
+            if key not in annual_data['other_deductions_breakdown']:
+                annual_data['other_deductions_breakdown'][key] = 0
+            annual_data['other_deductions_breakdown'][key] += deduction_amount
+
+        # Recalculate using calculator to get component breakdowns
+        calculator = SalaryCalculator(structure, record.month, record.year)
+        salary_data = calculator.calculate_complete_salary(
+            bonus=record.bonus,
+            custom_deductions=other_deductions,
+            additional_income=additional_income
+        )
+
+        # Aggregate basic components
+        basic_components = salary_data.get('basic_components_breakdown', {})
+        for code, component in basic_components.items():
+            if isinstance(component, dict):
+                if code not in annual_data['basic_components_breakdown']:
+                    annual_data['basic_components_breakdown'][code] = {
+                        'name': component.get('name', code),
+                        'amount': 0
+                    }
+                annual_data['basic_components_breakdown'][code]['amount'] += float(component.get('amount', 0))
+
+        # Aggregate allowances
+        allowances = salary_data.get('allowances_breakdown', {})
+        for allowance_name, allowance_data in allowances.items():
+            if isinstance(allowance_data, dict):
+                amount = float(allowance_data.get('amount', 0))
+                if allowance_name not in annual_data['allowances_breakdown']:
+                    annual_data['allowances_breakdown'][allowance_name] = 0
+                annual_data['allowances_breakdown'][allowance_name] += amount
+
+        # Aggregate statutory deductions
+        statutory_deductions = salary_data.get('statutory_deductions', {})
+        for name, deduction in statutory_deductions.items():
+            if isinstance(deduction, dict):
+                amount = float(deduction.get('amount', 0))
+                if name not in annual_data['statutory_breakdown']:
+                    annual_data['statutory_breakdown'][name] = 0
+                annual_data['statutory_breakdown'][name] += amount
+                annual_data['total_statutory_deductions'] += amount
+
+    # Calculate total allowances from breakdown
+    annual_data['total_allowances'] = sum(annual_data['allowances_breakdown'].values())
+
+    # Calculate total basic salary from breakdown
+    annual_data['total_basic_salary'] = sum(
+        comp['amount'] for comp in annual_data['basic_components_breakdown'].values()
+    )
+
+    context = {
+        'structure': structure,
+        'selected_year': selected_year,
+        'annual_data': annual_data,
+        'years': range(2020, today.year + 2),
+        'page_title': f'My Annual Payroll - {selected_year}',
+        'has_records': True,
+    }
+
+    return render(request, 'finance/staff_payroll/annual.html', context)
+
+
+@login_required
+def staff_bonus_list_view(request):
+    """
+    View for staff to see their own bonuses
+    """
+    # Check if user has a staff profile
+    try:
+        staff_member = request.user.staff_profile.staff
+    except (StaffProfileModel.DoesNotExist, AttributeError):
+        messages.warning(request, "Your user account is not linked to a staff profile.")
+        return render(request, 'finance/bonus/staff_bonus_list.html', {
+            'page_title': 'My Bonuses',
+            'no_profile': True,
+        })
+
+    # Get all bonuses for this staff member
+    bonuses = Bonus.objects.filter(
+        type='staff',
+        staff=staff_member
+    ).order_by('-year', '-month')
+
+    # Calculate summary
+    from django.db.models import Sum
+    total_amount = bonuses.aggregate(total=Sum('amount'))['total'] or 0
+    paid_amount = bonuses.filter(status='paid').aggregate(total=Sum('amount'))['total'] or 0
+    unpaid_amount = bonuses.filter(status='unpaid').aggregate(total=Sum('amount'))['total'] or 0
+
+    context = {
+        'bonuses': bonuses,
+        'page_title': 'My Bonuses',
+        'total_amount': total_amount,
+        'paid_amount': paid_amount,
+        'unpaid_amount': unpaid_amount,
+        'has_profile': True,
+    }
+
+    return render(request, 'finance/bonus/staff_bonus_list.html', context)
+
+
+@login_required
+def staff_bonus_detail_view(request, pk):
+    """
+    View for staff to see details of their own bonus
+    """
+    # Check if user has a staff profile
+    try:
+        staff_member = request.user.staff_profile.staff
+    except (StaffProfileModel.DoesNotExist, AttributeError):
+        messages.warning(request, "Your user account is not linked to a staff profile.")
+        return redirect('staff_bonus_list')
+
+    # Get the bonus and ensure it belongs to this staff member
+    bonus = get_object_or_404(
+        Bonus,
+        pk=pk,
+        type='staff',
+        staff=staff_member
+    )
+
+    context = {
+        'bonus': bonus,
+        'page_title': f'Bonus Details - {bonus.get_category_display()}',
+    }
+
+    return render(request, 'finance/bonus/staff_bonus_detail.html', context)

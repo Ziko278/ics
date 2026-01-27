@@ -248,4 +248,12 @@ urlpatterns = [
     path('bonus/report/', bonus_report_view, name='finance_bonus_report'),
     path('bonus/report/pdf/', bonus_report_pdf_view, name='finance_bonus_report_pdf'),
     path('bonus/staff-search/', staff_search_view, name='finance_bonus_staff_search'),
+
+    # Staff Payroll URLs
+    path('staff/my-payroll/monthly/', staff_monthly_payroll_view, name='staff_monthly_payroll'),
+    path('staff/my-payroll/annual/', staff_annual_payroll_view, name='staff_annual_payroll'),
+
+    # Staff Bonus URLs
+    path('staff/my-bonuses/', staff_bonus_list_view, name='staff_bonus_list'),
+    path('staff/my-bonuses/<int:pk>/', staff_bonus_detail_view, name='staff_bonus_detail'),
 ]

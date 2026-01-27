@@ -1,0 +1,98 @@
+{% extends 'admin_site/layout.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block 'main' %}
+<div class="col-lg-12 grid-margin stretch-card">
+  <div class="card">
+    <div class="card-body">
+      <h4 class="card-title">{{ page_title }}</h4>
+
+      {% if no_profile %}
+      <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        Your user account is not linked to a staff profile. Please contact HR.
+      </div>
+      {% else %}
+      <!-- Summary Cards -->
+      <div class="row mb-4">
+        <div class="col-md-3">
+          <div class="card bg-primary text-white">
+            <div class="card-body">
+              <h5 class="card-title">Total Amount</h5>
+              <h3>₦{{ total_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-success text-white">
+            <div class="card-body">
+              <h5 class="card-title">Paid Amount</h5>
+              <h3>₦{{ paid_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-warning text-white">
+            <div class="card-body">
+              <h5 class="card-title">Unpaid Amount</h5>
+              <h3>₦{{ unpaid_amount|floatformat:2|intcomma }}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-info text-white">
+            <div class="card-body">
+              <h5 class="card-title">Total Count</h5>
+              <h3>{{ bonuses|length }}</h3>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bonus List -->
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Amount</th>
+              <th>Period</th>
+              <th>Due Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for bonus in bonuses %}
+            <tr>
+              <td>{{ bonus.get_category_display }}</td>
+              <td>₦{{ bonus.amount|floatformat:2|intcomma }}</td>
+              <td>{{ bonus.month }}/{{ bonus.year }}</td>
+              <td>{{ bonus.due_date|date:"M d, Y" }}</td>
+              <td>
+                {% if bonus.status == 'paid' %}
+                  <span class="badge bg-success">Paid</span>
+                {% else %}
+                  <span class="badge bg-warning">Unpaid</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{% url 'staff_bonus_detail' bonus.pk %}" class="btn btn-sm btn-primary">
+                  <i class="bi bi-eye"></i> View Details
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" class="text-center">No bonuses found.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
