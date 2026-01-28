@@ -110,4 +110,31 @@
         </div>
     </div>
 </div>
+
+<!-- After form fields -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const paymentModeSelect = document.querySelector('select[name="payment_mode"]');
+    const amountInput = document.querySelector('input[name="amount"]');
+    const bankAccountField = document.querySelector('select[name="bank_account"]');
+    const walletBalance = {{ student.student_wallet.fee_balance|default:0 }};
+    const totalBalance = {{ total_balance }};
+
+    if (paymentModeSelect && amountInput) {
+        paymentModeSelect.addEventListener('change', function() {
+            if (this.value === 'wallet') {
+                amountInput.max = Math.min(walletBalance, totalBalance);
+                amountInput.placeholder = `Max: ₦${Math.min(walletBalance, totalBalance).toLocaleString()}`;
+                bankAccountField.required = false;
+                bankAccountField.closest('.col-md-6').style.display = 'none';
+            } else {
+                amountInput.max = totalBalance;
+                amountInput.placeholder = '';
+                bankAccountField.required = true;
+                bankAccountField.closest('.col-md-6').style.display = 'block';
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

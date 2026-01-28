@@ -1009,6 +1009,16 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
             return redirect('finance_student_dashboard', pk=student.pk)
 
         if payment_form.is_valid():
+            payment_mode = payment_form.cleaned_data['payment_mode']
+
+            # Validate wallet if payment mode is wallet
+            if payment_mode == 'wallet':
+                wallet = getattr(student, 'student_wallet', None)
+                if not wallet or wallet.fee_balance < total_paid_in_transaction:
+                    messages.error(request,
+                                   f"Insufficient fee wallet balance. Available: ₦{wallet.fee_balance if wallet else 0:,.2f}")
+                    return redirect('finance_student_dashboard', pk=student.pk)
+
             try:
                 with transaction.atomic():
                     # First, apply the payments to the individual items
@@ -1058,6 +1068,11 @@ class StudentFinancialDashboardView(LoginRequiredMixin, PermissionRequiredMixin,
                         confirmed_by=request.user,
                         item_breakdown=item_breakdown  # NEW: Save the breakdown
                     )
+
+                    if payment_mode == 'wallet':
+                        wallet = StudentWalletModel.objects.select_for_update().get(student=student)
+                        wallet.fee_balance -= total_paid_in_transaction
+                        wallet.save(update_fields=['fee_balance'])
 
                     # Finally, update the parent invoice's status
                     invoice.refresh_from_db()
@@ -1239,12 +1254,29 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
     def form_valid(self, form):
         student = get_object_or_404(StudentModel, pk=self.kwargs['pk'])
         total_amount_paid = form.cleaned_data['amount']
+        payment_mode = form.cleaned_data['payment_mode']
         amount_to_allocate = total_amount_paid
 
-        # Get all unpaid or partially paid invoices, oldest first, to pay them off in order.
+        # Get all unpaid or partially paid invoices, oldest first
         outstanding_invoices = student.invoices.exclude(status=InvoiceModel.Status.PAID).order_by('issue_date')
+        total_outstanding = sum(invoice.balance for invoice in outstanding_invoices)
 
         with transaction.atomic():
+            # Handle wallet payment - validate and lock wallet
+            if payment_mode == 'wallet':
+                wallet = StudentWalletModel.objects.select_for_update().get(student=student)
+                if wallet.fee_balance < total_amount_paid:
+                    messages.error(
+                        self.request,
+                        f"Insufficient fee wallet balance. Available: ₦{wallet.fee_balance:,.2f}, Required: ₦{total_amount_paid:,.2f}"
+                    )
+                    return redirect('finance_student_dashboard', pk=student.pk)
+
+            # Track amounts for messaging
+            total_applied_to_fees = Decimal('0.00')
+            invoices_paid_count = 0
+
+            # Allocate to invoices
             for invoice in outstanding_invoices:
                 if amount_to_allocate <= 0:
                     break
@@ -1257,7 +1289,6 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
                     remaining_for_invoice = payment_for_this_invoice
 
                     items_with_balance = [item for item in invoice.items.order_by('id') if item.balance > 0]
-
 
                     # Distribute payment across items in this invoice
                     for item in items_with_balance:
@@ -1296,31 +1327,52 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
                     FeePaymentModel.objects.create(
                         invoice=invoice,
                         amount=payment_for_this_invoice,
-                        payment_mode=form.cleaned_data['payment_mode'],
+                        payment_mode=payment_mode,
                         date=form.cleaned_data['date'],
                         description=form.cleaned_data.get('description', ''),
                         currency=form.cleaned_data['currency'],
-                        bank_account=form.cleaned_data['bank_account'],
+                        bank_account=form.cleaned_data.get('bank_account'),
                         reference=form.cleaned_data.get('reference') or f"bulk-pmt-{invoice.invoice_number}",
                         status=FeePaymentModel.PaymentStatus.CONFIRMED,
                         confirmed_by=self.request.user,
                         item_breakdown=item_breakdown
                     )
 
-                    # Refresh invoice from DB before checking balance again
+                    # Refresh invoice from DB before checking balance
                     invoice.refresh_from_db()
                     if invoice.balance <= Decimal('0.01'):
                         invoice.status = InvoiceModel.Status.PAID
+                        invoices_paid_count += 1
                     else:
                         invoice.status = InvoiceModel.Status.PARTIALLY_PAID
                     invoice.save()
 
+                    total_applied_to_fees += payment_for_this_invoice
                     amount_to_allocate -= payment_for_this_invoice
 
-        messages.success(self.request,
-                         f"Bulk payment of ₦{total_amount_paid:,.2f} allocated successfully across outstanding invoices.")
-        return redirect('finance_student_dashboard', pk=student.pk)
+            # Deduct from wallet if payment mode is wallet
+            if payment_mode == 'wallet':
+                wallet.fee_balance -= total_amount_paid
+                wallet.save(update_fields=['fee_balance'])
 
+            # Handle excess payment - fund fee wallet
+            if amount_to_allocate > 0:
+                wallet_to_fund, _ = StudentWalletModel.objects.get_or_create(student=student)
+                wallet_to_fund.fee_balance += amount_to_allocate  # Fund fee wallet, not canteen
+                wallet_to_fund.save(update_fields=['fee_balance'])
+
+                messages.success(
+                    self.request,
+                    f"Payment processed successfully! ₦{total_applied_to_fees:,.2f} applied to {invoices_paid_count} invoice(s). "
+                    f"Excess amount of ₦{amount_to_allocate:,.2f} has been credited to the student's fee wallet for future use."
+                )
+            else:
+                messages.success(
+                    self.request,
+                    f"Bulk payment of ₦{total_amount_paid:,.2f} allocated successfully across {invoices_paid_count} invoice(s)."
+                )
+
+        return redirect('finance_student_dashboard', pk=student.pk)
 
 @login_required
 @permission_required('finance.change_feepaymentmodel', raise_exception=True)
@@ -2319,6 +2371,7 @@ def deposit_get_class_students_by_reg_number(request):
 def deposit_payment_list_view(request):
     session_id = request.GET.get('session', None)
     term_id = request.GET.get('term', None)
+    wallet_type_filter = request.GET.get('wallet_type', '').strip()
     search_query = request.GET.get('search', '').strip()
     date_from = request.GET.get('date_from', '').strip()
     date_to = request.GET.get('date_to', '').strip()
@@ -2337,6 +2390,9 @@ def deposit_payment_list_view(request):
     term_list = TermModel.objects.all()
 
     queryset = StudentFundingModel.objects.filter(session=session, term=term).exclude(status='pending').order_by('-id')
+
+    if wallet_type_filter:
+        queryset = queryset.filter(wallet_type=wallet_type_filter)
 
     if search_query:
         queryset = queryset.filter(
@@ -2374,6 +2430,7 @@ def deposit_payment_list_view(request):
         'search_query': search_query,
         'date_from': date_from,
         'date_to': date_to,
+        'wallet_type_filter': wallet_type_filter,
     }
     return render(request, 'finance/funding/index.html', context)
 
@@ -2644,6 +2701,7 @@ def deposit_create_view(request, student_pk):
         if form.is_valid():
             deposit = form.save(commit=False)  # Don't save yet, we need to set the student
             deposit.student = student  # Associate the funding with the student
+            wallet_type = deposit.wallet_type
 
             try:
                 profile = StaffProfileModel.objects.get(user=request.user)
@@ -2660,44 +2718,50 @@ def deposit_create_view(request, student_pk):
             messages.success(request, f'Deposit of ₦{amount} successful!')
 
             # Update student wallet
-            student_wallet, created = StudentWalletModel.objects.get_or_create(student=student)  # Get or create wallet
+            student_wallet, created = StudentWalletModel.objects.get_or_create(student=student)
 
-            student_wallet.balance += amount
+            if wallet_type == StudentFundingModel.WalletType.CANTEEN:
+                student_wallet.balance += amount
 
-            if student_wallet.debt > 0:
-                if student_wallet.balance > student_wallet.debt:
-                    student_wallet.balance -= student_wallet.debt
-                    student_wallet.debt = 0
-                else:
-                    student_wallet.debt -= student_wallet.balance
-                    student_wallet.balance = 0
+                if student_wallet.debt > 0:
+                    if student_wallet.balance > student_wallet.debt:
+                        student_wallet.balance -= student_wallet.debt
+                        student_wallet.debt = 0
+                    else:
+                        student_wallet.debt -= student_wallet.balance
+                        student_wallet.balance = 0
+            else:  # FEE wallet
+                student_wallet.fee_balance += amount
 
             student_wallet.save()
 
             deposit.balance = student_wallet.balance - student_wallet.debt
             deposit.save()  # Now save the deposit
 
-            target_timezone = pytz_timezone('Africa/Lagos')
+            try:
+                target_timezone = pytz_timezone('Africa/Lagos')
 
-            localized_created_at = timezone.localtime(deposit.created_at, timezone=target_timezone)
+                localized_created_at = timezone.localtime(deposit.created_at, timezone=target_timezone)
 
-            formatted_time = localized_created_at.strftime(
-                f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
-            )
+                formatted_time = localized_created_at.strftime(
+                    f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
+                )
 
-            log = f"""
-                       <div class='text-white bg-success' style='padding:5px;'>
-                       <p class=''>Student Wallet Funding: <a href={reverse('deposit_detail', kwargs={'pk': deposit.id})}><b>₦{amount}</b></a> deposit to wallet of
-                       <a href={reverse('student_detail', kwargs={'pk': deposit.student.id})}><b>{deposit.student.__str__().title()}</b></a>
-                        by <a href={reverse('staff_detail', kwargs={'pk': deposit.created_by.id})}><b>{deposit.created_by.__str__().title()}</b></a>
-                       <br><span style='float:right'>{formatted_time}</span>
-                       </p>
+                log = f"""
+                           <div class='text-white bg-success' style='padding:5px;'>
+                           <p class=''>Student Wallet Funding: <a href={reverse('deposit_detail', kwargs={'pk': deposit.id})}><b>₦{amount}</b></a> deposit to wallet of
+                           <a href={reverse('student_detail', kwargs={'pk': deposit.student.id})}><b>{deposit.student.__str__().title()}</b></a>
+                            by <a href={reverse('staff_detail', kwargs={'pk': deposit.created_by.id})}><b>{deposit.created_by.__str__().title()}</b></a>
+                           <br><span style='float:right'>{formatted_time}</span>
+                           </p>
+    
+                           </div>
+                           """
 
-                       </div>
-                       """
-
-            activity = ActivityLogModel.objects.create(log=log)
-            activity.save()
+                activity = ActivityLogModel.objects.create(log=log)
+                activity.save()
+            except Exception:
+                pass
 
             return redirect('deposit_detail',
                         pk=deposit.pk)  # Redirect to prevent form resubmission on refresh
@@ -2757,14 +2821,20 @@ def deposit_revert_view(request, pk):
         student_wallet, created = StudentWalletModel.objects.select_for_update().get_or_create(student=student)
 
         refund_amount = funding.amount
-
-        # Check wallet sufficiency
-        if student_wallet.balance < refund_amount:
-            messages.error(request, "Student wallet balance is insufficient to perform this revert.")
-            return redirect('deposit_detail', pk=funding.pk)
+        wallet_type = funding.wallet_type
 
         # Deduct from wallet
-        student_wallet.balance = student_wallet.balance - refund_amount
+        if wallet_type == StudentFundingModel.WalletType.CANTEEN:
+            if student_wallet.balance < refund_amount:
+                messages.error(request, "Student canteen wallet balance is insufficient to perform this revert.")
+                return redirect('deposit_detail', pk=funding.pk)
+            student_wallet.balance -= refund_amount
+        else:  # FEE wallet
+            if student_wallet.fee_balance < refund_amount:
+                messages.error(request, "Student fee wallet balance is insufficient to perform this revert.")
+                return redirect('deposit_detail', pk=funding.pk)
+            student_wallet.fee_balance -= refund_amount
+
         student_wallet.save()
 
         # Mark funding reverted and store reason/who/when
@@ -2824,27 +2894,30 @@ def staff_deposit_create_view(request, staff_pk):
             deposit.balance = staff_wallet.balance
             deposit.save()  # Now save the deposit
 
-            target_timezone = pytz_timezone('Africa/Lagos')
+            try:
+                target_timezone = pytz_timezone('Africa/Lagos')
 
-            localized_created_at = timezone.localtime(deposit.created_at, timezone=target_timezone)
+                localized_created_at = timezone.localtime(deposit.created_at, timezone=target_timezone)
 
-            formatted_time = localized_created_at.strftime(
-                f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
-            )
+                formatted_time = localized_created_at.strftime(
+                    f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
+                )
 
-            log = f"""
-                       <div class='text-white bg-success' style='padding:5px;'>
-                       <p class=''>Staff Wallet Funding: <a href={reverse('staff_deposit_detail', kwargs={'pk': deposit.id})}><b>₦{amount}</b></a> deposit to wallet of
-                       <a href={reverse('staff_detail', kwargs={'pk': deposit.staff.id})}><b>{deposit.staff.__str__().title()}</b></a>
-                        by <a href={reverse('staff_detail', kwargs={'pk': deposit.created_by.id})}><b>{deposit.created_by.__str__().title()}</b></a>
-                       <br><span style='float:right'>{formatted_time}</span>
-                       </p>
+                log = f"""
+                           <div class='text-white bg-success' style='padding:5px;'>
+                           <p class=''>Staff Wallet Funding: <a href={reverse('staff_deposit_detail', kwargs={'pk': deposit.id})}><b>₦{amount}</b></a> deposit to wallet of
+                           <a href={reverse('staff_detail', kwargs={'pk': deposit.staff.id})}><b>{deposit.staff.__str__().title()}</b></a>
+                            by <a href={reverse('staff_detail', kwargs={'pk': deposit.created_by.id})}><b>{deposit.created_by.__str__().title()}</b></a>
+                           <br><span style='float:right'>{formatted_time}</span>
+                           </p>
+    
+                           </div>
+                           """
 
-                       </div>
-                       """
-
-            activity = ActivityLogModel.objects.create(log=log)
-            activity.save()
+                activity = ActivityLogModel.objects.create(log=log)
+                activity.save()
+            except Exception:
+                pass
 
             return redirect('staff_deposit_detail',
                         pk=deposit.pk)  # Redirect to prevent form resubmission on refresh
@@ -3199,21 +3272,22 @@ def confirm_payment_view(request, payment_id):
 
         # Get or create student wallet
         student_wallet, created = StudentWalletModel.objects.get_or_create(student=student)
+        wallet_type = payment.wallet_type
 
-        # Apply the payment amount to the wallet balance
-        # Keeping calculations as float as per original deposit_create_view
-        student_wallet.balance += payment.amount
+        if wallet_type == StudentFundingModel.WalletType.CANTEEN:
+            student_wallet.balance += payment.amount
 
-        # Apply debt reduction logic
-        if student_wallet.debt > 0:
-            if student_wallet.balance > student_wallet.debt:
-                student_wallet.balance -= student_wallet.debt
-                student_wallet.debt = 0.0 # Use 0.0 for float consistency
-            else:
-                student_wallet.debt -= student_wallet.balance
-                student_wallet.balance = 0.0 # Use 0.0 for float consistency
+            if student_wallet.debt > 0:
+                if student_wallet.balance > student_wallet.debt:
+                    student_wallet.balance -= student_wallet.debt
+                    student_wallet.debt = 0.0
+                else:
+                    student_wallet.debt -= student_wallet.balance
+                    student_wallet.balance = 0.0
+        else:  # FEE wallet
+            student_wallet.fee_balance += payment.amount
 
-        student_wallet.save() # Save the updated wallet
+        student_wallet.save()
 
         # Update the payment status and its internal balance field
         payment.status = 'confirmed'

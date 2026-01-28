@@ -125,7 +125,14 @@ class StudentFundingModel(models.Model):
         FAILED = 'failed', 'Failed'
         REVERTED = 'reverted', 'Reverted'
 
+    class WalletType(models.TextChoices):
+        CANTEEN = 'canteen', 'Canteen Wallet'
+        FEE = 'fee', 'Fee Wallet'
+
     student = models.ForeignKey(StudentModel, on_delete=models.CASCADE, related_name='funding_list')
+    wallet_type = models.CharField(max_length=20, choices=WalletType.choices,
+        default=WalletType.CANTEEN, help_text="Which wallet this funding is for"
+    )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     proof_of_payment = models.FileField(blank=True, null=True, upload_to='images/funding')
     method = models.CharField(max_length=100, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
@@ -492,6 +499,7 @@ class FeePaymentModel(models.Model):
         BANK_TRANSFER = 'bank_transfer', 'Bank Transfer'
         BANK_TELLER = 'bank_teller', 'Bank Teller'
         POS = 'pos', 'POS'
+        WALLET = 'wallet', 'Fee Wallet'
         DOLLAR_PAY = 'dollar_pay', 'Dollar Pay'
         OTHERS = 'others', 'OTHERS'
 

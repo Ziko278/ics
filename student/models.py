@@ -245,6 +245,7 @@ class StudentWalletModel(models.Model):
     # Use DecimalField for financial accuracy
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     debt = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    fee_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     def __str__(self):
         return f"{self.student}'s Wallet"

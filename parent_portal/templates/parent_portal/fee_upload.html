@@ -84,6 +84,21 @@
                         </div>
                         {% endif %}
 
+                        <!-- After form.target_invoice block and before Payment Type Selection -->
+                        {% if form.wallet_type %}
+                        <div class="col-12">
+                            <label for="{{ form.wallet_type.id_for_label }}" class="form-label">
+                                {{ form.wallet_type.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.wallet_type }}
+                            <small class="text-muted">Select which wallet to fund.</small>
+                            {% if form.wallet_type.errors %}
+                                <div class="text-danger small mt-1">{{ form.wallet_type.errors|striptags }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
                         {# Quick Payment Section #}
                         <div id="quickPaymentSection">
                             <div class="col-md-6">
@@ -155,8 +170,14 @@
             {% if transaction_type == 'wallet' %}
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title"><i class="bi bi-wallet2 me-2 text-primary"></i>Wallet Funding Account</h5>
-                    <p class="small">Please use this account **only** for funding the student's personal wallet.</p>
+                    <h5 class="card-title"><i class="bi bi-wallet2 me-2 text-primary"></i>
+                        {% if transaction_type == 'wallet' %}Wallet Funding Account{% endif %}
+                    </h5>
+                    <p class="small">
+                        {% if transaction_type == 'wallet' %}
+                        Please use this account for funding the student's wallet (canteen or fee wallet).
+                        {% endif %}
+                    </p>
                     {% if funding_account.account_number %}
                         <dl class="row mt-3">
                             <dt class="col-sm-4">Bank</dt>

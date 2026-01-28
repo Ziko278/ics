@@ -30,8 +30,17 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <!-- After the term select -->
+                    <div class="col-2">
+                        <label for="wallet_type">Wallet Type</label>
+                        <select id="wallet_type" name="wallet_type" class="form-control">
+                            <option value="">All Wallets</option>
+                            <option value="canteen" {% if wallet_type_filter == 'canteen' %}selected{% endif %}>Canteen</option>
+                            <option value="fee" {% if wallet_type_filter == 'fee' %}selected{% endif %}>Fee</option>
+                        </select>
+                    </div>
 
-                    <div class="col-3">
+                    <div class="col-2">
                         <label for="search">Search Student</label>
                         <input type="text" id="search" name="search" class="form-control" value="{{ search_query }}" placeholder="Search by name">
                     </div>
@@ -96,6 +105,7 @@
                         <tr>
                             <th scope="col" style="min-width:150px">Student</th>
                             <th scope="col" style="min-width:100px">Class</th>
+                            <th scope="col">Wallet Type</th>
                             <th scope="col">Amount Paid</th>
                             <th scope="col" style="">Date</th>
                             <th scope="col" style="">Method</th>
@@ -108,6 +118,7 @@
                             <tr>
                                 <td scope="row">{{ payment.student|title }}</td>
                                 <td scope="row">{% if payment.student.student_class %} {{ payment.student.student_class|upper }} {{ payment.student.class_section|upper }} {% endif %}</td>
+                                <td scope="row">{{ payment.get_wallet_type_display }}</td>
                                 <td scope="row">{{ payment.amount|intcomma }}</td>
                                 <td scope="row">{{ payment.created_at|date }}</td>
                                 <td scope="row">{{ payment.mode|title }} {% if payment.method %} ({{ payment.method|title }}) {% endif %}</td>

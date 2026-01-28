@@ -9,11 +9,11 @@
             <h4 class="card-title">Name: {{ student|title }} </h4>
             <h4 style="margin-top:-30px" class="card-title">Reg No: {{ student.registration_number|upper }}</h4>
             <h4 style="margin-top:-30px" class="card-title">Class: {% if student.student_class %} {{ student.student_class|upper }} {{ student.class_section|upper }} {% endif %}</h4>
-            <h4 style="margin-top:-30px" class="card-title">Balance/Debt:  <span class="text-success">{{ student.student_wallet.balance|intcomma }}</span>  /
-                <span class="text-danger">{{ student.student_wallet.debt|intcomma }}</span>
+            <h4 style="margin-top:-30px" class="card-title">
+                Canteen: <span class="text-success">₦{{ student.student_wallet.balance|intcomma }}</span> / <span class="text-danger">₦{{ student.student_wallet.debt|intcomma }}</span>
+                &nbsp;|&nbsp; Fee Wallet: <span class="text-success">₦{{ student.student_wallet.fee_balance|intcomma }}</span>
             </h4>
-                <img class="rounded-circle" style="margin-top:-100px;display:inline;float:right;width:100px;height:100px;border-radius:5px;" {% if student.image %} src="{{ student.image.url }}" {% else %} src="{% static 'admin_site/images/default_image.jpg' %}" {% endif %} /></h4>
-
+            <img class="rounded-circle" style="margin-top:-100px;display:inline;float:right;width:100px;height:100px;border-radius:5px;" {% if student.image %} src="{{ student.image.url }}" {% else %} src="{% static 'admin_site/images/default_image.jpg' %}" {% endif %} />
         </div>
     </div>
 </div>
@@ -51,6 +51,16 @@
                                     <div class="form-floating">
                                         {{form.method}}
                                         <label for="proofOfPayment">Payment Method</label>
+                                        <br />
+                                    </div>
+                                    <br />
+                                </div>
+
+                                <!-- After the method field -->
+                                <div class="col-md-6">
+                                    <div class="form-floating">
+                                        {{ form.wallet_type }}
+                                        <label for="walletType">Wallet Type</label>
                                         <br />
                                     </div>
                                     <br />

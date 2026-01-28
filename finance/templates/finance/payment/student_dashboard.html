@@ -16,11 +16,12 @@
 <div class="col-lg-12">
     <div class="card">
         <div class="card-body d-flex justify-content-between align-items-center">
-            <div>
+           <div>
                 <h5 class="card-title pb-0 mb-1">{{ student|title }}</h5>
                 <p class="mb-0">
                     <span class="me-3"><strong>Reg No:</strong> {{ student.registration_number|upper }}</span>
-                    <span><strong>Class:</strong> {{ student.student_class|title }} {{ student.class_section|title }}</span>
+                    <span class="me-3"><strong>Class:</strong> {{ student.student_class|title }} {{ student.class_section|title }}</span>
+                    <span><strong>Fee Wallet:</strong> ₦{{ student.student_wallet.fee_balance|floatformat|intcomma }}</span>
                 </p>
             </div>
             <div>
@@ -182,6 +183,12 @@
                     <hr>
                     <h6 class="card-subtitle mb-3 text-muted">Payment Details</h6>
                     <div class="row g-3">
+                        <div class="col-12" id="walletBalanceInfo" style="display: none;">
+                            <div class="alert alert-info">
+                                <i class="bi bi-wallet2"></i>
+                                <strong>Fee Wallet Balance:</strong> ₦{{ student.student_wallet.fee_balance|floatformat:2|intcomma }}
+                            </div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">Payment Mode</label>{{ payment_form.payment_mode }}</div>
                         <div class="col-md-6"><label class="form-label">Payment Date</label>{{ payment_form.date }}</div>
                         <div class="col-6"><label class="form-label">Bank Account</label>{{ payment_form.bank_account }}</div>
@@ -317,6 +324,30 @@ document.addEventListener('DOMContentLoaded', function () {
             const button = event.relatedTarget;
             form.action = button.getAttribute('data-action');
             message.textContent = button.getAttribute('data-message');
+        });
+    }
+});
+</script>
+
+<!-- At end of template -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const paymentModeSelect = document.querySelector('select[name="payment_mode"]');
+    const walletInfo = document.getElementById('walletBalanceInfo');
+    const bankAccountField = document.querySelector('select[name="bank_account"]');
+    const walletBalance = {{ student.student_wallet.fee_balance|default:0 }};
+
+    if (paymentModeSelect) {
+        paymentModeSelect.addEventListener('change', function() {
+            if (this.value === 'wallet') {
+                walletInfo.style.display = 'block';
+                bankAccountField.required = false;
+                bankAccountField.closest('.col-6').style.display = 'none';
+            } else {
+                walletInfo.style.display = 'none';
+                bankAccountField.required = true;
+                bankAccountField.closest('.col-6').style.display = 'block';
+            }
         });
     }
 });

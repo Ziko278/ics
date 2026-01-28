@@ -274,6 +274,19 @@ class FeePaymentForm(forms.ModelForm):
             'notes': forms.Textarea(attrs={'class': 'form-control form-control-sm', 'rows': 2}),
         }
 
+    def clean(self):
+        cleaned_data = super().clean()
+        payment_mode = cleaned_data.get('payment_mode')
+        bank_account = cleaned_data.get('bank_account')
+
+        # Bank account not required for wallet payments
+        if payment_mode == 'wallet':
+            cleaned_data['bank_account'] = None
+        elif not bank_account:
+            self.add_error('bank_account', 'Bank account is required for this payment method.')
+
+        return cleaned_data
+
 
 class BulkPaymentForm(forms.Form):
     """A simple form for accepting a single bulk payment amount."""
@@ -307,43 +320,55 @@ class BulkPaymentForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
-        # Get student to calculate max amount
         self.student = kwargs.pop('student', None)
         super().__init__(*args, **kwargs)
 
-        # Set the queryset dynamically when form is instantiated
         self.fields['bank_account'].queryset = SchoolBankDetail.objects.all()
 
-        # Set default currency to 'naira' if not bound
         if not self.is_bound:
             self.fields['currency'].initial = 'naira'
-
-        # Update amount field help text with max amount
-        if self.student:
-            total_balance = sum(
-                invoice.balance
-                for invoice in self.student.invoices.exclude(status=InvoiceModel.Status.PAID)
-            )
-            self.fields['amount'].help_text = f"Maximum: ₦{total_balance:,.2f}"
-            self.fields['amount'].widget.attrs['max'] = str(total_balance)
 
     def clean_amount(self):
         amount = self.cleaned_data.get('amount')
 
+        # REMOVED: validation against total_balance
+        # Only validate for wallet payments
         if self.student:
-            # Calculate total outstanding balance
-            total_balance = sum(
-                invoice.balance
-                for invoice in self.student.invoices.exclude(status=InvoiceModel.Status.PAID)
-            )
-
-            if amount > total_balance:
-                raise forms.ValidationError(
-                    f"Payment amount (₦{amount:,.2f}) exceeds total outstanding balance (₦{total_balance:,.2f}). "
-                    f"Please enter a maximum of ₦{total_balance:,.2f}."
-                )
+            payment_mode = self.data.get('payment_mode')
+            if payment_mode == 'wallet':
+                wallet = getattr(self.student, 'student_wallet', None)
+                if wallet and wallet.fee_balance < amount:
+                    raise forms.ValidationError(
+                        f"Insufficient fee wallet balance. Available: ₦{wallet.fee_balance:,.2f}, "
+                        f"Required: ₦{amount:,.2f}"
+                    )
 
         return amount
+
+    def clean(self):
+        cleaned_data = super().clean()
+        payment_mode = cleaned_data.get('payment_mode')
+        amount = cleaned_data.get('amount')
+
+        # Validate wallet balance if paying with wallet
+        if payment_mode == 'wallet' and self.student and amount:
+            wallet = getattr(self.student, 'student_wallet', None)
+            if not wallet:
+                raise forms.ValidationError("Student does not have a wallet.")
+
+            if wallet.fee_balance < amount:
+                raise forms.ValidationError(
+                    f"Insufficient fee wallet balance. Available: ₦{wallet.fee_balance:,.2f}, "
+                    f"Required: ₦{amount:,.2f}"
+                )
+
+        # Bank account not required for wallet
+        if payment_mode == 'wallet':
+            cleaned_data['bank_account'] = None
+        elif not cleaned_data.get('bank_account'):
+            self.add_error('bank_account', 'Bank account is required for this payment method.')
+
+        return cleaned_data
     
 
 # -------------------- EXPENSE CATEGORY FORM --------------------
@@ -927,7 +952,7 @@ class StudentFundingForm(forms.ModelForm):
         model = StudentFundingModel
         # Be explicit about the fields a user can fill
         fields = [
-             'amount', 'method', 'mode',
+             'amount', 'method', 'mode', 'wallet_type',
              'proof_of_payment', 'teller_number', 'reference'
         ]
         widgets = {
@@ -937,6 +962,7 @@ class StudentFundingForm(forms.ModelForm):
             'proof_of_payment': forms.FileInput(attrs={'class': 'form-control'}),
             'teller_number': forms.TextInput(attrs={'class': 'form-control'}),
             'reference': forms.TextInput(attrs={'class': 'form-control'}),
+            'wallet_type': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
