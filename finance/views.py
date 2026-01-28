@@ -1369,7 +1369,7 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
             else:
                 messages.success(
                     self.request,
-                    f"Bulk payment of ₦{total_amount_paid:,.2f} allocated successfully across {invoices_paid_count} invoice(s)."
+                    f"Bulk payment of ₦{total_amount_paid:,.2f} allocated successfully across invoice(s)."
                 )
 
         return redirect('finance_student_dashboard', pk=student.pk)

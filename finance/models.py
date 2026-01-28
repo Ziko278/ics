@@ -514,7 +514,7 @@ class FeePaymentModel(models.Model):
         REVERTED = 'reverted', 'Reverted'
 
     invoice = models.ForeignKey(InvoiceModel, on_delete=models.PROTECT, related_name='payments')
-    bank_account = models.ForeignKey('SchoolBankDetail', on_delete=models.PROTECT)
+    bank_account = models.ForeignKey('SchoolBankDetail', on_delete=models.SET_NULL, blank=True, null=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_mode = models.CharField(max_length=20, choices=PaymentMode.choices)
     currency = models.CharField(max_length=20, choices=Currency.choices, default='naira')

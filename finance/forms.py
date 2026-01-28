@@ -280,6 +280,7 @@ class FeePaymentForm(forms.ModelForm):
         bank_account = cleaned_data.get('bank_account')
 
         # Bank account not required for wallet payments
+        print(payment_mode)
         if payment_mode == 'wallet':
             cleaned_data['bank_account'] = None
         elif not bank_account:
@@ -305,7 +306,8 @@ class BulkPaymentForm(forms.Form):
     bank_account = forms.ModelChoiceField(
         queryset=SchoolBankDetail.objects.none(),
         widget=forms.Select(attrs={'class': 'form-select'}),
-        label="Bank Account"
+        label="Bank Account",
+        required=False,
     )
     date = forms.DateField(
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
