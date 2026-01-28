@@ -9444,7 +9444,7 @@ def staff_annual_payroll_view(request):
         'has_records': True,
     }
 
-    return render(request, 'finance/staff_payroll/annual.html', context)
+    return render(request, 'finance/payroll/staff_annual.html', context)
 
 
 @login_required
