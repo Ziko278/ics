@@ -9222,7 +9222,7 @@ def staff_monthly_payroll_view(request):
         structure = SalaryStructure.objects.get(staff=staff_member, is_active=True)
     except SalaryStructure.DoesNotExist:
         messages.warning(request, "You do not have an active salary structure configured yet.")
-        return render(request, 'finance/staff_payroll/monthly.html', {
+        return render(request, 'finance/payroll/staff_monthly.html', {
             'page_title': 'My Monthly Payroll',
             'no_structure': True,
             'years': range(2020, today.year + 2),
@@ -9271,7 +9271,7 @@ def staff_monthly_payroll_view(request):
             'has_record': False,
         }
 
-    return render(request, 'finance/staff_payroll/monthly.html', context)
+    return render(request, 'finance/payroll/staff_monthly.html', context)
 
 
 @login_required
@@ -9303,7 +9303,7 @@ def staff_annual_payroll_view(request):
         ).get(staff=staff_member, is_active=True)
     except SalaryStructure.DoesNotExist:
         messages.warning(request, "You do not have an active salary structure configured yet.")
-        return render(request, 'finance/staff_payroll/annual.html', {
+        return render(request, 'finance/payroll/staff_annual.html', {
             'page_title': 'My Annual Payroll',
             'no_structure': True,
             'years': range(2020, today.year + 2),
@@ -9322,7 +9322,7 @@ def staff_annual_payroll_view(request):
             f"No payroll records found for {selected_year}. "
             "Please check with HR or select a different year."
         )
-        return render(request, 'finance/staff_payroll/annual.html', {
+        return render(request, 'finance/payroll/staff_annual.html', {
             'structure': structure,
             'page_title': 'My Annual Payroll',
             'years': range(2020, today.year + 2),
