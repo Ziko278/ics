@@ -79,6 +79,8 @@
                         <td>
                             {% if payment.status == 'confirmed' %}
                                 <span class="badge bg-success">{{ payment.get_status_display }}</span>
+                            {% elif payment.status == 'reverted' %}
+                                <span class="badge bg-danger">{{ payment.get_status_display }}</span>
                             {% else %}
                                 <span class="badge bg-warning text-dark">{{ payment.get_status_display }}</span>
                             {% endif %}
@@ -88,12 +90,21 @@
                                 <a href="{% url 'finance_fee_payment_receipt' payment.pk %}" class="btn btn-outline-info btn-sm" target="_blank" title="Print Receipt">
                                     <i class="bi bi-printer"></i>
                                 </a>
+                                <button type="button"
+                                        class="btn btn-outline-warning btn-sm btn-revert"
+                                        data-payment-id="{{ payment.pk }}"
+                                        data-payment-amount="{{ payment.amount }}"
+                                        data-payment-reference="{{ payment.reference|default:payment.pk }}"
+                                        data-student-name="{{ payment.invoice.student }}"
+                                        title="Revert Payment">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                </button>
                             {% endif %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center py-4">
+                        <td colspan="9" class="text-center py-4">
                             <h5>No Payments Found</h5>
                             <p>No payment records match your current filters.</p>
                         </td>
@@ -120,4 +131,66 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Revert Payment Modal -->
+<div class="modal fade" id="revertModal" tabindex="-1" aria-labelledby="revertModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title" id="revertModalLabel">
+                    <i class="bi bi-exclamation-triangle"></i> Confirm Payment Reversal
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="revertForm" method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <strong>Warning:</strong> This action will reverse the payment and restore invoice balances. This cannot be undone.
+                    </div>
+                    <p>You are about to revert the following payment:</p>
+                    <ul class="list-unstyled">
+                        <li><strong>Student:</strong> <span id="revertStudentName"></span></li>
+                        <li><strong>Amount:</strong> ₦<span id="revertAmount"></span></li>
+                        <li><strong>Reference:</strong> <span id="revertReference"></span></li>
+                    </ul>
+                    <p class="text-danger fw-bold">Are you sure you want to proceed?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Yes, Revert Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const revertButtons = document.querySelectorAll('.btn-revert');
+    const revertModal = new bootstrap.Modal(document.getElementById('revertModal'));
+    const revertForm = document.getElementById('revertForm');
+
+    revertButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const paymentId = this.getAttribute('data-payment-id');
+            const amount = this.getAttribute('data-payment-amount');
+            const reference = this.getAttribute('data-payment-reference');
+            const studentName = this.getAttribute('data-student-name');
+
+            // Update modal content
+            document.getElementById('revertStudentName').textContent = studentName;
+            document.getElementById('revertAmount').textContent = parseFloat(amount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('revertReference').textContent = reference;
+
+            // Update form action
+            revertForm.action = "{% url 'finance_fee_payment_revert' 0 %}".replace('/0/', '/' + paymentId + '/');
+
+            // Show modal
+            revertModal.show();
+        });
+    });
+});
+</script>
+
 {% endblock %}

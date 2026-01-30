@@ -1,29 +1,119 @@
 {% extends 'admin_site/layout.html' %}
-{% block 'main' %}
+{% load static %}
 {% load humanize %}
+{% block 'main' %}
+
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Filter and Search</h4>
+            <form id="filterForm">
+                <div class="row">
+                    <div class="col-2">
+                        <label for="session">Session</label>
+                        <select id="session" name="session" required class="form-control">
+                            <option value="">-------------------</option>
+                            {% for session in session_list %}
+                            <option {% if current_session.id == session.id %} selected {% endif %} value="{{session.id}}">{{ session }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-2">
+                        <label for="term">Term</label>
+                        <select id="term" name="term" required class="form-control">
+                            <option value="">-------------------</option>
+                            {% for term in term_list %}
+                            <option {% if current_term.id == term.id %} selected {% endif %} value="{{term.id}}">{{ term|title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-2">
+                        <label for="status">Status</label>
+                        <select id="status" name="status" class="form-control">
+                            <option value="">All Status</option>
+                            <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                            <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                            <option value="disbursed" {% if status_filter == 'disbursed' %}selected{% endif %}>Disbursed</option>
+                            <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                            <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                        </select>
+                    </div>
+
+                    <div class="col-2">
+                        <label for="search">Search Staff</label>
+                        <input type="text" id="search" name="search" class="form-control" value="{{ search_query }}" placeholder="Search by name or ID">
+                    </div>
+
+                    <div class="col-2">
+                        <label for="date_from">Date From</label>
+                        <input type="date" id="date_from" name="date_from" class="form-control" value="{{ date_from }}">
+                    </div>
+
+                    <div class="col-2">
+                        <label for="date_to">Date To</label>
+                        <input type="date" id="date_to" name="date_to" class="form-control" value="{{ date_to }}">
+                    </div>
+
+                    <div class="col-1">
+                        <label>&nbsp;</label>
+                        <div>
+                            <input type="submit" value="Filter" class="btn btn-success w-100">
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <div class="col-12">
     <div class="card overflow-auto">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-                <h5 class="card-title">Salary Advance Requests</h5>
-                <a href="{% url 'finance_salary_advance_create' %}" class="btn btn-sm btn-primary">
-                    <i class="bi bi-plus-circle"></i> New Advance Request
-                </a>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h5 class="card-title mb-0">Salary Advance Requests for {{ current_session }} - {{ current_term }}
+                        {% if search_query %} (Search: "{{ search_query }}"){% endif %}
+                    </h5>
+                    {% if date_from or date_to %}
+                    <small class="text-muted">
+                        Filtered by date:
+                        {% if date_from %}From {{ date_from }}{% endif %}
+                        {% if date_to %}To {{ date_to }}{% endif %}
+                    </small>
+                    {% endif %}
+                </div>
+                <div>
+                    <a href="{% url 'finance_salary_advance_create' %}" class="btn btn-sm btn-primary me-2">
+                        <i class="bi bi-plus-circle"></i> New Advance Request
+                    </a>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-download"></i> Download
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end">
+                            <button class="dropdown-item" onclick="downloadReport('excel')">
+                                <i class="bi bi-file-excel"></i> Download as Excel
+                            </button>
+                            <button class="dropdown-item" onclick="downloadReport('pdf')">
+                                <i class="bi bi-file-pdf"></i> Download as PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <p class="card-description">
-                Manage and track all staff salary advance requests.
-            </p>
 
-            <!-- Add a filter form here if needed in the future -->
-
-            <table class="table table-hover datatable">
+            <table class="table table-hover table-bordered" style="font-size:14px">
                 <thead class="table-light">
                     <tr>
                         <th>#</th>
-                        <th>Staff Member</th>
+                        <th style="min-width:150px">Staff Member</th>
+                        <th>Staff ID</th>
                         <th>Request Date</th>
                         <th class="text-end">Amount</th>
+                        <th class="text-end">Repaid</th>
+                        <th class="text-end">Balance</th>
                         <th>Status</th>
                         <th class="text-center">Action</th>
                     </tr>
@@ -33,13 +123,15 @@
                     <tr>
                         <th scope="row">{{ forloop.counter }}</th>
                         <td>
-                            <strong>{{ advance.staff|title }}</strong><br>
-                            <small class="text-muted">{{ advance.staff.staff_id }}</small>
+                            <strong>{{ advance.staff|title }}</strong>
                         </td>
+                        <td>{{ advance.staff.staff_id }}</td>
                         <td>{{ advance.request_date|date:"d M, Y" }}</td>
                         <td class="text-end">₦{{ advance.amount|intcomma }}</td>
+                        <td class="text-end">₦{{ advance.repaid_amount|intcomma }}</td>
+                        <td class="text-end">₦{{ advance.balance|intcomma }}</td>
                         <td>
-                            <span class="badge 
+                            <span class="badge
                                 {% if advance.status == 'approved' %}bg-info
                                 {% elif advance.status == 'disbursed' %}bg-primary
                                 {% elif advance.status == 'completed' %}bg-success
@@ -56,7 +148,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="text-center py-4">
+                        <td colspan="9" class="text-center py-4">
                             <div class="text-muted">
                                 <h5 class="mt-3">No salary advance requests found</h5>
                                 <p>Click the "New Advance Request" button to begin.</p>
@@ -67,8 +159,53 @@
                 </tbody>
             </table>
 
-            <!-- Pagination Controls can be added here if the list grows -->
+            {% if advances.has_other_pages %}
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center">
+                    {% if advances.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}&status={{ status_filter }}">First</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ advances.previous_page_number }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}&status={{ status_filter }}">Previous</a>
+                        </li>
+                    {% endif %}
+
+                    <li class="page-item active">
+                        <span class="page-link">Page {{ advances.number }} of {{ advances.paginator.num_pages }}</span>
+                    </li>
+
+                    {% if advances.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ advances.next_page_number }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}&status={{ status_filter }}">Next</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ advances.paginator.num_pages }}&session={{ current_session.id }}&term={{ current_term.id }}&search={{ search_query|urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}&status={{ status_filter }}">Last</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
         </div>
     </div>
 </div>
+
+<script>
+function downloadReport(format) {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+
+    let url = window.location.pathname + '?download=' + format;
+
+    for (let [key, value] of formData.entries()) {
+        if (value) {
+            url += '&' + key + '=' + encodeURIComponent(value);
+        }
+    }
+
+    window.location.href = url;
+}
+</script>
+
 {% endblock %}

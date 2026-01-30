@@ -608,6 +608,10 @@ class IncomeModel(models.Model):
     amount = models.DecimalField(
         max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
     )
+    bank_account = models.ForeignKey(
+        'SchoolBankDetail', on_delete=models.PROTECT, null=True, blank=True,
+        related_name="incomes"
+    )
     income_date = models.DateField(default=timezone.now, db_index=True)
 
     source = models.CharField(max_length=100, blank=True, null=True)

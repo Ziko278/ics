@@ -661,7 +661,7 @@ class IncomeForm(forms.ModelForm):
         model = IncomeModel
         fields = [
             "category", "description", "amount", "income_date",
-            "source", "reference", "receipt", "notes",
+            "source", "reference", "receipt", "notes", "bank_account",
             "session", "term",
         ]
         widgets = {
@@ -670,6 +670,7 @@ class IncomeForm(forms.ModelForm):
             "amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0.01"}),
             "income_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "source": forms.TextInput(attrs={"class": "form-control"}),
+            "bank_account": forms.Select(attrs={"class": "form-control"}),
             "reference": forms.TextInput(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "session": forms.Select(attrs={"class": "form-control"}),

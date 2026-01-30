@@ -129,7 +129,7 @@ urlpatterns = [
     path('finance/school-bank/<int:pk>/delete/', SchoolBankDetailDeleteView.as_view(), name='finance_school_bank_detail_delete'),
 
     # --- Salary Advance URLs (Multi-page Interface) ---
-    path('finance/salary-advances/', SalaryAdvanceListView.as_view(), name='finance_salary_advance_list'),
+    path('finance/salary-advances/', salary_advance_list_view, name='finance_salary_advance_list'),
     path('finance/salary-advances/create/', SalaryAdvanceCreateView.as_view(), name='finance_salary_advance_create'),
     path('finance/salary-advances/<int:pk>/', SalaryAdvanceDetailView.as_view(), name='finance_salary_advance_detail'),
     path('finance/salary-advances/<int:pk>/action/', SalaryAdvanceActionView.as_view(),
@@ -137,15 +137,13 @@ urlpatterns = [
 
 
     # --- Staff Loan URLs ---
-    path('finance/staff-loans/', StaffLoanListView.as_view(), name='finance_staff_loan_list'),
+    path('finance/staff-loans/', staff_loan_list_view, name='finance_staff_loan_list'),
     path('finance/staff-loans/create/', StaffLoanCreateView.as_view(), name='finance_staff_loan_create'),
     path('finance/staff-loans/<int:pk>/', StaffLoanDetailView.as_view(), name='finance_staff_loan_detail'),
     path('finance/staff-loans/<int:pk>/action/', StaffLoanActionView.as_view(), name='finance_staff_loan_action'),
     path('staff-loans/debtors/', StaffLoanDebtorsListView.as_view(), name='finance_staff_loan_debtors'),
     path('staff-loans/staff/<int:staff_pk>/', StaffLoanDebtDetailView.as_view(), name='finance_staff_loan_debt_detail'),
     path('staff-loans/staff/<int:staff_pk>/repay/', record_staff_loan_repayment, name='finance_record_loan_repayment'),
-
-
 
     path('deposit/select-student', DepositPaymentSelectStudentView.as_view(), name='deposit_select_student'),
     path('deposit/get-class-student', deposit_get_class_students, name='deposit_get_class_students'),

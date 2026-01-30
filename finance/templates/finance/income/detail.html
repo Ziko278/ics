@@ -77,6 +77,9 @@
                         <dt class="col-sm-3 label">Income Date:</dt>
                         <dd class="col-sm-9">{{ income.income_date|date:"F d, Y" }}</dd>
 
+                        <dt class="col-sm-3 label">Bank Account:</dt>
+                        <dd class="col-sm-9">{{ income.bank_account|title|default:'' }}</dd>
+
                         <dt class="col-sm-3 label">Source:</dt>
                         <dd class="col-sm-9">{{ income.source|default:"Not specified." }}</dd>
 

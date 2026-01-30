@@ -1629,6 +1629,22 @@ class FeePaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, View):
             payment.status = FeePaymentModel.PaymentStatus.REVERTED
             payment.save(update_fields=['status'])
 
+            if payment.payment_mode == FeePaymentModel.PaymentMode.WALLET:
+                try:
+                    wallet = StudentWalletModel.objects.select_for_update().get(student=student)
+                    wallet.fee_balance += payment.amount
+                    wallet.save(update_fields=['fee_balance'])
+
+                    messages.info(
+                        request,
+                        f"₦{payment.amount:,.2f} has been refunded to {student}'s fee wallet."
+                    )
+                except StudentWalletModel.DoesNotExist:
+                    messages.warning(
+                        request,
+                        f"Payment reverted but student wallet not found. Manual refund of ₦{payment.amount:,.2f} may be required."
+                    )
+                    
             # Update invoice status based on new balance
             invoice.refresh_from_db()
             if invoice.amount_paid <= 0:
@@ -2108,16 +2124,284 @@ class SchoolBankDetailDeleteView(LoginRequiredMixin, PermissionRequiredMixin, De
 # ===================================================================
 # Salary Advance Views (NEW - Multi-page Interface)
 # ===================================================================
-class SalaryAdvanceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
-    model = SalaryAdvance
-    permission_required = 'finance.view_salaryrecord'
-    template_name = 'finance/salary_advance/index.html'
-    context_object_name = 'advances'
-    paginate_by = 15
+# ============================================
+# SALARY ADVANCE VIEWS
+# ============================================
 
-    def get_queryset(self):
-        # Add search and filter logic here
-        return super().get_queryset().select_related('staff__staff_profile__user').order_by('-request_date')
+def salary_advance_list_view(request):
+    """List view for salary advances with filtering and export."""
+    session_id = request.GET.get('session', None)
+    term_id = request.GET.get('term', None)
+    status_filter = request.GET.get('status', '').strip()
+    search_query = request.GET.get('search', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    page = request.GET.get('page', 1)
+
+    school_setting = SchoolSettingModel.objects.first()
+    if not session_id:
+        session = school_setting.session
+    else:
+        session = SessionModel.objects.get(id=session_id)
+    if not term_id:
+        term = school_setting.term
+    else:
+        term = TermModel.objects.get(id=term_id)
+
+    session_list = SessionModel.objects.all()
+    term_list = TermModel.objects.all()
+
+    queryset = SalaryAdvance.objects.filter(
+        session=session,
+        term=term
+    ).select_related('staff__staff_profile__user').order_by('-request_date')
+
+    if status_filter:
+        queryset = queryset.filter(status=status_filter)
+
+    if search_query:
+        queryset = queryset.filter(
+            Q(staff__staff_profile__user__first_name__icontains=search_query) |
+            Q(staff__staff_profile__user__last_name__icontains=search_query) |
+            Q(staff__staff_id__icontains=search_query)
+        )
+
+    if date_from:
+        queryset = queryset.filter(request_date__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(request_date__lte=date_to)
+
+    # Handle downloads
+    if 'download' in request.GET:
+        download_format = request.GET.get('download')
+        if download_format == 'excel':
+            return download_salary_advance_excel(queryset, session, term)
+        elif download_format == 'pdf':
+            return download_salary_advance_pdf(queryset, session, term)
+
+    paginator = Paginator(queryset, 15)
+    try:
+        advances = paginator.page(page)
+    except PageNotAnInteger:
+        advances = paginator.page(1)
+    except EmptyPage:
+        advances = paginator.page(paginator.num_pages)
+
+    context = {
+        'advances': advances,
+        'current_session': session,
+        'current_term': term,
+        'session_list': session_list,
+        'term_list': term_list,
+        'search_query': search_query,
+        'date_from': date_from,
+        'date_to': date_to,
+        'status_filter': status_filter,
+    }
+    return render(request, 'finance/salary_advance/index.html', context)
+
+
+def download_salary_advance_excel(queryset, session, term):
+    """Export salary advances to Excel."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Salary Advances"
+
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    border_side = Side(style='thin', color='000000')
+    border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+
+    center_align = Alignment(horizontal="center", vertical="center")
+    right_align = Alignment(horizontal="right", vertical="center")
+
+    headers = ['Staff Member', 'Staff ID', 'Request Date', 'Amount (₦)', 'Repaid (₦)', 'Balance (₦)', 'Status']
+
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = border
+
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 12
+
+    for row_num, advance in enumerate(queryset, 2):
+        cell = ws.cell(row=row_num, column=1, value=str(advance.staff))
+        cell.border = border
+
+        cell = ws.cell(row=row_num, column=2, value=advance.staff.staff_id)
+        cell.border = border
+        cell.alignment = center_align
+
+        date_str = advance.request_date.strftime("%b %d, %Y") if advance.request_date else ""
+        cell = ws.cell(row=row_num, column=3, value=date_str)
+        cell.border = border
+        cell.alignment = center_align
+
+        cell = ws.cell(row=row_num, column=4, value=float(advance.amount))
+        cell.number_format = '#,##0.00'
+        cell.border = border
+        cell.alignment = right_align
+
+        cell = ws.cell(row=row_num, column=5, value=float(advance.repaid_amount))
+        cell.number_format = '#,##0.00'
+        cell.border = border
+        cell.alignment = right_align
+
+        cell = ws.cell(row=row_num, column=6, value=float(advance.balance))
+        cell.number_format = '#,##0.00'
+        cell.border = border
+        cell.alignment = right_align
+
+        cell = ws.cell(row=row_num, column=7, value=advance.get_status_display())
+        cell.border = border
+        cell.alignment = center_align
+
+    ws.freeze_panes = 'A2'
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"salary_advances_{session.__str__()}_{term.name}_{timestamp}.xlsx"
+
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response
+
+
+def download_salary_advance_pdf(queryset, session, term):
+    """Export salary advances to PDF."""
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30
+    )
+
+    elements = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#366092'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+
+    title = Paragraph(f"Salary Advances - {session.__str__()} - {term.name}", title_style)
+    elements.append(title)
+
+    info_style = ParagraphStyle(
+        'Info',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+
+    generation_date = datetime.now().strftime("%B %d, %Y at %H:%M")
+    info = Paragraph(f"Generated on {generation_date}", info_style)
+    elements.append(info)
+    elements.append(Spacer(1, 20))
+
+    headers = ['Staff Member', 'Staff ID', 'Request Date', 'Amount (₦)', 'Repaid (₦)', 'Balance (₦)', 'Status']
+    col_widths = [1.8 * inch, 1 * inch, 1.1 * inch, 1.1 * inch, 1.1 * inch, 1.1 * inch, 0.9 * inch]
+
+    data = [headers]
+
+    for advance in queryset:
+        staff_name = str(advance.staff)
+        date_str = advance.request_date.strftime("%b %d, %Y") if advance.request_date else ""
+
+        row = [
+            staff_name,
+            advance.staff.staff_id,
+            date_str,
+            f"₦{advance.amount:,.2f}",
+            f"₦{advance.repaid_amount:,.2f}",
+            f"₦{advance.balance:,.2f}",
+            advance.get_status_display(),
+        ]
+
+        data.append(row)
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#366092')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ALIGN', (3, 1), (5, -1), 'RIGHT'),
+        ('ALIGN', (1, 1), (1, -1), 'CENTER'),
+        ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+        ('ALIGN', (6, 1), (6, -1), 'CENTER'),
+        ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+    ])
+
+    table.setStyle(table_style)
+    elements.append(table)
+
+    elements.append(Spacer(1, 20))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+
+    total_amount = sum(a.amount for a in queryset)
+    total_repaid = sum(a.repaid_amount for a in queryset)
+    total_balance = sum(a.balance for a in queryset)
+    footer_text = f"Total Records: {queryset.count()} | Total Amount: ₦{total_amount:,.2f} | Total Repaid: ₦{total_repaid:,.2f} | Total Balance: ₦{total_balance:,.2f}"
+    footer = Paragraph(footer_text, footer_style)
+    elements.append(footer)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"salary_advances_{session.__str__()}_{term.name}_{timestamp}.pdf"
+
+    response = HttpResponse(buffer.read(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response
 
 
 class SalaryAdvanceCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
@@ -2170,15 +2454,280 @@ class SalaryAdvanceActionView(LoginRequiredMixin, PermissionRequiredMixin, View)
 # ===================================================================
 # Staff Loan Views
 # ===================================================================
-class StaffLoanListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
-    model = StaffLoan
-    permission_required = 'finance.view_salaryrecord'
-    template_name = 'finance/staff_loan/index.html'
-    context_object_name = 'loans'
-    paginate_by = 15
+def staff_loan_list_view(request):
+    """List view for staff loans with filtering and export."""
+    session_id = request.GET.get('session', None)
+    term_id = request.GET.get('term', None)
+    status_filter = request.GET.get('status', '').strip()
+    search_query = request.GET.get('search', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    page = request.GET.get('page', 1)
 
-    def get_queryset(self):
-        return super().get_queryset().select_related('staff__staff_profile__user').order_by('-request_date')
+    school_setting = SchoolSettingModel.objects.first()
+    if not session_id:
+        session = school_setting.session
+    else:
+        session = SessionModel.objects.get(id=session_id)
+    if not term_id:
+        term = school_setting.term
+    else:
+        term = TermModel.objects.get(id=term_id)
+
+    session_list = SessionModel.objects.all()
+    term_list = TermModel.objects.all()
+
+    queryset = StaffLoan.objects.filter(
+        session=session,
+        term=term
+    ).select_related('staff__staff_profile__user').order_by('-request_date')
+
+    if status_filter:
+        queryset = queryset.filter(status=status_filter)
+
+    if search_query:
+        queryset = queryset.filter(
+            Q(staff__staff_profile__user__first_name__icontains=search_query) |
+            Q(staff__staff_profile__user__last_name__icontains=search_query) |
+            Q(staff__staff_id__icontains=search_query)
+        )
+
+    if date_from:
+        queryset = queryset.filter(request_date__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(request_date__lte=date_to)
+
+    # Handle downloads
+    if 'download' in request.GET:
+        download_format = request.GET.get('download')
+        if download_format == 'excel':
+            return download_staff_loan_excel(queryset, session, term)
+        elif download_format == 'pdf':
+            return download_staff_loan_pdf(queryset, session, term)
+
+    paginator = Paginator(queryset, 15)
+    try:
+        loans = paginator.page(page)
+    except PageNotAnInteger:
+        loans = paginator.page(1)
+    except EmptyPage:
+        loans = paginator.page(paginator.num_pages)
+
+    context = {
+        'loans': loans,
+        'current_session': session,
+        'current_term': term,
+        'session_list': session_list,
+        'term_list': term_list,
+        'search_query': search_query,
+        'date_from': date_from,
+        'date_to': date_to,
+        'status_filter': status_filter,
+    }
+    return render(request, 'finance/staff_loan/index.html', context)
+
+
+def download_staff_loan_excel(queryset, session, term):
+    """Export staff loans to Excel."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Staff Loans"
+
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    border_side = Side(style='thin', color='000000')
+    border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+
+    center_align = Alignment(horizontal="center", vertical="center")
+    right_align = Alignment(horizontal="right", vertical="center")
+
+    headers = ['Staff Member', 'Staff ID', 'Request Date', 'Amount (₦)', 'Repaid (₦)', 'Balance (₦)', 'Status']
+
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = border
+
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 12
+
+    for row_num, loan in enumerate(queryset, 2):
+        cell = ws.cell(row=row_num, column=1, value=str(loan.staff))
+        cell.border = border
+
+        cell = ws.cell(row=row_num, column=2, value=loan.staff.staff_id)
+        cell.border = border
+        cell.alignment = center_align
+
+        date_str = loan.request_date.strftime("%b %d, %Y") if loan.request_date else ""
+        cell = ws.cell(row=row_num, column=3, value=date_str)
+        cell.border = border
+        cell.alignment = center_align
+
+        cell = ws.cell(row=row_num, column=4, value=float(loan.amount))
+        cell.number_format = '#,##0.00'
+        cell.border = border
+        cell.alignment = right_align
+
+        cell = ws.cell(row=row_num, column=5, value=float(loan.repaid_amount))
+        cell.number_format = '#,##0.00'
+        cell.border = border
+        cell.alignment = right_align
+
+        cell = ws.cell(row=row_num, column=6, value=float(loan.balance))
+        cell.number_format = '#,##0.00'
+        cell.border = border
+        cell.alignment = right_align
+
+        cell = ws.cell(row=row_num, column=7, value=loan.get_status_display())
+        cell.border = border
+        cell.alignment = center_align
+
+    ws.freeze_panes = 'A2'
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"staff_loans_{session.__str__()}_{term.name}_{timestamp}.xlsx"
+
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response
+
+
+def download_staff_loan_pdf(queryset, session, term):
+    """Export staff loans to PDF."""
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30
+    )
+
+    elements = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#366092'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+
+    title = Paragraph(f"Staff Loans - {session.__str__()} - {term.name}", title_style)
+    elements.append(title)
+
+    info_style = ParagraphStyle(
+        'Info',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+
+    generation_date = datetime.now().strftime("%B %d, %Y at %H:%M")
+    info = Paragraph(f"Generated on {generation_date}", info_style)
+    elements.append(info)
+    elements.append(Spacer(1, 20))
+
+    headers = ['Staff Member', 'Staff ID', 'Request Date', 'Amount (₦)', 'Repaid (₦)', 'Balance (₦)', 'Status']
+    col_widths = [1.8 * inch, 1 * inch, 1.1 * inch, 1.1 * inch, 1.1 * inch, 1.1 * inch, 0.9 * inch]
+
+    data = [headers]
+
+    for loan in queryset:
+        staff_name = str(loan.staff)
+        date_str = loan.request_date.strftime("%b %d, %Y") if loan.request_date else ""
+
+        row = [
+            staff_name,
+            loan.staff.staff_id,
+            date_str,
+            f"₦{loan.amount:,.2f}",
+            f"₦{loan.repaid_amount:,.2f}",
+            f"₦{loan.balance:,.2f}",
+            loan.get_status_display(),
+        ]
+
+        data.append(row)
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#366092')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ALIGN', (3, 1), (5, -1), 'RIGHT'),
+        ('ALIGN', (1, 1), (1, -1), 'CENTER'),
+        ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+        ('ALIGN', (6, 1), (6, -1), 'CENTER'),
+        ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+    ])
+
+    table.setStyle(table_style)
+    elements.append(table)
+
+    elements.append(Spacer(1, 20))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+
+    total_amount = sum(l.amount for l in queryset)
+    total_repaid = sum(l.repaid_amount for l in queryset)
+    total_balance = sum(l.balance for l in queryset)
+    footer_text = f"Total Records: {queryset.count()} | Total Amount: ₦{total_amount:,.2f} | Total Repaid: ₦{total_repaid:,.2f} | Total Balance: ₦{total_balance:,.2f}"
+    footer = Paragraph(footer_text, footer_style)
+    elements.append(footer)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"staff_loans_{session.__str__()}_{term.name}_{timestamp}.pdf"
+
+    response = HttpResponse(buffer.read(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response
 
 
 class StaffLoanCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
@@ -4539,10 +5088,10 @@ def income_expense_report(request):
 
     loan_repayments = loan_repayments_qs.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
 
-    # Salary advance repayments from payroll
+    # Salary advance repayments from payroll (now tracked in other_deductions JSON field)
     salary_records_qs = SalaryRecord.objects.filter(
         paid_date__range=[from_date, to_date],
-        is_paid=True
+        payment_status='paid'  # Changed from is_paid=True
     )
 
     if session_filter:
@@ -4550,7 +5099,11 @@ def income_expense_report(request):
     if term_filter:
         salary_records_qs = salary_records_qs.filter(term_id=term_filter)
 
-    advance_repayments = salary_records_qs.aggregate(total=Sum('salary_advance_deduction'))['total'] or Decimal('0.00')
+    # Calculate advance repayments from other_deductions JSON field
+    advance_repayments = Decimal('0.00')
+    for record in salary_records_qs:
+        other_deductions = record.other_deductions or {}
+        advance_repayments += Decimal(str(other_deductions.get('salary_advance', 0)))
 
     total_debt_recoveries = loan_repayments + advance_repayments
 
@@ -4585,7 +5138,7 @@ def income_expense_report(request):
     # 2. Salary Payments
     salary_payments_qs = SalaryRecord.objects.filter(
         paid_date__range=[from_date, to_date],
-        is_paid=True
+        payment_status='paid'  # Changed from is_paid=True
     )
 
     if session_filter:

@@ -50,6 +50,14 @@
                                         {{ form.income_date }}
                                     </div>
 
+                                    <!-- Bank Account -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="{{ form.bank_account.id_for_label }}" class="form-label">
+                                            Bank Account <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.bank_account }}
+                                    </div>
+
                                     <!-- Source -->
                                     <div class="col-md-12 mb-3">
                                         <label for="{{ form.source.id_for_label }}" class="form-label">Source of Income</label>
