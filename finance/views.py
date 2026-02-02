@@ -6055,7 +6055,7 @@ class OtherPaymentClearanceRevertView(LoginRequiredMixin, PermissionRequiredMixi
 # ============================================================================
 
 @login_required
-@permission_required('finance.view_salarysetting', raise_exception=True)
+@permission_required('finance.view_salaryrecord', raise_exception=True)
 def salary_setting_list_view(request):
     """List all salary settings"""
     settings = SalarySetting.objects.all().order_by('-is_active', '-effective_from')
@@ -6068,7 +6068,7 @@ def salary_setting_list_view(request):
 
 
 @login_required
-@permission_required('finance.add_salarysetting', raise_exception=True)
+@permission_required('finance.add_salaryrecord', raise_exception=True)
 def salary_setting_create_view(request):
     """Create new salary setting"""
     if request.method == 'POST':
@@ -6094,7 +6094,7 @@ def salary_setting_create_view(request):
 
 
 @login_required
-@permission_required('finance.view_salarysetting', raise_exception=True)
+@permission_required('finance.view_salaryrecord', raise_exception=True)
 def salary_setting_detail_view(request, pk):
     """View and manage salary setting"""
     setting = get_object_or_404(SalarySetting, pk=pk)
@@ -6104,7 +6104,7 @@ def salary_setting_detail_view(request, pk):
         action = request.POST.get('action')
 
         if action == 'activate' and not setting.is_active:
-            if request.user.has_perm('finance.change_salarysetting'):
+            if request.user.has_perm('finance.add_salaryrecord'):
                 setting.is_active = True
                 setting.save()
                 messages.success(request, f'"{setting.name}" is now active.')
@@ -6112,7 +6112,7 @@ def salary_setting_detail_view(request, pk):
                 messages.error(request, 'You do not have permission to activate settings.')
 
         elif action == 'deactivate' and setting.is_active:
-            if request.user.has_perm('finance.change_salarysetting'):
+            if request.user.has_perm('finance.add_salaryrecord'):
                 setting.is_active = False
                 setting.save()
                 messages.success(request, f'"{setting.name}" has been deactivated.')
@@ -6153,12 +6153,12 @@ def salary_setting_detail_view(request, pk):
         'statutory_deductions_json': statutory_deductions_json,
         'other_deductions_json': other_deductions_json,
         # optional helper (handy in templates if you prefer)
-        'can_change': request.user.has_perm('finance.change_salarysetting'),
+        'can_change': request.user.has_perm('finance.add_salaryrecord'),
     }
     return render(request, 'finance/salary_setting/detail.html', context)
 
 @login_required
-@permission_required('finance.change_salarysetting', raise_exception=True)
+@permission_required('finance.add_salaryrecord', raise_exception=True)
 def salary_setting_update_view(request, pk):
     """Update salary setting (only if not locked)"""
     setting = get_object_or_404(SalarySetting, pk=pk)
@@ -6192,7 +6192,7 @@ def salary_setting_update_view(request, pk):
 # ============================================================================
 
 @login_required
-@permission_required('finance.view_salarystructure', raise_exception=True)
+@permission_required('finance.view_salaryrecord', raise_exception=True)
 def salary_structure_list_view(request):
     """List all salary structures"""
     structures = SalaryStructure.objects.select_related(
@@ -6217,7 +6217,7 @@ def salary_structure_list_view(request):
 
 
 @login_required
-@permission_required('finance.add_salarystructure', raise_exception=True)
+@permission_required('finance.add_salaryrecord', raise_exception=True)
 def salary_structure_create_view(request):
     """Create salary structure for staff"""
     if request.method == 'POST':
@@ -6260,7 +6260,7 @@ def salary_structure_create_view(request):
 
 
 @login_required
-@permission_required('finance.change_salarystructure', raise_exception=True)
+@permission_required('finance.add_salaryrecord', raise_exception=True)
 def salary_structure_update_view(request, pk):
     """Update salary structure"""
     structure = get_object_or_404(SalaryStructure, pk=pk)
@@ -6303,7 +6303,7 @@ def salary_structure_update_view(request, pk):
 
 
 @login_required
-@permission_required('finance.view_salarystructure', raise_exception=True)
+@permission_required('finance.view_salaryrecord', raise_exception=True)
 def salary_structure_detail_view(request, pk):
     """View salary structure details with complete breakdown"""
     structure = get_object_or_404(
