@@ -345,23 +345,21 @@ class StockInItemModel(models.Model):
 
     @property
     def line_total(self):
+
         return self.quantity_received * self.unit_cost
 
     def save(self, *args, **kwargs):
-        """
-        FIXED VERSION: This method now uses update() to avoid triggering
-        additional save() calls that could cause recursion.
-        """
         is_new = self.pk is None
         if is_new:
             self.quantity_remaining = self.quantity_received
 
+        # Extract the flag to prevent double-counting
+        skip_inventory_update = kwargs.pop('skip_inventory_update', False)
+
         super().save(*args, **kwargs)
 
-        if is_new:
-            # Use atomic transaction for the inventory update
+        if is_new and not skip_inventory_update:
             with transaction.atomic():
-                # Use update() instead of save() to avoid triggering signals/recursion
                 if self.stock_in.location == 'shop':
                     ItemModel.objects.filter(pk=self.item.pk).update(
                         shop_quantity=F('shop_quantity') + self.quantity_received
