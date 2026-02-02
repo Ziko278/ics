@@ -70,6 +70,9 @@ class ItemModel(models.Model):
         ordering = ['name']
         verbose_name = "Inventory Item"
         verbose_name_plural = "Inventory Items"
+        permissions = [
+            ("view_inventory_report", "Can view inventory reports"),
+        ]
         constraints = [
             models.UniqueConstraint(fields=['name', 'unit'], name='unique_item_name_unit')
         ]

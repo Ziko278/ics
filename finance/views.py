@@ -1644,7 +1644,7 @@ class FeePaymentRevertView(LoginRequiredMixin, PermissionRequiredMixin, View):
                         request,
                         f"Payment reverted but student wallet not found. Manual refund of ₦{payment.amount:,.2f} may be required."
                     )
-                    
+
             # Update invoice status based on new balance
             invoice.refresh_from_db()
             if invoice.amount_paid <= 0:

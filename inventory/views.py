@@ -2593,7 +2593,7 @@ def view_staff_collections(request):
 
 
 @login_required
-@permission_required("inventory.view_itemmodel", raise_exception=True)
+@permission_required("inventory.view_inventory_report", raise_exception=True)
 def inventory_level_report(request):
     """Display inventory level report with stock movements."""
 
