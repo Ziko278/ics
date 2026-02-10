@@ -9,6 +9,11 @@ urlpatterns = [
     path('department/<int:pk>/edit', DepartmentUpdateView.as_view(), name='department_edit'),
     path('department/<int:pk>/delete', DepartmentDeleteView.as_view(), name='department_delete'),
 
+    path('position/create', PositionCreateView.as_view(), name='position_create'),
+    path('position/index', PositionListView.as_view(), name='position_index'),
+    path('position/<int:pk>/edit', PositionUpdateView.as_view(), name='position_edit'),
+    path('position/<int:pk>/delete', PositionDeleteView.as_view(), name='position_delete'),
+
     # Staff URLs
     path('staff/', StaffListView.as_view(), name='staff_index'),
     path('staff/create/', StaffCreateView.as_view(), name='staff_create'),

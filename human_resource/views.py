@@ -17,6 +17,8 @@ from django.utils.decorators import method_decorator
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView
 )
+from django.contrib.messages.views import SuccessMessageMixin
+
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.decorators import login_required, permission_required
 from django.conf import settings
@@ -24,8 +26,8 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from xlsxwriter import Workbook
 
-from .models import StaffModel, StaffProfileModel, HRSettingModel, StaffUploadTask, DepartmentModel
-from .forms import StaffForm, GroupForm, HRSettingForm, StaffUploadForm, StaffProfileUpdateForm, DepartmentForm
+from .models import StaffModel, StaffProfileModel, HRSettingModel, StaffUploadTask, DepartmentModel, PositionModel
+from .forms import StaffForm, GroupForm, HRSettingForm, StaffUploadForm, StaffProfileUpdateForm, DepartmentForm, PositionForm
 from human_resource.tasks import process_staff_upload
 
 logger = logging.getLogger(__name__)
@@ -176,6 +178,73 @@ class DepartmentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteVi
         return reverse('department_index')
 
 
+class PositionCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, CreateView):
+    model = PositionModel
+    permission_required = 'human_resource.add_departmentmodel'
+    form_class = PositionForm
+    template_name = 'human_resource/position/index.html'
+    success_message = 'Position Successfully Registered'
+
+    def get_success_url(self):
+        return reverse('position_index')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context['department_list'] = DepartmentModel.objects.all().order_by('name')
+        context['position_list'] = PositionModel.objects.all().order_by('name')
+        return context
+
+
+class PositionListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = PositionModel
+    permission_required = 'human_resource.view_departmentmodel'
+    fields = '__all__'
+    template_name = 'human_resource/position/index.html'
+    context_object_name = "position_list"
+
+    def get_queryset(self):
+        return PositionModel.objects.all().order_by('name')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['department_list'] = DepartmentModel.objects.all().order_by('name')
+        context['form'] = PositionForm()
+
+        return context
+
+
+class PositionUpdateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, UpdateView):
+    model = PositionModel
+    permission_required = 'human_resource.add_departmentmodel'
+    form_class = PositionForm
+    template_name = 'human_resource/position/index.html'
+    success_message = 'Position Successfully Updated'
+
+    def get_success_url(self):
+        return reverse('position_index')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        return context
+
+
+class PositionDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, DeleteView):
+    model = PositionModel
+    permission_required = 'human_resource.add_departmentmodel'
+    fields = '__all__'
+    template_name = 'human_resource/position/delete.html'
+    context_object_name = "position"
+    success_message = 'Position Successfully Deleted'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        return context
+
+    def get_success_url(self):
+        return reverse('position_index')
+
+
 # -------------------------
 # Staff Views
 # -------------------------
@@ -251,6 +320,13 @@ class StaffCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
             messages.error(self.request, f"An unexpected error occurred: {e}")
             return self.form_invalid(form)
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context['department_list'] = DepartmentModel.objects.all().order_by('name')
+        context['staff'] = self.object
+        return context
+
 
 class StaffDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = StaffModel
@@ -269,6 +345,13 @@ class StaffUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse('staff_detail', kwargs={'pk': self.object.pk})
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context['department_list'] = DepartmentModel.objects.all().order_by('name')
+        context['staff'] = self.object
+        return context
 
 
 class StaffDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):

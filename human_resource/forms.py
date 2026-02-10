@@ -2,7 +2,7 @@ import re
 from django import forms
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from .models import StaffModel, HRSettingModel, DepartmentModel
+from .models import StaffModel, HRSettingModel, DepartmentModel, PositionModel
 
 
 class DepartmentForm(forms.ModelForm):
@@ -60,6 +60,25 @@ class DepartmentForm(forms.ModelForm):
                 raise ValidationError(f"Department code '{code}' already exists.")
 
         return code
+
+
+class PositionForm(forms.ModelForm):
+    """  """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields:
+            self.fields[field].widget.attrs.update({
+                'class': 'form-control',
+                'autocomplete': 'off'
+            })
+
+    class Meta:
+        model = PositionModel
+        fields = '__all__'
+        widgets = {
+
+        }
+
 
 
 class StaffForm(forms.ModelForm):

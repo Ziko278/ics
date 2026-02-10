@@ -5,7 +5,15 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from reportlab.lib.pagesizes import landscape, A4
 from io import BytesIO
-import openpyxl
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+import json
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl import Workbook
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core import serializers
@@ -29,15 +37,6 @@ from django.views.generic import TemplateView, CreateView, UpdateView, ListView,
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required, permission_required
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
-import json
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl import Workbook
 from admin_site.models import SessionModel, TermModel, SchoolSettingModel, ClassesModel, ActivityLogModel, \
     SchoolInfoModel
 from admin_site.views import FlashFormErrorsMixin
@@ -9580,7 +9579,11 @@ def bank_payment_export_view(request):
     elif sort_by == 'bank':
         payment_data.sort(key=lambda x: (x['bank_name'], x['staff_name']))
     elif sort_by == 'department':
-        payment_data.sort(key=lambda x: (x['department'], x['staff_name']))
+        payment_data.sort(key=lambda x: (
+            x['department'] if x['department'] != 'N/A' else 'ZZZZZ',  # Push N/A to end
+            x.get('position', 'ZZZZZ'),  # Push missing positions to end
+            x['staff_name']
+        ))
 
     # Get list of banks with staff (sorted)
     banks_list = sorted(list(banks_with_staff))
@@ -9676,7 +9679,11 @@ def download_bank_payment_excel(request):
     elif sort_by == 'bank':
         payment_data.sort(key=lambda x: (x['bank_name'], x['staff_name']))
     elif sort_by == 'department':
-        payment_data.sort(key=lambda x: (x['department'], x['staff_name']))
+        payment_data.sort(key=lambda x: (
+            x['department'] if x['department'] != 'N/A' else 'ZZZZZ',
+            x.get('position', 'ZZZZZ'),
+            x['staff_name']
+        ))
 
     # Create Excel workbook
     wb = Workbook()

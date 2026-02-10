@@ -1,6 +1,6 @@
 {% extends 'admin_site/layout.html' %}
 {% block 'main' %}
-
+{% load static %}
 <div class="col-12">
     <div class="card">
         <div class="card-body">
@@ -40,8 +40,22 @@
                         {{ form.gender }}
                     </div>
                     <div class="col-md-6">
-                        <label for="id_department" class="form-label">Department<span class="text-danger">*</span></label>
-                        {{ form.department }}
+                        <select name="department" class="form-control" id="id_department" required>
+                        {% for department in department_list %}
+                        <option {% if department == staff.department %} selected {% endif %} value="{{department.id}}" position="<option value=''>----------</option>
+                        {% for position in department.positions.all %}
+                        <option value='{{position.id}}'>{{position.name|upper}}</option>
+                        {% endfor %}
+                        ">{{department.name|upper}} </option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="col-md-6">
+                        <select name="position" class="form-control" id="id_position" required>
+                            {% for position in staff.department.positions.all %}
+                              <option {% if position == staff.position %} selected {% endif %} value="{{ position.id }}">{{ position.name|upper }}</option>
+                            {% endfor %}
+                          </select>
                     </div>
                     <div class="col-md-6">
                         <label for="id_image" class="form-label">Change Profile Image</label>
@@ -90,4 +104,19 @@
     </div>
 </div>
 
+  <script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+<script>
+$(document).ready(function(){
+  $('#id_department').change(function(){
+    position = $('option:selected', this).attr('position')
+    $('#id_position').html(position)
+  })
+
+  $('#state').change(function(){
+    lga = $('option:selected', this).attr('lga')
+    $('#lga').html(lga)
+  })
+})
+
+</script>
 {% endblock %}

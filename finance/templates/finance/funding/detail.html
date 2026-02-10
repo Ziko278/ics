@@ -16,6 +16,9 @@
                         <dt class="col-sm-4">Amount Paid:</dt>
                         <dd class="col-sm-8">₦{{ funding.amount|floatformat:2 }}</dd>
 
+                        <dt class="col-sm-4">Wallet:</dt>
+                        <dd class="col-sm-8">{{ funding.wallet_type|title }} Wallet</dd>
+
                         <dt class="col-sm-4">Payment Method:</dt>
                         <dd class="col-sm-8">{{ funding.get_method_display }}</dd>
 

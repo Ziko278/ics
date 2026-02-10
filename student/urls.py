@@ -24,7 +24,7 @@ urlpatterns = [
     # Parent URLs
     path('parents/', ParentListView.as_view(), name='parent_index'),
     path('parents/create/', ParentCreateView.as_view(), name='parent_create'),
-path('parent/<int:pk>/reset-password/', ParentPasswordResetView.as_view(), name='parent_password_reset'),
+    path('parent/<int:pk>/reset-password/', ParentPasswordResetView.as_view(), name='parent_password_reset'),
     path('parents/<int:pk>/', ParentDetailView.as_view(), name='parent_detail'),
     path('parents/<int:pk>/edit/', ParentUpdateView.as_view(), name='parent_edit'),
     path('parents/<int:pk>/delete/', ParentDeleteView.as_view(), name='parent_delete'),

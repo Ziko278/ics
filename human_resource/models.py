@@ -52,6 +52,28 @@ class DepartmentModel(models.Model):
         return StaffModel.objects.filter(department=self).count()
 
 
+class PositionModel(models.Model):
+    name = models.CharField(max_length=100)
+    department = models.ForeignKey(DepartmentModel, on_delete=models.CASCADE, related_name='positions')
+    description = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True, blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'department'],
+                name='unique_dept_name_and_dept_combo'
+            )
+        ]
+
+    def __str__(self):
+        return self.name.upper() + ' (' + self.department.name.upper() + ')'
+
+    def number_of_staff(self):
+        return StaffModel.objects.filter(position=self).count()
+
+
 class StaffModel(models.Model):
     """
     Represents a staff member in the school.
@@ -64,6 +86,8 @@ class StaffModel(models.Model):
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     department = models.ForeignKey(DepartmentModel, blank=True, null=True, on_delete=models.SET_NULL)
+
+    position = models.ForeignKey(PositionModel, on_delete=models.CASCADE, related_name='position_staffs', null=True, blank=True)
     staff_id = models.CharField(max_length=100, unique=True, blank=True)
     image = models.FileField(upload_to='images/staff_images', blank=True, null=True)
     mobile = models.CharField(max_length=20, blank=True, null=True, default='')
