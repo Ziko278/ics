@@ -4945,7 +4945,7 @@ class StudentDiscountDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Del
 
 
 @login_required
-@permission_required("finance.view_incomemodel", raise_exception=True)
+@permission_required("finance.view_expensemodel", raise_exception=True)
 def income_expense_report(request):
     """Display comprehensive income and expense report with net income calculation."""
 
