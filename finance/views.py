@@ -2,6 +2,7 @@ import calendar
 import json
 import traceback
 from datetime import date, datetime, timedelta
+from calendar import monthrange
 from decimal import Decimal
 from reportlab.lib.pagesizes import landscape, A4
 from io import BytesIO
