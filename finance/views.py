@@ -1111,34 +1111,47 @@ class InvoiceReceiptView(LoginRequiredMixin, PermissionRequiredMixin, DetailView
 
 class FeePaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = FeePaymentModel
-    permission_required = 'finance.view_feemodel'  # Assumes default permission
+    permission_required = 'finance.view_feemodel'
     template_name = 'finance/payment/payment_index.html'
     context_object_name = 'payment_list'
     paginate_by = 25
 
+    def get(self, request, *args, **kwargs):
+        # Check if download is requested
+        if request.GET.get('download') == 'excel':
+            return self.download_excel()
+        return super().get(request, *args, **kwargs)
+
     def get_queryset(self):
-        # Start with a base queryset, pre-fetching related data for efficiency
         queryset = FeePaymentModel.objects.select_related(
             'invoice__student',
             'invoice__session',
             'invoice__term'
         ).order_by('-date', '-created_at')
 
-        # Get filter parameters from the URL
+        # Get filter parameters
         session_id = self.request.GET.get('session', '')
         term_id = self.request.GET.get('term', '')
         search_query = self.request.GET.get('search', '').strip()
+        date_from = self.request.GET.get('date_from', '')
+        date_to = self.request.GET.get('date_to', '')
 
-        # Apply filters if they exist
+        # Apply filters
         if session_id:
             queryset = queryset.filter(invoice__session_id=session_id)
 
         if term_id:
             queryset = queryset.filter(invoice__term_id=term_id)
 
-        # Apply search query if it exists
+        # Apply date range filter
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+
+        # Apply search query
         if search_query:
-            # Annotate the student's full name to make it searchable
             queryset = queryset.annotate(
                 student_full_name=Concat(
                     'invoice__student__first_name', Value(' '), 'invoice__student__last_name'
@@ -1154,16 +1167,91 @@ class FeePaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # Pass data for the filter dropdowns
+        # Get current date and calculate default date range
+        today = date.today()
+        first_day = date(today.year, today.month, 1)
+        last_day = date(today.year, today.month, monthrange(today.year, today.month)[1])
+
         context['session_list'] = SessionModel.objects.all().order_by('-start_year')
         context['term_list'] = TermModel.objects.all().order_by('order')
 
-        # Pass current filter values back to the template to maintain state
+        # Pass current filter values
         context['current_session_id'] = self.request.GET.get('session', '')
         context['current_term_id'] = self.request.GET.get('term', '')
         context['search_query'] = self.request.GET.get('search', '')
+        context['date_from'] = self.request.GET.get('date_from', first_day.strftime('%Y-%m-%d'))
+        context['date_to'] = self.request.GET.get('date_to', last_day.strftime('%Y-%m-%d'))
 
         return context
+
+    def download_excel(self):
+        # Get filtered queryset (without pagination)
+        self.object_list = self.get_queryset()
+
+        # Create workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Payment History"
+
+        # Define styles
+        header_font = Font(bold=True, color="FFFFFF", size=12)
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # Headers
+        headers = ['Student Name', 'Reg. Number', 'Amount Paid', 'Invoice #',
+                   'Payment Date', 'Session', 'Quarter', 'Status']
+
+        ws.append(headers)
+
+        # Style header row
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = border
+
+        # Add data rows
+        for payment in self.object_list:
+            ws.append([
+                f"{payment.invoice.student.first_name} {payment.invoice.student.last_name}".title(),
+                payment.invoice.student.registration_number,
+                float(payment.amount),
+                payment.invoice.invoice_number,
+                payment.date.strftime('%d %b, %Y'),
+                str(payment.invoice.session),
+                payment.invoice.term.name.title(),
+                payment.get_status_display()
+            ])
+
+        # Style data rows
+        for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+            for cell in row:
+                cell.border = border
+                if cell.column == 3:  # Amount column
+                    cell.number_format = '#,##0.00'
+                    cell.alignment = Alignment(horizontal="right")
+
+        # Adjust column widths
+        column_widths = [25, 15, 15, 20, 15, 20, 15, 12]
+        for i, width in enumerate(column_widths, 1):
+            ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = width
+
+        # Prepare response
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename=payment_history_{date.today().strftime("%Y%m%d")}.xlsx'
+
+        wb.save(response)
+        return response
 
 
 class FeePendingPaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):

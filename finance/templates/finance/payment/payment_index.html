@@ -40,14 +40,27 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="col-md-2">
+                <label for="date-from" class="form-label">From Date</label>
+                <input type="date" name="date_from" id="date-from" class="form-control" value="{{ date_from }}">
+            </div>
+            <div class="col-md-2">
+                <label for="date-to" class="form-label">To Date</label>
+                <input type="date" name="date_to" id="date-to" class="form-control" value="{{ date_to }}">
+            </div>
             <div class="col-md-4">
                 <label for="search-input" class="form-label">Search</label>
                 <input type="text" name="search" id="search-input" class="form-control" 
                        placeholder="Student Name, Reg No, Invoice #" value="{{ search_query }}">
             </div>
-            <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary me-2">Filter</button>
-                <a href="{% url 'finance_payment_index' %}" class="btn btn-secondary">Clear</a>
+            <div class="col-md-12 d-flex align-items-end justify-content-between">
+                <div>
+                    <button type="submit" class="btn btn-primary me-2">Filter</button>
+                    <a href="{% url 'finance_payment_index' %}" class="btn btn-secondary">Clear</a>
+                </div>
+                <a href="?download=excel&{{ request.GET.urlencode }}" class="btn btn-success">
+                    <i class="bi bi-file-earmark-excel"></i> Download Excel
+                </a>
             </div>
         </form>
 
