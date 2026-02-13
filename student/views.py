@@ -226,7 +226,7 @@ class ParentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class ParentCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = ParentModel
-    permission_required = 'student.add_parentmodel'  # Permission is on ParentModel
+    permission_required = 'student.add_studentmodel'  # Permission is on ParentModel
     form_class = ParentForm
     template_name = 'student/parent/create.html'
 
