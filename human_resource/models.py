@@ -82,11 +82,15 @@ class StaffModel(models.Model):
         MALE = 'MALE', 'MALE'
         FEMALE = 'FEMALE', 'FEMALE'
 
+    class Category(models.TextChoices):
+            TEACHING = 'TEACHING', 'TEACHING'
+            NON_TEACHING = 'NON TEACHING', 'NON TEACHING'
+
     # Renamed for consistency with Django conventions
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
+    category = models.CharField(max_length=10, null=True, blank=True, choices=Category.choices)
     department = models.ForeignKey(DepartmentModel, blank=True, null=True, on_delete=models.SET_NULL)
-
     position = models.ForeignKey(PositionModel, on_delete=models.CASCADE, related_name='position_staffs', null=True, blank=True)
     staff_id = models.CharField(max_length=100, unique=True, blank=True)
     image = models.FileField(upload_to='images/staff_images', blank=True, null=True)

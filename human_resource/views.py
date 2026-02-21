@@ -2,7 +2,6 @@ import io
 import logging
 import random
 import string
-
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.files.storage import FileSystemStorage
 from django.db import transaction, IntegrityError

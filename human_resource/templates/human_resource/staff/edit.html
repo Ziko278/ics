@@ -40,6 +40,11 @@
                         {{ form.gender }}
                     </div>
                     <div class="col-md-6">
+                        <label for="id_gender" class="form-label">Category<span class="text-danger">*</span></label>
+                        {{ form.category }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="id_department" class="form-label">Sub Department<span class="text-danger">*</span></label>
                         <select name="department" class="form-control" id="id_department" required>
                         {% for department in department_list %}
                         <option {% if department == staff.department %} selected {% endif %} value="{{department.id}}" position="<option value=''>----------</option>
@@ -51,6 +56,7 @@
                       </select>
                     </div>
                     <div class="col-md-6">
+                        <label for="id_department" class="form-label">Role<span class="text-danger">*</span></label>
                         <select name="position" class="form-control" id="id_position" required>
                             {% for position in staff.department.positions.all %}
                               <option {% if position == staff.position %} selected {% endif %} value="{{ position.id }}">{{ position.name|upper }}</option>

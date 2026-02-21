@@ -39,8 +39,14 @@
                         <label for="id_gender" class="form-label">Gender<span class="text-danger">*</span></label>
                         {{ form.gender }}
                     </div>
+
                     <div class="col-md-6">
-                        <label for="id_department" class="form-label">Department<span class="text-danger">*</span></label>
+                        <label for="id_gender" class="form-label">Category<span class="text-danger">*</span></label>
+                        {{ form.category }}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="id_department" class="form-label">Sub Department<span class="text-danger">*</span></label>
                         <select name="department" class="form-control" id="id_department" required>
                             <option value="" position="<option value=''>----------</option>">----------</option>
                             {% for department in department_list %}
@@ -55,7 +61,7 @@
                           </select>
                     </div>
                     <div class="col-md-6">
-                        <label for="id_department" class="form-label">Sub Department<span class="text-danger">*</span></label>
+                        <label for="id_department" class="form-label">Role<span class="text-danger">*</span></label>
                         <select name="position" class="form-control" id="id_position" required>
                             <option value="">----------</option>
                           </select>

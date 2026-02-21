@@ -90,7 +90,7 @@ class StaffForm(forms.ModelForm):
         model = StaffModel
         fields = [
             'first_name', 'last_name', 'department', 'email', 'mobile',
-            'gender', 'group', 'status', 'image'
+            'gender', 'group', 'status', 'image', 'category'
         ]
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
