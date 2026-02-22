@@ -90,12 +90,14 @@ class StaffForm(forms.ModelForm):
         model = StaffModel
         fields = [
             'first_name', 'last_name', 'department', 'email', 'mobile',
-            'gender', 'group', 'status', 'image', 'category'
+            'gender', 'group', 'status', 'image', 'category', 'position'
         ]
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'category': forms.Select(attrs={'class': 'form-control'}),
             'department': forms.Select(attrs={'class': 'form-control'}),
+            'position': forms.Select(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'mobile': forms.TextInput(attrs={'class': 'form-control'}),
             'gender': forms.Select(attrs={'class': 'form-control'}),
