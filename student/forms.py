@@ -239,7 +239,7 @@ class StudentForm(forms.ModelForm):
                 ).distinct()
 
             # Lock parent field during edit
-            self.fields['parent'].disabled = True
+            #self.fields['parent'].disabled = True
             self.fields['parent'].initial = self.instance.parent
 
         # --- Empty labels ---

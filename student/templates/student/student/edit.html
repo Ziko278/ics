@@ -1,5 +1,6 @@
 {% extends 'admin_site/layout.html' %}
 {% block 'main' %}
+{% load static %}
 
 <div class="col-12">
     <div class="card">
@@ -13,18 +14,93 @@
 
             <!-- Parent Information Header (Read-Only) -->
             <div class="alert alert-light mt-3">
-                <h6 class="alert-heading">Parent / Guardian:</h6>
-                <div class="d-flex align-items-center">
-                    <img {% if student.parent.image %} src="{{ student.parent.image.url }}" {% else %} src="https://placehold.co/50x50/EFEFEF/AAAAAA?text={{ student.parent.first_name|first|upper }}" {% endif %} alt="Parent" class="rounded-circle me-3" width="50" height="50" style="object-fit: cover;">
-                    <div>
-                        <strong>{{ student.parent.first_name|title }} {{ student.parent.last_name|title }}</strong>
-                        <div class="text-muted small">Parent ID: {{ student.parent.parent_id }}</div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="alert-heading">Parent / Guardian:</h6>
+                        <div class="d-flex align-items-center">
+                            <img {% if student.parent.image %} src="{{ student.parent.image.url }}" {% else %} src="https://placehold.co/50x50/EFEFEF/AAAAAA?text={{ student.parent.first_name|first|upper }}" {% endif %} alt="Parent" class="rounded-circle me-3" width="50" height="50" style="object-fit: cover;">
+                            <div>
+                                <strong>{{ student.parent.first_name|title }} {{ student.parent.last_name|title }}</strong>
+                                <div class="text-muted small">Parent ID: {{ student.parent.parent_id }}</div>
+                            </div>
+                        </div>
                     </div>
-                </div>
+
+                    <div class="col-md-6">
+                         <!-- Parent Change Section -->
+                                        <div class="col-md-12 mt-4">
+                                            <div class="card border">
+                                                <div class="card-body">
+                                                    <h5 class="card-title mb-1">Change Parent</h5>
+                                                    <p class="text-muted small mb-3">Search and assign a different parent to this student</p>
+
+                                                    <input type="hidden" id="parent_list" value="{{ parent_list }}">
+                                                    <input type="hidden" id="original_parent_id" value="{{ original_parent_id }}">
+                                                    <input type="hidden" id="current_selected_parent_id" value="{{ student_parent.id }}">
+                                                    <input type="hidden" id="parent_changed" value="false">
+                                                    <div class="form-group">
+                                                        <label class="form-label">Search Parent by Name</label>
+                                                        <div class="input-group">
+                                                            <span class="input-group-text"><i class="mdi mdi-magnify"></i></span>
+                                                            <input type="text" class="form-control" id="parent_search"
+                                                                   placeholder="Type surname, middle name or last name...">
+                                                        </div>
+                                                        <small class="form-text text-muted">Start typing to see results (minimum 3 characters)</small>
+                                                    </div>
+
+                                                    <div class="row mt-3">
+                                                        <div class="col-md-12">
+                                                            <div id="parent_search_results" class="list-group" style="max-height: 300px; overflow-y: auto;"></div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div id="parent_detail_div" class="mt-3" style="display:none;">
+                                                        <hr>
+                                                        <div class="alert alert-info" role="alert">
+                                                            <h6 class="alert-heading mb-3">
+                                                                <i class="mdi mdi-information-outline me-1"></i>
+                                                                New Parent Selected
+                                                            </h6>
+                                                            <div class="row">
+                                                                <div class="col-md-3 text-center">
+                                                                    <div id="new_parent_image"></div>
+                                                                </div>
+                                                                <div class="col-md-9">
+                                                                    <div id="new_parent_fullname" class="mb-2"></div>
+                                                                    <div id="new_parent_mobile" class="mb-2"></div>
+                                                                    <div id="new_parent_email" class="mb-2"></div>
+                                                                    <div id="new_parent_address" class="mb-3"></div>
+                                                                    <div class="btn-group" role="group">
+                                                                        <button type="button" id="confirm_parent_change" class="btn btn-success btn-sm">
+                                                                            <i class="mdi mdi-check me-1"></i>Confirm Change
+                                                                        </button>
+                                                                        <button type="button" id="cancel_parent_change" class="btn btn-secondary btn-sm">
+                                                                            <i class="mdi mdi-close me-1"></i>Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div id="parent_change_notice" class="alert alert-warning mt-3" style="display:none;">
+                                                        <i class="mdi mdi-alert me-1"></i>
+                                                        <strong>Parent Changed!</strong> Remember to save the form to apply all changes.
+                                                        <button type="button" id="revert_parent_change" class="btn btn-warning btn-sm float-end">
+                                                            <i class="mdi mdi-undo me-1"></i>Revert to Original
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                    </div>
             </div>
 
             <form method="POST" enctype="multipart/form-data" class="mt-4">
                 {% csrf_token %}
+                <input type="hidden" name="parent" id="parent_id_field" value="{{ student.parent.id }}" />
+
 
                 <!-- Student's Personal Details -->
                 <h6 class="card-subtitle mb-2 text-muted">Student's Personal Details</h6>
@@ -142,5 +218,210 @@ document.addEventListener('DOMContentLoaded', function() {
     updateSections(true);
 });
 </script>
+
+    <script src="{% static 'admin_site/scripts/jquery.js' %}"></script>
+<script>
+$(document).ready(function(){
+
+
+    // Toast notification function
+    function showToast(message, type = 'success') {
+        const toast = $('#toast');
+        const toastMessage = $('#toast-message');
+
+        // Set message
+        toastMessage.text(message);
+
+        // Set color based on type
+        toast.removeClass('bg-success bg-warning bg-danger bg-info');
+        if(type === 'success') {
+            toast.addClass('bg-success text-white');
+        } else if(type === 'warning') {
+            toast.addClass('bg-warning text-dark');
+        } else if(type === 'danger') {
+            toast.addClass('bg-danger text-white');
+        } else if(type === 'info') {
+            toast.addClass('bg-info text-white');
+        }
+
+        // Show toast
+        const bsToast = new bootstrap.Toast(toast[0], {
+            autohide: true,
+            delay: 3000
+        });
+        bsToast.show();
+    }
+
+    // Store original parent data
+    let originalParentData = {
+        id: $('#original_parent_id').val(),
+        image: "{% if student_parent.image %}{{ student_parent.image.url }}{% else %}{% static 'admin_dashboard/images/default_image.jpg' %}{% endif %}",
+        fullname: "{{ student_parent|title }}",
+        mobile: "{% if student_parent.mobile %}{{ student_parent.mobile }}{% else %}Mobile Not Provided{% endif %}",
+        email: "{% if student_parent.email %}{{ student_parent.email }}{% else %}Email Not Provided{% endif %}"
+    };
+
+    // Function to update parent display
+    function updateParentDisplay(parentData) {
+        $('#parent_image_display').attr('src', parentData.image);
+        $('#parent_name_display').html('<strong>' + parentData.fullname + '</strong>');
+        $('#parent_mobile_display').html('<i class="mdi mdi-phone me-1"></i>' + parentData.mobile);
+        $('#parent_email_display').html('<i class="mdi mdi-email me-1"></i>' + parentData.email);
+    }
+
+    // Parent search functionality
+    $('#parent_search').on('input', function(){
+        let search = $(this).val().toLowerCase().trim();
+        let parent_list = JSON.parse($('#parent_list').val());
+        $('#parent_search_results').empty();
+
+        if(search.length >= 3) {
+            let resultsFound = false;
+
+            parent_list.forEach(function(parent){
+                let fullname = (parent.fields.first_name + ' ' + (parent.fields.middle_name || '') + ' ' + parent.fields.last_name).toLowerCase();
+
+                if(fullname.includes(search)){
+                    resultsFound = true;
+                    let displayName = `${parent.fields.title || ''} ${parent.fields.first_name} ${parent.fields.middle_name || ''} ${parent.fields.last_name}`.trim();
+                    let mobile = parent.fields.mobile || 'No mobile';
+                    let email = parent.fields.email || 'No email';
+
+                    $('#parent_search_results').append(
+                        `<a href="#" class="list-group-item list-group-item-action parent_item"
+                            data-id="${parent.pk}"
+                            data-image="${parent.fields.image || ''}"
+                            data-fullname="${displayName}"
+                            data-mobile="${parent.fields.mobile || 'Not Provided'}"
+                            data-email="${parent.fields.email || 'Not Provided'}"
+                            data-address="${parent.fields.residential_address || 'Not Provided'}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${displayName}</h6>
+                            </div>
+                            <small class="text-muted">
+                                <i class="mdi mdi-phone me-1"></i>${mobile} |
+                                <i class="mdi mdi-email me-1"></i>${email}
+                            </small>
+                        </a>`
+                    );
+                }
+            });
+
+            if(!resultsFound) {
+                $('#parent_search_results').html(
+                    '<div class="list-group-item text-muted">No parents found matching your search</div>'
+                );
+            }
+        } else if(search.length > 0 && search.length < 3) {
+            $('#parent_search_results').html(
+                '<div class="list-group-item text-muted">Type at least 3 characters to search</div>'
+            );
+        }
+    });
+
+    // Handle parent selection
+    $(document).on('click', '.parent_item', function(e){
+        e.preventDefault();
+
+        let parentId = $(this).data('id');
+        let parentImage = $(this).data('image');
+        let imageSrc = parentImage ? '/media/' + parentImage : "{% static 'admin_site/images/default_image.jpg' %}";
+
+        $('#new_parent_image').html(`<img src="${imageSrc}" style="width:80px;height:80px;border-radius:5px;object-fit:cover;" />`);
+        $('#new_parent_fullname').html(`<strong><i class="mdi mdi-account me-1"></i>${$(this).data('fullname')}</strong>`);
+        $('#new_parent_mobile').html(`<i class="mdi mdi-phone me-1"></i><strong>Mobile:</strong> ${$(this).data('mobile')}`);
+        $('#new_parent_email').html(`<i class="mdi mdi-email me-1"></i><strong>Email:</strong> ${$(this).data('email')}`);
+        $('#new_parent_address').html(`<i class="mdi mdi-map-marker me-1"></i><strong>Address:</strong> ${$(this).data('address')}`);
+
+        $('#current_selected_parent_id').val(parentId);
+        $('#parent_detail_div').show();
+        $('#parent_search_results').empty();
+        $('#parent_search').val('');
+
+        showToast('Parent selected. Review and confirm the change.', 'info');
+    });
+
+    // Confirm parent change
+    $('#confirm_parent_change').click(function(){
+        let newParentId = $('#current_selected_parent_id').val();
+        let newParentData = {
+            id: newParentId,
+            image: $('#new_parent_image img').attr('src'),
+            fullname: $('#new_parent_fullname').text().replace('👤', '').trim(),
+            mobile: $('#new_parent_mobile').text().replace('Mobile:', '').trim(),
+            email: $('#new_parent_email').text().replace('Email:', '').trim()
+        };
+
+        // Update the hidden field
+        $('#parent_id_field').val(newParentId);
+
+
+        // Update the display
+        updateParentDisplay(newParentData);
+
+        // Show success notice
+        $('#parent_detail_div').hide();
+        $('#parent_change_notice').show();
+        $('#parent_changed').val('true');
+
+        showToast('Parent changed successfully! Remember to save the form.', 'success');
+    });
+
+    // Cancel parent selection
+    $('#cancel_parent_change').click(function(){
+        $('#parent_detail_div').hide();
+        $('#parent_search').val('');
+        showToast('Parent selection cancelled', 'info');
+    });
+
+    // Revert to original parent
+    $('#revert_parent_change').click(function(){
+        $('#parent_id_field').val(originalParentData.id);
+        $('#current_selected_parent_id').val(originalParentData.id);
+
+        // Update display back to original
+        updateParentDisplay(originalParentData);
+
+        // Hide notices
+        $('#parent_change_notice').hide();
+        $('#parent_detail_div').hide();
+        $('#parent_changed').val('false');
+
+        showToast('Reverted to original parent', 'warning');
+    });
+});
+</script>
+
+<style>
+#parent_search_results {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+}
+
+#parent_search_results:empty {
+    border: none;
+}
+
+.parent_item:hover {
+    background-color: #f8f9fa;
+}
+
+.list-group-item-action {
+    cursor: pointer;
+}
+
+#toast {
+    min-width: 300px;
+}
+
+.form-label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.card.border {
+    border-color: #dee2e6 !important;
+}
+</style>
 
 {% endblock %}

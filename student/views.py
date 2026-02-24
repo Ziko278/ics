@@ -10,7 +10,7 @@ import string
 from datetime import datetime
 from functools import reduce
 import operator
-
+from django.core import serializers
 import logging
 from io import BytesIO
 
@@ -879,6 +879,17 @@ class StudentUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView)
         kwargs['user'] = self.request.user  # Pass the logged-in user
         return kwargs
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['student_parent'] = self.object.parent
+        context['student'] = self.object
+
+        parent_list = ParentModel.objects.all()
+        context['student_setting'] = StudentSettingModel.objects.filter().first()
+        context['class_list'] = ClassesModel.objects.all().order_by('name')
+        context['parent_list'] = serializers.serialize("json", parent_list)
+        return context
+
 
 class StudentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = StudentModel
@@ -923,6 +934,8 @@ class StudentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView)
     def get_success_url(self):
         messages.success(self.request, "Student deleted successfully.")
         return reverse('student_index')
+
+
 
 
 # -------------------------
