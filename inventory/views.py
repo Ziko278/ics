@@ -1,6 +1,7 @@
 import json
 import logging
 import tempfile
+import re
 from datetime import date
 from decimal import Decimal
 from django.db.models.functions import Coalesce
@@ -1218,18 +1219,29 @@ def place_order_view(request):
         return redirect(reverse('place_order'))
 
     # Gather line-items from the form
-    idx = 0
     items = []
     subtotal = Decimal('0.00')
-    while True:
+
+    # Collect all submitted item indexes — handles gaps caused by deleted rows
+    item_indexes = set()
+    for key in request.POST.keys():
+        match = re.match(r'^items\[(\d+)\]\[item_id\]$', key)
+        if match:
+            item_indexes.add(int(match.group(1)))
+
+    for idx in sorted(item_indexes):
         item_id = request.POST.get(f'items[{idx}][item_id]')
         qty = request.POST.get(f'items[{idx}][quantity]')
+
+        # Skip rows that are incomplete (empty search rows, etc.)
         if not item_id or not qty:
-            break
+            continue
 
         item = get_object_or_404(ItemModel, pk=item_id)
         try:
             quantity = Decimal(str(qty))
+            if quantity <= Decimal('0.00'):
+                continue
         except Exception:
             messages.error(request, f'Invalid quantity for item {item.name}')
             return redirect(reverse('place_order'))
@@ -1238,7 +1250,6 @@ def place_order_view(request):
         line_total = unit_price * quantity
         items.append((item, quantity, unit_price))
         subtotal += line_total
-        idx += 1
 
     if not items:
         messages.error(request, 'No items were added to the order.')

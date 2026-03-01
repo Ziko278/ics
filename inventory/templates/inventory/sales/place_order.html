@@ -868,13 +868,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     orderForm.addEventListener('submit', function(e) {
-        let hasItems = false;
+        // Re-index all filled rows sequentially before submission.
+        // This fixes the bug where deleted rows leave index gaps (e.g. items[0], items[2], items[3])
+        // which caused the old sequential while-loop on the server to stop reading at the first gap.
+        let newIndex = 0;
         orderTableBody.querySelectorAll('.order-row').forEach(row => {
-            if(row.querySelector('.item-id').value) {
-                hasItems = true;
+            const itemIdInput = row.querySelector('.item-id');
+            const qtyInput = row.querySelector('.quantity-input');
+
+            if (itemIdInput && itemIdInput.value) {
+                // Only rename rows that actually have an item selected
+                itemIdInput.name = `items[${newIndex}][item_id]`;
+                if (qtyInput) qtyInput.name = `items[${newIndex}][quantity]`;
+                newIndex++;
             }
         });
 
+        const hasItems = newIndex > 0;
         if (!hasItems) {
             e.preventDefault();
             showToast('danger', 'Please add at least one item to the order.');
