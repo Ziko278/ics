@@ -93,7 +93,7 @@ class StaffModel(models.Model):
     department = models.ForeignKey(DepartmentModel, blank=True, null=True, on_delete=models.SET_NULL)
     position = models.ForeignKey(PositionModel, on_delete=models.CASCADE, related_name='position_staffs', null=True, blank=True)
     staff_id = models.CharField(max_length=100, unique=True, blank=True)
-    image = models.FileField(upload_to='images/staff_images', blank=True, null=True)
+    image = models.ImageField(upload_to='images/staff_images', blank=True, null=True)
     mobile = models.CharField(max_length=20, blank=True, null=True, default='')
     email = models.EmailField(max_length=100, blank=True, null=True, default='')
     gender = models.CharField(max_length=10, choices=Gender.choices)
