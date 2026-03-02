@@ -12,13 +12,13 @@
                 </li>
 
                 <li><a class="dropdown-item" href="#">
-                    <button title="Add Position" type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#verticalycentered" style="width:100%">Add Sub Department</button>
+                    <button title="Add Position" type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#verticalycentered" style="width:100%">Add Role</button>
                 </a></li>
             </ul>
         </div>
 
         <div class="card-body">
-            <h5 class="card-title">List of Sub Department in the School</h5>
+            <h5 class="card-title">List of Roles in the School</h5>
             {% if form.errors %}
                 <h5 class="text-danger">{{form.errors}}</h5>
             {% endif %}
@@ -53,7 +53,7 @@
                 </tr>
                 {% endfor %}
                 {% else %}
-                    <tr><td colspan="6"><h3 class="text-center">No Sub Department Added Yet</h3></td></tr>
+                    <tr><td colspan="6"><h3 class="text-center">No Role Added Yet</h3></td></tr>
                 {% endif %}
 
                 </tbody>
