@@ -172,7 +172,7 @@ class StaffForm(forms.ModelForm):
 
     def clean_image(self):
         image = self.cleaned_data.get('image')
-        if image:
+        if image and hasattr(image, 'content_type'):
             # Check file size (2MB limit)
             if image.size > 2 * 1024 * 1024:
                 raise ValidationError("Image file size cannot exceed 2MB.")
