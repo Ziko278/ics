@@ -36,7 +36,7 @@
                                         <th>Method</th>
                                         <th>Reference / Invoice</th>
                                         <th>Status</th>
-                                        <th class="text-center">Proof</th>
+                                        <th class="text-center">Action</th>
                                         <th>Admin Remarks/Notes</th>
                                     </tr>
                                 </thead>
@@ -52,16 +52,10 @@
                                         </td>
                                         <td class="text-end fw-bold">₦{{ upload.amount|floatformat:2|intcomma }}</td>
                                         <td>{{ upload.get_payment_mode_display }}</td>
-                                        <td>
-                                            {% if upload.invoice %}
-                                            <a href="{% url 'parent_fee_invoice_detail' upload.invoice.pk %}" title="View Invoice {{ upload.invoice.invoice_number }}">
-                                                {{ upload.invoice.invoice_number }}
+                                        <td class="text-center">
+                                            <a href="{% url 'parent_fee_payment_detail' upload.pk %}" class="btn btn-sm btn-outline-secondary" title="View Details">
+                                                <i class="bi bi-info-circle"></i> Details
                                             </a>
-                                            {% else %}
-                                            <span class="text-muted">Invoice Error</span>
-                                            {% endif %}
-                                            <br>
-                                            <small class="text-muted">Ref: {{ upload.reference|default:"N/A" }}</small>
                                         </td>
                                         <td>
                                             {# Status Badge for FeePaymentModel #}
