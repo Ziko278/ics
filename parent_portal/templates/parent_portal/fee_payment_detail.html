@@ -1,0 +1,159 @@
+{% extends "parent_portal/layout.html" %}
+{% load humanize %}
+
+{% block title %}Payment Detail — {{ payment.invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Payment Detail</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'parent_dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'parent_fee_history' %}">Upload History</a></li>
+      <li class="breadcrumb-item active">Payment Detail</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Payment Summary</h5>
+
+                {# Rejected banner #}
+                {% if payment.status == 'rejected' %}
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading"><i class="bi bi-x-circle-fill"></i> This Payment Was Rejected</h6>
+                    {% if 'Reason:' in payment.notes %}
+                        <p class="mb-0">
+                            <strong>Reason:</strong>
+                            {% with parts=payment.notes|split:"Reason:" %}
+                                {{ parts.1|split:"\n"|first|strip }}
+                            {% endwith %}
+                        </p>
+                    {% else %}
+                        <p class="mb-0">No reason provided. Please contact the school administration.</p>
+                    {% endif %}
+                    <hr>
+                    <p class="mb-0 small">You may upload a new proof of payment for the same invoice.</p>
+                    <a href="{% url 'parent_fee_upload' %}?type=fee" class="btn btn-sm btn-danger mt-2">
+                        <i class="bi bi-upload"></i> Re-upload Payment Proof
+                    </a>
+                </div>
+                {% endif %}
+
+                <table class="table table-borderless">
+                    <tr>
+                        <th style="width:40%">Invoice</th>
+                        <td>
+                            <a href="{% url 'parent_fee_invoice_detail' payment.invoice.pk %}">
+                                {{ payment.invoice.invoice_number }}
+                            </a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Amount</th>
+                        <td class="fw-bold">₦{{ payment.amount|floatformat:2|intcomma }}</td>
+                    </tr>
+                    <tr>
+                        <th>Payment Method</th>
+                        <td>{{ payment.get_payment_mode_display }}</td>
+                    </tr>
+                    <tr>
+                        <th>Reference / Teller</th>
+                        <td>{{ payment.reference|default:"N/A" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Date Submitted</th>
+                        <td>{{ payment.created_at|date:"d M, Y H:i" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Status</th>
+                        <td>
+                            <span class="badge
+                                {% if payment.status == 'confirmed' %}bg-success
+                                {% elif payment.status == 'pending' %}bg-warning text-dark
+                                {% elif payment.status == 'rejected' %}bg-danger
+                                {% else %}bg-secondary{% endif %}">
+                                {{ payment.get_status_display }}
+                            </span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        {# Invoice items breakdown #}
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Invoice Breakdown</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Fee</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Discount</th>
+                                <th class="text-end">Paid</th>
+                                <th class="text-end">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in payment.invoice.items.all %}
+                            <tr>
+                                <td>{{ item.description|title }}</td>
+                                <td class="text-end">₦{{ item.amount|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-success">₦{{ item.total_discount|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-info">₦{{ item.amount_paid|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-danger">₦{{ item.balance|floatformat:2|intcomma }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="fw-bold">
+                                <td colspan="3" class="text-end">Invoice Balance:</td>
+                                <td colspan="2" class="text-end text-danger">₦{{ payment.invoice.balance|floatformat:2|intcomma }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        {# Proof of payment #}
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Your Proof of Payment</h5>
+                {% if payment.proof_of_payment %}
+                    <div class="text-center">
+                        <a href="{{ payment.proof_of_payment.url }}" target="_blank">
+                            <img src="{{ payment.proof_of_payment.url }}" class="img-fluid rounded" alt="Proof"
+                                 onerror="this.style.display='none'; document.getElementById('proofLink').style.display='block'">
+                        </a>
+                        <a id="proofLink" href="{{ payment.proof_of_payment.url }}" target="_blank"
+                           class="btn btn-outline-primary mt-2" style="display:none">
+                            <i class="bi bi-file-earmark-arrow-down"></i> Open File
+                        </a>
+                        <p class="small text-muted mt-2">Click to open full size</p>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning text-center">No proof file found.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <a href="{% url 'parent_fee_history' %}" class="btn btn-secondary w-100">
+                    <i class="bi bi-arrow-left"></i> Back to History
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+{% endblock %}

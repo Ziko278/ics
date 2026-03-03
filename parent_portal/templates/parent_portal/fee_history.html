@@ -108,14 +108,26 @@
                                         <td>{{ upload.get_method_display }}</td>
                                         <td>{{ upload.teller_number|default:"N/A" }}</td>
                                         <td>
-                                            {# Status Badge for StudentFundingModel #}
+                                            {# Status Badge — add rejected #}
                                             <span class="badge
                                                 {% if upload.status == 'confirmed' %}bg-success
                                                 {% elif upload.status == 'pending' %}bg-warning text-dark
-                                                {% elif upload.status == 'failed' %}bg-danger
+                                                {% elif upload.status == 'rejected' %}bg-danger
+                                                {% elif upload.status == 'failed' or upload.status == 'reverted' %}bg-secondary
                                                 {% else %}bg-secondary{% endif %}">
                                                 {{ upload.get_status_display }}
                                             </span>
+
+                                            {# Show rejection reason inline if rejected #}
+                                            {% if upload.status == 'rejected' %}
+                                                <br><small class="text-danger"><i class="bi bi-exclamation-circle"></i>
+                                                {% if 'Reason:' in upload.notes %}
+                                                    {{ upload.notes|slice_after:"Reason:" }}
+                                                {% else %}
+                                                    Rejected — see details
+                                                {% endif %}
+                                                </small>
+                                            {% endif %}
                                         </td>
                                         <td class="text-center">
                                             {# Assuming StudentFundingModel *does* have proof_of_payment field #}

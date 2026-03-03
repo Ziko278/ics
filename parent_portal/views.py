@@ -403,43 +403,41 @@ class ParentOtherPaymentListView(ParentPortalMixin, ListView):
 
 
 class FeeUploadHistoryView(ParentPortalMixin, ListView):
-    # --- ADD THIS LINE BACK ---
-    model = StudentFundingModel # Provide a base model for ListView
-    # --- END ADDITION ---
+    model = StudentFundingModel
     template_name = 'parent_portal/fee_history.html'
-    # context_object_name = 'uploads' # We are using custom context names below
-    # paginate_by = 10 # Pagination across two lists is complex, handle manually if needed
 
     def get_context_data(self, **kwargs):
-        # This calls ParentPortalMixin.get_context_data and ListView.get_context_data
         context = super().get_context_data(**kwargs)
         parent_user = self.request.user
 
-        # Fetch wallet funding uploads
         wallet_uploads = StudentFundingModel.objects.filter(
             student=self.selected_ward,
             mode='online'
-            # Add parent filter if model has it
-            # parent=self.parent_obj,
         ).order_by('-created_at')
 
-        # Fetch invoice payment uploads initiated by parent
+        # ✅ Removed status=PENDING filter — show ALL statuses including rejected
         invoice_uploads = FeePaymentModel.objects.filter(
             invoice__student=self.selected_ward,
-            status=FeePaymentModel.PaymentStatus.PENDING, # Show pending ones
-            notes__icontains=f"User: {parent_user.username}" # Identify by note
-            # Add parent filter if model has it
-            # parent=self.parent_obj
+            notes__icontains=f"User: {parent_user.username}"
         ).select_related('invoice').order_by('-created_at')
 
         context['wallet_uploads'] = wallet_uploads
         context['invoice_uploads'] = invoice_uploads
-
-        # Remove the default queryset if ListView added it under 'object_list' or 'studentfundingmodel_list'
         context.pop('object_list', None)
         context.pop('studentfundingmodel_list', None)
-
         return context
+
+
+class FeePaymentUploadDetailView(ParentPortalMixin, DetailView):
+    model = FeePaymentModel
+    template_name = 'parent_portal/fee_payment_detail.html'
+    context_object_name = 'payment'
+
+    def get_queryset(self):
+        # Ensure parent can only see payments for their own ward
+        return FeePaymentModel.objects.filter(
+            invoice__student=self.selected_ward
+        ).select_related('invoice', 'invoice__student', 'invoice__session', 'invoice__term')
 
 
 # --- Shop ---
