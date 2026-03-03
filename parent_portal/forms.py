@@ -102,7 +102,6 @@ class FeeUploadForm(forms.ModelForm):
             self.add_error('proof_of_payment', "Proof of payment is required.")
 
         if self.upload_type == 'fee':
-            # For fee uploads, force wallet_type to 'fee'
             cleaned_data['wallet_type'] = 'fee'
 
             if not target_invoice:
@@ -112,8 +111,8 @@ class FeeUploadForm(forms.ModelForm):
                 self.add_error(None, "This student has no outstanding invoices available for payment.")
 
         if self.upload_type == 'wallet':
-            if not wallet_type:
-                self.add_error('wallet_type', 'You must select a wallet type.')
+            # ✅ Removed add_error('wallet_type', ...) — field is required=True so
+            # Django handles this automatically before clean() is even called
             cleaned_data['target_invoice'] = None
 
         return cleaned_data
