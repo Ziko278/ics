@@ -87,7 +87,7 @@ urlpatterns = [
     path('finance/student-payments/<int:pk>/revert/', FeePaymentRevertView.as_view(), name='finance_fee_payment_revert'),
     path('finance/student-payments/<int:pk>/receipt/', FeePaymentReceiptView.as_view(), name='finance_fee_payment_receipt'),
     path('fee-payments/<int:payment_id>/confirm/', confirm_fee_payment_view, name='confirm_fee_payment'),
-
+    path('finance/payment/reject/<int:payment_id>/', reject_fee_payment_view, name='reject_fee_payment'),
     path('get-invoice-items/<int:invoice_id>/', get_invoice_items_json, name='get_invoice_items_json'),
     path('payment/review/<int:payment_id>/', payment_review_view, name='review_fee_payment'),
 

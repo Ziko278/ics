@@ -528,6 +528,10 @@ class FeePaymentModel(models.Model):
         blank=True,
         help_text='Stores breakdown of payment across invoice items'
     )
+
+    proof_of_payment = models.FileField(
+        upload_to='parent_proofs/', null=True, blank=True
+    )
     notes = models.TextField(blank=True, null=True)
     confirmed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

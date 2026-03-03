@@ -1474,7 +1474,7 @@ def confirm_fee_payment_view(request, payment_id):
 
     if payment.status != FeePaymentModel.PaymentStatus.PENDING:
         messages.warning(request, "This payment has already been processed.")
-        return redirect('pending_fee_payment_list')
+        return redirect('finance_pending_payment_index')
 
     # Check if this is a confirmation with override
     override_allocation = request.POST.get('override_allocation') == 'true'
@@ -1600,7 +1600,7 @@ def confirm_fee_payment_view(request, payment_id):
                                 )
                                 sibling_item.paid_by_sibling = student
                                 sibling_item.amount_paid = sibling_item.amount_after_discount
-                                sibling_item.save(update_flags=['paid_by_sibling', 'amount_paid'])
+                                sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
                             except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
                                 continue
 
@@ -1619,7 +1619,38 @@ def confirm_fee_payment_view(request, payment_id):
     allocation_method = "auto-distributed" if (
             not parent_allocations or override_allocation) else "parent's specified items"
     messages.success(request, f"Payment of ₦{payment.amount:,.2f} confirmed successfully ({allocation_method}).")
-    return redirect('pending_fee_payment_list')
+    return redirect('finance_pending_payment_index')
+
+
+@login_required
+@permission_required('finance.change_feepaymentmodel', raise_exception=True)
+def reject_fee_payment_view(request, payment_id):
+    """Rejects a pending fee payment uploaded by parent."""
+    payment = get_object_or_404(FeePaymentModel, pk=payment_id)
+
+    if payment.status != FeePaymentModel.PaymentStatus.PENDING:
+        messages.warning(request, "This payment has already been processed.")
+        return redirect('finance_pending_payment_index')
+
+    if request.method == 'POST':
+        reason = request.POST.get('reason', '').strip()
+
+        payment.status = FeePaymentModel.PaymentStatus.REJECTED
+        payment.confirmed_by = request.user  # log who rejected it
+
+        # Append rejection reason to notes
+        rejection_note = f"\n\n--- REJECTED by {request.user.username} on {timezone.now().strftime('%d %b %Y %H:%M')} ---"
+        if reason:
+            rejection_note += f"\nReason: {reason}"
+        payment.notes = (payment.notes or '') + rejection_note
+
+        payment.save(update_fields=['status', 'confirmed_by', 'notes'])
+
+        messages.warning(request, f"Payment of ₦{payment.amount:,.2f} has been rejected.")
+        return redirect('finance_pending_payment_index')
+
+    # If somehow accessed via GET, redirect back
+    return redirect('finance_pending_payment_index')
 
 
 @login_required

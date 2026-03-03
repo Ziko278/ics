@@ -74,27 +74,16 @@
                                                 {{ upload.get_status_display }}
                                             </span>
                                         </td>
-                                        <td class="text-center">
-                                            {# --- CORRECTED PROOF HANDLING --- #}
-                                            {# Assumes notes contain "Proof File: path/to/file.ext" on its own line or easily extractable #}
-                                            {% if "Proof File:" in upload.notes %}
-                                                {# Attempt to extract path - THIS IS FRAGILE #}
-                                                {% with proof_note_part=upload.notes|split:"Proof File:"|last %} {# Get text after "Proof File:" #}
-                                                {% with proof_path=proof_note_part|split:"\n"|first|strip %} {# Get first line after, strip whitespace #}
-                                                    {% if proof_path and proof_path != 'Not Saved' %}
-                                                        <a href="{{ MEDIA_URL }}{{ proof_path }}" target="_blank" class="btn btn-sm btn-outline-primary" title="View Uploaded Proof">
-                                                            <i class="bi bi-eye"></i>
-                                                        </a>
-                                                    {% else %}
-                                                        <span class="text-muted" title="Proof path invalid or not saved">-</span>
-                                                    {% endif %}
-                                                {% endwith %}
-                                                {% endwith %}
+                                       <td class="text-center">
+                                            {% if upload.proof_of_payment %}
+                                                <a href="{{ upload.proof_of_payment.url }}" target="_blank" class="btn btn-sm btn-outline-primary" title="View Uploaded Proof">
+                                                    <i class="bi bi-eye"></i>
+                                                </a>
                                             {% else %}
-                                                <span class="text-muted" title="Proof info missing">-</span>
+                                                <span class="text-muted">-</span>
                                             {% endif %}
-                                            {# --- END CORRECTION --- #}
                                         </td>
+
                                         <td>
                                              {# Display notes, which might include admin rejection reasons #}
                                              {% if upload.notes %}

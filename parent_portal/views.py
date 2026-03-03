@@ -256,34 +256,24 @@ class FeeUploadView(ParentPortalMixin, FormView):
         target_invoice = cleaned_data.get('target_invoice')
         proof_file = self.request.FILES.get('proof_of_payment')
         parent_user = self.request.user
-        payment_type = self.request.POST.get('payment_type', 'quick')  # 'quick' or 'itemized'
+        payment_type = self.request.POST.get('payment_type', 'quick')
 
         if target_invoice:
-            # --- Create FeePaymentModel for invoice payment ---
             try:
                 if target_invoice.student != self.selected_ward:
                     messages.error(self.request, "Selected invoice does not belong to the current student.")
                     return self.form_invalid(form)
 
-                # Save proof file
-                proof_file_name = None
-                if proof_file:
-                    file_name = f"parent_proofs/{self.selected_ward.registration_number}_{target_invoice.invoice_number}_{proof_file.name}"
-                    proof_file_name = default_storage.save(file_name, proof_file)
-
-                # Get or create a default bank account for parent uploads
                 bank_account = SchoolBankDetail.objects.first()
                 if not bank_account:
                     messages.error(self.request, "No bank account configured. Please contact administration.")
                     return self.form_invalid(form)
 
-                # Build notes with payment allocation details
                 notes_parts = [
                     f"Parent Upload via Portal.",
                     f"User: {parent_user.username}.",
-                    f"Proof File: {proof_file_name or 'Not Saved'}.",
                     f"Student: {self.selected_ward}.",
-                    f"Payment Type: {payment_type.title()}"
+                    f"Payment Type: {payment_type.title()}",
                 ]
 
                 # Handle itemized payment
@@ -296,29 +286,22 @@ class FeeUploadView(ParentPortalMixin, FormView):
                             try:
                                 item_id = int(key.split('_')[1])
                                 amount_for_item = Decimal(value)
-
                                 if amount_for_item > 0:
                                     item = get_object_or_404(InvoiceItemModel, pk=item_id, invoice=target_invoice)
-
-                                    # Don't allow overpayment on a single item
                                     payable_amount = min(amount_for_item, item.balance)
-
                                     if payable_amount != amount_for_item:
                                         messages.warning(
                                             self.request,
                                             f"Amount for '{item.description}' adjusted from ₦{amount_for_item:,.2f} to ₦{payable_amount:,.2f} (item balance)"
                                         )
-
                                     item_allocations[item_id] = {
                                         'description': item.description,
                                         'amount': float(payable_amount)
                                     }
                                     total_allocated += payable_amount
-
                             except (ValueError, TypeError, InvoiceItemModel.DoesNotExist):
                                 continue
 
-                    # Validate that allocated amounts match the total payment
                     if total_allocated != cleaned_data['amount']:
                         messages.error(
                             self.request,
@@ -330,12 +313,12 @@ class FeeUploadView(ParentPortalMixin, FormView):
                         messages.error(self.request, "Please select at least one fee item to pay.")
                         return self.form_invalid(form)
 
-                    # Store item allocations as JSON in notes
                     import json
                     notes_parts.append(f"Item Allocations: {json.dumps(item_allocations, indent=2)}")
 
                 notes = "\n".join(notes_parts)
 
+                # Create the payment — proof saved directly on the model
                 FeePaymentModel.objects.create(
                     invoice=target_invoice,
                     amount=cleaned_data['amount'],
@@ -344,6 +327,7 @@ class FeeUploadView(ParentPortalMixin, FormView):
                     date=timezone.now().date(),
                     reference=cleaned_data.get('teller_number', ''),
                     status=FeePaymentModel.PaymentStatus.PENDING,
+                    proof_of_payment=proof_file,  # ✅ saved directly
                     notes=notes,
                 )
 
@@ -357,12 +341,10 @@ class FeeUploadView(ParentPortalMixin, FormView):
 
             except Exception as e:
                 messages.error(self.request, f"Error saving invoice payment proof: {e}")
-                if proof_file_name and default_storage.exists(proof_file_name):
-                    default_storage.delete(proof_file_name)
                 return self.form_invalid(form)
 
         else:
-            # --- Create StudentFundingModel (Wallet) ---
+            # Wallet funding
             try:
                 funding = StudentFundingModel(
                     student=self.selected_ward,

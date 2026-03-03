@@ -19,7 +19,7 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Payment Details</h5>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <strong>Student:</strong> {{ payment.invoice.student|title }}<br>
@@ -41,8 +41,7 @@
                     {% endif %}
 
                     <h6 class="mt-4">Payment Allocation Strategy</h6>
-                    
-                    {# Check if parent specified item allocations #}
+
                     {% if 'Item Allocations:' in payment.notes %}
                     <div class="alert alert-success">
                         <div class="d-flex justify-content-between align-items-center">
@@ -57,7 +56,6 @@
                         </div>
                     </div>
 
-                    {# Parse and display parent's allocations #}
                     <div id="parentAllocations">
                         <h6>Parent's Selected Items:</h6>
                         <div class="table-responsive">
@@ -65,7 +63,6 @@
                                 <thead>
                                     <tr>
                                         <th>Fee Item</th>
-                                        <th class="text-end">Item Balance</th>
                                         <th class="text-end">Parent Wants to Pay</th>
                                     </tr>
                                 </thead>
@@ -129,13 +126,19 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Proof of Payment</h5>
-                    {% if payment.notes and 'Proof File:' in payment.notes %}
-                        {# Extract file path from notes #}
+                    {% if payment.proof_of_payment %}
                         <div class="text-center">
-                            <img src="{{ MEDIA_URL }}parent_proofs/{{ payment.invoice.student.registration_number }}_{{ payment.invoice.invoice_number }}_proof.jpg" 
-                                 class="img-fluid rounded" alt="Payment Proof" 
-                                 onerror="this.src='{% static 'admin_site/images/no-image.png' %}'">
-                            <p class="small text-muted mt-2">Click to enlarge</p>
+                            <a href="{{ payment.proof_of_payment.url }}" target="_blank">
+                                <img src="{{ payment.proof_of_payment.url }}"
+                                     class="img-fluid rounded" alt="Payment Proof"
+                                     onerror="this.style.display='none'; document.getElementById('proofFallback').style.display='block'">
+                            </a>
+                            <div id="proofFallback" style="display:none;">
+                                <a href="{{ payment.proof_of_payment.url }}" target="_blank" class="btn btn-outline-primary mt-2">
+                                    <i class="bi bi-file-earmark-arrow-down"></i> Open Proof File
+                                </a>
+                            </div>
+                            <p class="small text-muted mt-2">Click image to open full size</p>
                         </div>
                     {% else %}
                         <div class="alert alert-warning text-center">
@@ -149,22 +152,18 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Actions</h5>
-                    
+
                     <form method="POST" action="{% url 'confirm_fee_payment' payment.pk %}" id="confirmForm">
                         {% csrf_token %}
                         <input type="hidden" name="override_allocation" id="overrideInput" value="false">
-                        
-                        <button type="submit" class="btn btn-success w-100 mb-2">
+                        <button type="button" class="btn btn-success w-100 mb-2" onclick="openConfirmModal()">
                             <i class="bi bi-check-circle"></i> Confirm Payment
                         </button>
                     </form>
-                    
-                    <form method="POST" action="{% url 'reject_fee_payment' payment.pk %}">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-danger w-100" onclick="return confirm('Are you sure you want to reject this payment?')">
-                            <i class="bi bi-x-circle"></i> Reject Payment
-                        </button>
-                    </form>
+
+                    <button type="button" class="btn btn-danger w-100 mb-2" onclick="openRejectModal()">
+                        <i class="bi bi-x-circle"></i> Reject Payment
+                    </button>
 
                     <a href="{% url 'pending_fee_payment_list' %}" class="btn btn-secondary w-100 mt-2">
                         <i class="bi bi-arrow-left"></i> Back to List
@@ -175,11 +174,66 @@
     </div>
 </section>
 
+{# Confirm Modal #}
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="confirmModalLabel"><i class="bi bi-check-circle"></i> Confirm Payment</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to confirm a payment of <strong>₦{{ payment.amount|floatformat:2|intcomma }}</strong> for
+                <strong>{{ payment.invoice.student|title }}</strong>.</p>
+                <p class="mb-0 text-muted small">This will update the invoice and item balances. This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="submitConfirm()">
+                    <i class="bi bi-check-circle"></i> Yes, Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Reject Modal #}
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="rejectModalLabel"><i class="bi bi-x-circle"></i> Reject Payment</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to <strong>reject</strong> this payment of <strong>₦{{ payment.amount|floatformat:2|intcomma }}</strong>
+                for <strong>{{ payment.invoice.student|title }}</strong>.</p>
+                <div class="mb-3">
+                    <label for="rejectReason" class="form-label">Reason for Rejection <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="rejectReason" name="reason" rows="3"
+                              placeholder="e.g. Proof of payment is unclear, wrong amount..."></textarea>
+                    <div class="invalid-feedback" id="rejectReasonError">Please provide a reason for rejection.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{% url 'reject_fee_payment' payment.pk %}" id="rejectForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="reason" id="rejectReasonInput">
+                    <button type="submit" class="btn btn-danger" onclick="return submitReject()">
+                        <i class="bi bi-x-circle"></i> Yes, Reject
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const overrideCheckbox = document.getElementById('overrideAllocation');
     const overrideInput = document.getElementById('overrideInput');
-    
+
     if (overrideCheckbox) {
         overrideCheckbox.addEventListener('change', function() {
             overrideInput.value = this.checked ? 'true' : 'false';
@@ -187,30 +241,68 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Parse and display parent allocations from notes
-    const notesText = {{ payment.notes|safe|escapejs }};
-    const allocationsMatch = notesText.match(/Item Allocations:\s*(\{[\s\S]*?\})/);
-    
-    if (allocationsMatch) {
-        try {
-            const allocations = JSON.parse(allocationsMatch[1]);
-            const tbody = document.getElementById('allocationTableBody');
-            
-            if (tbody) {
-                let html = '';
-                for (const [itemId, data] of Object.entries(allocations)) {
-                    html += `<tr>
-                        <td>${data.description}</td>
-                        <td class="text-end">-</td>
-                        <td class="text-end fw-bold text-success">₦${parseFloat(data.amount).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                    </tr>`;
+    // Use Django to pass notes safely to JS
+    const notesText = `{{ payment.notes|escapejs }}`;
+
+    // More robust JSON extraction — find the JSON block after "Item Allocations:"
+    const allocIdx = notesText.indexOf('Item Allocations:');
+    if (allocIdx !== -1) {
+        const jsonStart = notesText.indexOf('{', allocIdx);
+        if (jsonStart !== -1) {
+            // Find the matching closing brace
+            let depth = 0, jsonEnd = -1;
+            for (let i = jsonStart; i < notesText.length; i++) {
+                if (notesText[i] === '{') depth++;
+                else if (notesText[i] === '}') {
+                    depth--;
+                    if (depth === 0) { jsonEnd = i; break; }
                 }
-                tbody.innerHTML = html;
             }
-        } catch (e) {
-            console.error('Error parsing allocations:', e);
+            if (jsonEnd !== -1) {
+                try {
+                    const allocations = JSON.parse(notesText.substring(jsonStart, jsonEnd + 1));
+                    const tbody = document.getElementById('allocationTableBody');
+                    if (tbody) {
+                        let html = '';
+                        for (const [itemId, data] of Object.entries(allocations)) {
+                            html += `<tr>
+                                <td>${data.description}</td>
+                                <td class="text-end fw-bold text-success">₦${parseFloat(data.amount).toLocaleString('en-NG', {minimumFractionDigits: 2})}</td>
+                            </tr>`;
+                        }
+                        tbody.innerHTML = html;
+                    }
+                } catch (e) {
+                    console.error('Error parsing allocations:', e);
+                }
+            }
         }
     }
 });
+
+function openConfirmModal() {
+    const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    modal.show();
+}
+
+function submitConfirm() {
+    document.getElementById('confirmForm').submit();
+}
+
+function openRejectModal() {
+    const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
+    modal.show();
+}
+
+function submitReject() {
+    const reason = document.getElementById('rejectReason').value.trim();
+    if (!reason) {
+        document.getElementById('rejectReason').classList.add('is-invalid');
+        return false;
+    }
+    document.getElementById('rejectReasonInput').value = reason;
+    return true;
+}
 </script>
 
 {% endblock %}
