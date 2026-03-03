@@ -49,8 +49,8 @@
                     {% endif %}
 
                     {# --- Form --- #}
-                    <form method="post" enctype="multipart/form-data" class="row g-3 needs-validation" id="paymentForm">
-                        {% csrf_token %}
+                    <form method="post" enctype="multipart/form-data" class="row g-3" id="paymentForm" novalidate>
+                         {% csrf_token %}
 
                         {# Target Invoice Field #}
                         {% if form.target_invoice %}
@@ -250,18 +250,25 @@
 
 <script>
 // Payment type toggle
+// Payment type toggle
 document.addEventListener('DOMContentLoaded', function() {
     const quickRadio = document.getElementById('quickPayment');
     const itemizedRadio = document.getElementById('itemizedPayment');
     const quickSection = document.getElementById('quickPaymentSection');
     const itemizedSection = document.getElementById('itemizedPaymentSection');
     const invoiceSelect = document.querySelector('select[name="target_invoice"]');
+    const amountInput = document.querySelector('input[name="amount"]');
 
     if (quickRadio && itemizedRadio) {
         quickRadio.addEventListener('change', function() {
             if (this.checked) {
                 quickSection.style.display = 'block';
                 itemizedSection.style.display = 'none';
+                // Re-enable amount field for quick mode
+                if (amountInput) {
+                    amountInput.required = true;
+                    amountInput.value = '';
+                }
             }
         });
 
@@ -269,15 +276,17 @@ document.addEventListener('DOMContentLoaded', function() {
             if (this.checked) {
                 quickSection.style.display = 'none';
                 itemizedSection.style.display = 'block';
-
-                // Load invoice items if invoice is selected
+                // Disable required on amount — itemized mode calculates it
+                if (amountInput) {
+                    amountInput.required = false;
+                    amountInput.value = '0';
+                }
                 if (invoiceSelect && invoiceSelect.value) {
                     loadInvoiceItems(invoiceSelect.value);
                 }
             }
         });
 
-        // Load items when invoice changes in itemized mode
         if (invoiceSelect) {
             invoiceSelect.addEventListener('change', function() {
                 if (itemizedRadio.checked && this.value) {
@@ -355,7 +364,6 @@ function updateTotal() {
     if (totalElement) {
         totalElement.textContent = '₦' + total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
-        // Visual feedback
         if (total > 0) {
             totalElement.classList.add('text-success');
             totalElement.classList.remove('text-primary');
@@ -363,6 +371,12 @@ function updateTotal() {
             totalElement.classList.add('text-primary');
             totalElement.classList.remove('text-success');
         }
+    }
+
+    // ✅ Keep amount field in sync so Django receives the correct total
+    const amountInput = document.querySelector('input[name="amount"]');
+    if (amountInput) {
+        amountInput.value = total > 0 ? total.toFixed(2) : '0';
     }
 }
 

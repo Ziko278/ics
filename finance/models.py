@@ -513,6 +513,7 @@ class FeePaymentModel(models.Model):
         CONFIRMED = 'confirmed', 'Confirmed'
         FAILED = 'failed', 'Failed'
         REVERTED = 'reverted', 'Reverted'
+        REJECTED = 'rejected', 'Rejected'
 
     invoice = models.ForeignKey(InvoiceModel, on_delete=models.PROTECT, related_name='payments')
     bank_account = models.ForeignKey('SchoolBankDetail', on_delete=models.SET_NULL, blank=True, null=True)
