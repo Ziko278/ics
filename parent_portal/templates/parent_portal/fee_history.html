@@ -36,8 +36,7 @@
                                         <th>Method</th>
                                         <th>Reference / Invoice</th>
                                         <th>Status</th>
-                                        <th class="text-center">Action</th>
-                                        <th>Admin Remarks/Notes</th>
+
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -67,24 +66,7 @@
                                                 {{ upload.get_status_display }}
                                             </span>
                                         </td>
-                                       <td class="text-center">
-                                            {% if upload.proof_of_payment %}
-                                                <a href="{{ upload.proof_of_payment.url }}" target="_blank" class="btn btn-sm btn-outline-primary" title="View Uploaded Proof">
-                                                    <i class="bi bi-eye"></i>
-                                                </a>
-                                            {% else %}
-                                                <span class="text-muted">-</span>
-                                            {% endif %}
-                                        </td>
-
-                                        <td>
-                                             {# Display notes, which might include admin rejection reasons #}
-                                             {% if upload.notes %}
-                                                <small class="text-muted">{{ upload.notes|linebreaksbr }}</small>
-                                             {% else %}
-                                                -
-                                             {% endif %}
-                                        </td>
+                                        
                                     </tr>
                                 {% endfor %}
 
