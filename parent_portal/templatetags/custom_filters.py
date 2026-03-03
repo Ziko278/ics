@@ -25,3 +25,8 @@ def slice_after(value, delimiter):
     if len(parts) > 1:
         return parts[1].split('\n')[0].strip()
     return ''
+
+
+@register.filter
+def split(value, delimiter):
+    return value.split(delimiter)

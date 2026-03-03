@@ -44,7 +44,3 @@ def get_item(dictionary, key):
     """Gets an item from a dictionary by key"""
     return dictionary.get(key)
 
-
-@register.filter
-def split(value, delimiter):
-    return value.split(delimiter)
