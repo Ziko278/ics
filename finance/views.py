@@ -1124,7 +1124,7 @@ class FeePaymentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = FeePaymentModel.objects.select_related(
+        queryset = FeePaymentModel.objects.exclude(status='pending').select_related(
             'invoice__student',
             'invoice__session',
             'invoice__term'
