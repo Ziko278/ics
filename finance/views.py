@@ -1463,7 +1463,7 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
         return redirect('finance_student_dashboard', pk=student.pk)
 
 @login_required
-@permission_required('finance.change_feepaymentmodel', raise_exception=True)
+@permission_required('finance.add_feepaymentmodel', raise_exception=True)
 def confirm_fee_payment_view(request, payment_id):
     """
     Confirms a pending fee payment uploaded by parent.
@@ -1623,7 +1623,7 @@ def confirm_fee_payment_view(request, payment_id):
 
 
 @login_required
-@permission_required('finance.change_feepaymentmodel', raise_exception=True)
+@permission_required('finance.add_feepaymentmodel', raise_exception=True)
 def reject_fee_payment_view(request, payment_id):
     """Rejects a pending fee payment uploaded by parent."""
     payment = get_object_or_404(FeePaymentModel, pk=payment_id)
@@ -1654,7 +1654,7 @@ def reject_fee_payment_view(request, payment_id):
 
 
 @login_required
-@permission_required('finance.change_feepaymentmodel', raise_exception=True)
+@permission_required('finance.add_feepaymentmodel', raise_exception=True)
 def payment_review_view(request, payment_id):
     """
     Confirms a pending fee payment uploaded by parent.
@@ -5729,7 +5729,7 @@ def get_invoice_items_json(request, invoice_id):
 
 
 @login_required
-@permission_required("finance.change_feepaymentmodel", raise_exception=True)
+@permission_required("finance.add_feepaymentmodel", raise_exception=True)
 def payment_cleanup_view(request):
     """
     Renders a page showing classes that have students with confirmed payments
@@ -5788,7 +5788,7 @@ def payment_cleanup_view(request):
 
 @require_POST
 @login_required
-@permission_required("finance.change_feepaymentmodel", raise_exception=True)
+@permission_required("finance.add_feepaymentmodel", raise_exception=True)
 def process_payment_cleanup_for_class(request):
     """
     AJAX endpoint. Processes one class at a time: finds confirmed payments
