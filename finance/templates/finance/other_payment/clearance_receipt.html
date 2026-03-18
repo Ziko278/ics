@@ -194,7 +194,7 @@
             <button class="btn btn-primary" onclick="window.print();">
                 <i class="bi bi-printer"></i> Print Receipt
             </button>
-            <a href="{% url 'finance_student_other_payments' clearance.other_payment.student.pk %}"
+            <a href="{% url 'finance_student_other_payment_index' clearance.other_payment.student.pk %}"
                class="btn btn-info">
                 <i class="bi bi-list-ul"></i> View All Debts
             </a>
