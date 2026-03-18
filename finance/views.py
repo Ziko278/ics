@@ -6127,6 +6127,18 @@ class OtherPaymentClearanceCreateView(LoginRequiredMixin, PermissionRequiredMixi
         return redirect('finance_student_other_payment_index', student_pk=other_payment.student.pk)
 
 
+class OtherPaymentClearanceReceiptView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
+    model = OtherPaymentClearanceModel
+    permission_required = 'finance.view_feemodel'
+    template_name = 'finance/other_payment/clearance_receipt.html'
+    context_object_name = 'clearance'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['school_info'] = SchoolSettingModel.objects.first()
+        return context
+
+
 class OtherPaymentClearanceRevertView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     """Revert a payment clearance"""
     model = OtherPaymentClearanceModel

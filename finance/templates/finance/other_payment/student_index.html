@@ -182,6 +182,12 @@
                                                                 title="Revert Payment">
                                                             <i class="bi bi-arrow-counterclockwise"></i> Revert
                                                         </button>
+
+                                                        <a href="{% url 'finance_other_payment_clearance_receipt' clearance.pk %}"
+                                                           class="btn btn-sm btn-outline-success" target="_blank" title="View Receipt">
+                                                            <i class="bi bi-receipt"></i>
+                                                        </a>
+
                                                         {% endif %}
                                                     </td>
                                                 </tr>

@@ -194,6 +194,7 @@ urlpatterns = [
     path('student/<int:student_pk>/other-payments/create/', StudentOtherPaymentCreateView.as_view(), name='finance_student_other_payment_create'),
     path('other-payments/<int:pk>/update/', StudentOtherPaymentUpdateView.as_view(), name='finance_other_payment_update'),
     path('other-payments/<int:pk>/delete/', StudentOtherPaymentDeleteView.as_view(), name='finance_other_payment_delete'),
+    path('other-payment/clearance/<int:pk>/receipt/', OtherPaymentClearanceReceiptView.as_view(), name='finance_other_payment_clearance_receipt'),
 
     # ============================================================================
     # PAYMENT CLEARANCE URLS
