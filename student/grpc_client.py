@@ -18,16 +18,28 @@ def get_stub():
     return _stub
 
 def enroll_fmd(raw_fmds: list) -> str:
-    """Takes list of raw FMD strings, returns single enrolled FMD string."""
     stub = get_stub()
+
+    # Ensure we have plain strings, not dicts or objects
+    cleaned = []
+    for f in raw_fmds:
+        if isinstance(f, dict):
+            cleaned.append(f.get('Data', ''))
+        else:
+            cleaned.append(str(f))
+
+    if not all(cleaned):
+        raise ValueError('One or more FMD Data strings are empty')
+
     request = fingerprint_pb2.EnrollmentRequest(
         fmdCandidates=[
             fingerprint_pb2.PreEnrolledFMD(base64PreEnrolledFMD=f)
-            for f in raw_fmds
+            for f in cleaned
         ]
     )
     response = stub.EnrollFingerprint(request)
     return response.base64EnrolledFMD
+
 
 def verify_fmd(probe_fmd: str, enrolled_fmd: str) -> bool:
     """Compare a raw probe FMD against one enrolled FMD."""

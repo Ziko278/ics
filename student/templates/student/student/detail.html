@@ -442,20 +442,24 @@ function onAcquisitionStopped(event) {
 function onSamplesAcquired(event) {
     try {
         const samples = JSON.parse(event.samples);
-        if (!samples || samples.length === 0) throw new Error('No samples captured');
+        if (!samples || samples.length === 0) throw new Error('No samples');
 
         const fmd = samples[0];
-        collectedScans.push(fmd);
+
+        // Extract just the Data string — not the full object
+        const fmdData = typeof fmd === 'object' ? fmd.Data : fmd;
+
+        if (!fmdData) throw new Error('No FMD Data field in sample');
+
+        collectedScans.push(fmdData);  // ← store string only
         scanCount++;
 
         updateScanDots(scanCount + 1);
 
         if (scanCount < REQUIRED_SCANS) {
             showStatus('info', `✅ Scan ${scanCount} of ${REQUIRED_SCANS} done. Lift finger and place again...`);
-            // Keep acquisition running for next scan — do NOT stop
         } else {
-            // All 4 scans collected
-            showStatus('info', '⏳ All 4 scans collected. Enrolling fingerprint...');
+            showStatus('info', '⏳ All 4 scans collected. Enrolling...');
             stopCapture();
             saveFingerprintToServer();
         }
