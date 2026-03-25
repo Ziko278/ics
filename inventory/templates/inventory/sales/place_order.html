@@ -279,53 +279,57 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     async function onSamplesAcquired(event) {
-        try {
-            const samples = JSON.parse(event.samples);
-            if (!samples || samples.length === 0) throw new Error('No samples captured');
+    try {
+        const samples = JSON.parse(event.samples);
+        if (!samples || samples.length === 0) throw new Error('No samples captured');
 
-            const probeFmd = samples[0];
+        const fmd = samples[0];
 
-            updateFingerprintStatus('scanning', 'Identifying...', 'Please wait');
+        // Extract just the Data string
+        const probeData = typeof fmd === 'object' ? fmd.Data : fmd;
+        if (!probeData) throw new Error('No FMD Data in sample');
 
-            const response = await fetch(fingerprintIdentifyUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify({ fingerprint_data: probeFmd })
-            });
+        updateFingerprintStatus('scanning', 'Identifying...', 'Please wait');
 
-            const data = await response.json();
+        const response = await fetch(fingerprintIdentifyUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ fingerprint_data: probeData })
+        });
 
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || 'Not identified');
-            }
+        const data = await response.json();
 
-            populateCustomer({
-                type: 'student',
-                id: data.student.id,
-                name: data.student.name,
-                identifier: data.student.reg_number,
-                display_class: data.student.student_class + ' ' + data.student.class_section,
-                wallet_balance: data.student.wallet_balance,
-                image_url: data.student.image_url
-            });
-
-            showToast('success', `Identified: ${data.student.name}`);
-            updateFingerprintStatus('ready', 'Student identified', data.student.name);
-
-            setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
-
-        } catch (error) {
-            showToast('danger', error.message);
-            updateFingerprintStatus('error', 'Not identified', error.message);
-            setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
-        } finally {
-            document.getElementById('scan-overlay').classList.remove('active');
-            isCapturing = false;
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Not identified');
         }
+
+        populateCustomer({
+            type: 'student',
+            id: data.student.id,
+            name: data.student.name,
+            identifier: data.student.reg_number,
+            display_class: data.student.student_class + ' ' + data.student.class_section,
+            wallet_balance: data.student.wallet_balance,
+            image_url: data.student.image_url
+        });
+
+        showToast('success', `Identified: ${data.student.name}`);
+        updateFingerprintStatus('ready', 'Student identified', data.student.name);
+
+        setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
+
+    } catch (error) {
+        showToast('danger', error.message);
+        updateFingerprintStatus('error', 'Not identified', error.message);
+        setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
+    } finally {
+        document.getElementById('scan-overlay').classList.remove('active');
+        isCapturing = false;
     }
+}
 
     function onQualityReported(event) {
         console.log('Quality:', event.quality);
