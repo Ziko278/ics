@@ -273,6 +273,7 @@ class FingerprintModel(models.Model):
 
     # Store the fingerprint template (binary data as base64)
     fingerprint_template = models.TextField(help_text="Base64 encoded fingerprint template")
+    enrolled_template = models.TextField(blank=True, null=True)
 
     # Quality metrics
     quality_score = models.FloatField(null=True, blank=True, help_text="Fingerprint quality (0.0-1.0)")

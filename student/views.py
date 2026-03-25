@@ -1153,81 +1153,47 @@ def get_client_ip(request):
 @csrf_exempt
 @require_POST
 def capture_fingerprint(request):
-    """
-    Enhanced fingerprint capture with quality assessment and feature extraction
-    """
     try:
         data = json.loads(request.body)
         student_id = data.get('student_id')
         finger_name = data.get('finger_name')
-        fingerprint_data = data.get('fingerprint_data')
-        quality_score = data.get('quality_score')
+        raw_fmds = data.get('raw_fmds')  # list of 4 FMD strings
 
-        if not all([student_id, finger_name, fingerprint_data]):
-            return JsonResponse({
-                'success': False,
-                'message': 'Missing required fields'
-            }, status=400)
+        if not all([student_id, finger_name, raw_fmds]):
+            return JsonResponse({'success': False, 'message': 'Missing required fields'}, status=400)
 
-        # Validate student exists
+        if len(raw_fmds) < 4:
+            return JsonResponse({'success': False, 'message': 'Need 4 scans to enroll'}, status=400)
+
         try:
             student = StudentModel.objects.get(id=student_id)
         except StudentModel.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'message': 'Student not found'
-            }, status=404)
+            return JsonResponse({'success': False, 'message': 'Student not found'}, status=404)
 
-        # Check if fingerprint for this finger already exists
         if FingerprintModel.objects.filter(student=student, finger_name=finger_name).exists():
-            return JsonResponse({
-                'success': False,
-                'message': f'Fingerprint for {finger_name} already exists for this student'
-            }, status=400)
+            return JsonResponse({'success': False, 'message': f'{finger_name} already enrolled'}, status=400)
 
-        # Enhanced quality assessment
-        assessed_quality = quality_score
-        quality_feedback = ""
+        # Enroll via gRPC engine
+        from student.grpc_client import enroll_fmd
+        enrolled = enroll_fmd(raw_fmds)
 
-        # Check minimum quality threshold
-        min_quality = getattr(settings, 'FINGERPRINT_MIN_QUALITY', 0.4)
-        if assessed_quality < min_quality:
-            return JsonResponse({
-                'success': False,
-                'message': f'Fingerprint quality too low ({assessed_quality:.2f}). {quality_feedback}',
-                'quality_score': assessed_quality,
-                'feedback': quality_feedback
-            }, status=400)
+        if not enrolled:
+            return JsonResponse({'success': False, 'message': 'Enrollment failed — try again with clearer scans'}, status=400)
 
-        # Create fingerprint record
         fingerprint = FingerprintModel(
             student=student,
             finger_name=finger_name,
-            fingerprint_template=fingerprint_data,
-            quality_score=assessed_quality
+            fingerprint_template=raw_fmds[0],  # keep first raw for reference
+            enrolled_template=enrolled,
+            quality_score=0.85
         )
         fingerprint.save()
 
-        return JsonResponse({
-            'success': True,
-            'message': 'Fingerprint captured successfully',
-            'fingerprint_id': fingerprint.id,
-            'quality_score': assessed_quality,
-            'quality_feedback': quality_feedback,
-        })
-
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'message': 'Invalid JSON data'
-        }, status=400)
+        return JsonResponse({'success': True, 'message': 'Fingerprint enrolled successfully'})
 
     except Exception as e:
-        logger.error(f"Error during fingerprint capture: {e}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'message': f'An error occurred during capture: {str(e)}'
-        }, status=500)
+        logger.error(f"Capture error: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 import struct
 
@@ -1320,7 +1286,6 @@ def compare_fmd(fmd1_b64: str, fmd2_b64: str) -> float:
 @csrf_exempt
 @require_POST
 def identify_student_by_fingerprint(request):
-    print('workings')
     try:
         data = json.loads(request.body)
         probe = data.get('fingerprint_data')
@@ -1328,35 +1293,30 @@ def identify_student_by_fingerprint(request):
         if not probe:
             return JsonResponse({'success': False, 'message': 'No fingerprint data'}, status=400)
 
-        THRESHOLD = 0.35  # 35% minutiae match — tune this after testing
+        from student.grpc_client import verify_fmd
 
-        # Load only id + template — no joins, no heavy data
+        # Load only enrolled templates — no joins
         candidates = FingerprintModel.objects.filter(
             is_active=True,
             student__status='active'
-        ).values_list('id', 'fingerprint_template')
+        ).exclude(
+            enrolled_template__isnull=True
+        ).exclude(
+            enrolled_template=''
+        ).values_list('id', 'enrolled_template')
 
-        best_id = None
-        best_score = 0.0
+        matched_id = None
+        for fp_id, enrolled in candidates:
+            if verify_fmd(probe, enrolled):
+                matched_id = fp_id
+                break
 
-        for fp_id, template in candidates:
-            score = compare_fmd(probe, template)
-            if score > best_score:
-                best_score = score
-                best_id = fp_id
+        if not matched_id:
+            return JsonResponse({'success': False, 'message': 'No match found'}, status=404)
 
-        logger.info(f"Best score: {best_score:.3f} | ID: {best_id}")
-
-        if best_id is None or best_score < THRESHOLD:
-            return JsonResponse({
-                'success': False,
-                'message': f'No match found (best score: {best_score:.2f})',
-            }, status=404)
-
-        # Only now fetch full student data
         fingerprint = FingerprintModel.objects.select_related(
             'student', 'student__student_wallet', 'student__parent'
-        ).get(id=best_id)
+        ).get(id=matched_id)
 
         student = fingerprint.student
         fingerprint.mark_used()
@@ -1375,7 +1335,6 @@ def identify_student_by_fingerprint(request):
                 'parent_mobile': student.parent.mobile or '',
             },
             'match_details': {
-                'score': round(best_score, 3),
                 'finger_used': fingerprint.get_finger_name_display(),
             }
         })
