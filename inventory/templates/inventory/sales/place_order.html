@@ -221,6 +221,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let fingerprintEnabled = false;
     let isCapturing = false;
     let isCancelling = false;
+    let justIdentified = false;
 
     // =============================================================================
     // FINGERPRINT STATUS UI
@@ -261,6 +262,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function onAcquisitionStarted(event) {
+        if (justIdentified) {
+            justIdentified = false;  // reset — don't show overlay on auto-restart
+            return;
+        }
         document.getElementById('scan-overlay').classList.add('active');
         updateFingerprintStatus('scanning', 'Scanning...', 'Hold finger steady');
     }
@@ -313,7 +318,12 @@ document.addEventListener('DOMContentLoaded', function () {
             showToast('success', `Identified: ${data.student.name}`);
             updateFingerprintStatus('ready', 'Student identified', data.student.name);
 
-            setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
+            setTimeout(() => {
+                if (fingerprintEnabled) {
+                    justIdentified = true;  // ← prevent overlay on this restart
+                    startFingerprintCapture();
+                }
+            }, 2000);
 
         } catch (error) {
             document.getElementById('scan-overlay').classList.remove('active');  // close on error too
