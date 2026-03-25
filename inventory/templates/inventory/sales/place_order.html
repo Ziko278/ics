@@ -64,7 +64,6 @@
             </button>
         </div>
 
-        <!-- Scan Overlay -->
         <div class="scan-overlay" id="scan-overlay">
             <div class="scan-message">
                 <i class="bi bi-fingerprint text-primary" style="font-size: 4rem;"></i>
@@ -72,9 +71,6 @@
                 <p class="text-muted">Identifying student...</p>
                 <button type="button" class="btn btn-secondary mt-3" onclick="cancelFingerprintScan()">Cancel</button>
             </div>
-            <button type="button" class="btn btn-secondary mt-3" onclick="cancelFingerprintScan()">
-    Cancel
-</button>
         </div>
 
         <form id="order-form" method="POST" action="{% url 'place_order' %}">
@@ -279,57 +275,55 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     async function onSamplesAcquired(event) {
-    try {
-        const samples = JSON.parse(event.samples);
-        if (!samples || samples.length === 0) throw new Error('No samples captured');
+        try {
+            const samples = JSON.parse(event.samples);
+            if (!samples || samples.length === 0) throw new Error('No samples captured');
 
-        const fmd = samples[0];
+            const fmd = samples[0];
+            const probeData = typeof fmd === 'object' ? fmd.Data : fmd;
+            if (!probeData) throw new Error('No FMD Data in sample');
 
-        // Extract just the Data string
-        const probeData = typeof fmd === 'object' ? fmd.Data : fmd;
-        if (!probeData) throw new Error('No FMD Data in sample');
+            updateFingerprintStatus('scanning', 'Identifying...', 'Please wait');
 
-        updateFingerprintStatus('scanning', 'Identifying...', 'Please wait');
+            const response = await fetch(fingerprintIdentifyUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ fingerprint_data: probeData })
+            });
 
-        const response = await fetch(fingerprintIdentifyUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            },
-            body: JSON.stringify({ fingerprint_data: probeData })
-        });
+            const data = await response.json();
 
-        const data = await response.json();
+            // Close overlay immediately on response — success or fail
+            document.getElementById('scan-overlay').classList.remove('active');
 
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || 'Not identified');
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Not identified');
+            }
+
+            populateCustomer({
+                type: 'student',
+                id: data.student.id,
+                name: data.student.name,
+                identifier: data.student.reg_number,
+                display_class: data.student.student_class + ' ' + data.student.class_section,
+                wallet_balance: data.student.wallet_balance,
+                image_url: data.student.image_url
+            });
+
+            showToast('success', `Identified: ${data.student.name}`);
+            updateFingerprintStatus('ready', 'Student identified', data.student.name);
+
+            setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
+
+        } catch (error) {
+            document.getElementById('scan-overlay').classList.remove('active');  // close on error too
+            showToast('danger', error.message);
+            updateFingerprintStatus('error', 'Not identified', error.message);
+            setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
+        } finally {
+            isCapturing = false;
         }
-
-        populateCustomer({
-            type: 'student',
-            id: data.student.id,
-            name: data.student.name,
-            identifier: data.student.reg_number,
-            display_class: data.student.student_class + ' ' + data.student.class_section,
-            wallet_balance: data.student.wallet_balance,
-            image_url: data.student.image_url
-        });
-
-        showToast('success', `Identified: ${data.student.name}`);
-        updateFingerprintStatus('ready', 'Student identified', data.student.name);
-
-        setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
-
-    } catch (error) {
-        showToast('danger', error.message);
-        updateFingerprintStatus('error', 'Not identified', error.message);
-        setTimeout(() => { if (fingerprintEnabled) startFingerprintCapture(); }, 2000);
-    } finally {
-        document.getElementById('scan-overlay').classList.remove('active');
-        isCapturing = false;
     }
-}
 
     function onQualityReported(event) {
         console.log('Quality:', event.quality);
