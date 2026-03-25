@@ -1,14 +1,6 @@
 from django.urls import path
 
-from student.views import StudentSettingDetailView, StudentSettingUpdateView, StudentSettingCreateView, ParentListView, \
-    ParentCreateView, ParentDetailView, ParentUpdateView, ParentDeleteView, StudentListView, StudentCreateView, \
-    StudentUpdateView, StudentDeleteView, StudentDetailView, change_student_status, select_class_for_export_view, \
-    export_class_list_view, capture_fingerprint, identify_student_by_fingerprint, SelectParentView, ParentSearchView, \
-    ClassStudentSelectView, GetClassSectionsView, delete_fingerprint, test_scanner_connection, \
-    parent_student_upload_view, import_batch_detail_view, download_parent_credentials, download_all_parent_credentials, \
-    ajax_create_parent_view, paste_create_parents_view, paste_create_students_view, ajax_create_student_view, \
-    UtilityListView, UtilityUpdateView, UtilityCreateView, UtilityDeleteView, ParentPasswordResetView
-
+from student.views import *
 urlpatterns = [
 
     # Student Settings URLs (Singleton)
@@ -56,6 +48,8 @@ urlpatterns = [
     path('api/fingerprint/identify/', identify_student_by_fingerprint, name='identify_student'),
     path('api/fingerprint/delete/', delete_fingerprint, name='delete_fingerprint'),
     path('api/fingerprint/test-scanner/', test_scanner_connection, name='test_scanner'),
+    path('api/fingerprint/templates/', get_fingerprint_templates, name='get_fingerprint_templates'),
+path('api/fingerprint/confirm/', confirm_fingerprint_match, name='confirm_fingerprint_match'),
 
     path(
         'paste-create-parents/',

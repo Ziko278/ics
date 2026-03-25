@@ -1229,374 +1229,161 @@ def capture_fingerprint(request):
             'message': f'An error occurred during capture: {str(e)}'
         }, status=500)
 
+import struct
 
-class SimpleFingerprintMatcher:
+def compare_fmd(fmd1_b64: str, fmd2_b64: str) -> float:
     """
-    Simple but effective fingerprint matching for DigitalPersona PNG images
+    Compare two DigitalPersona FMD templates.
+    Returns similarity score 0.0 - 1.0 (higher = better match).
+    Uses minutiae point comparison — fast binary math, no image decoding.
     """
+    try:
+        def to_b64(s):
+            s = s.replace('-', '+').replace('_', '/')
+            s += '=='
+            return s
 
-    def __init__(self):
-        # Balanced threshold - strict enough for security, lenient enough to work
-        self.min_match_score = 0.65  # 65% threshold
+        if isinstance(fmd1_b64, dict):
+            fmd1_b64 = fmd1_b64.get('Data', '')
+        if isinstance(fmd2_b64, dict):
+            fmd2_b64 = fmd2_b64.get('Data', '')
 
-    def decode_fingerprint(self, base64_data):
-        """Decode base64 fingerprint to numpy array"""
-        try:
-            if ',' in base64_data:
-                base64_data = base64_data.split(',')[1]
+        fmd1 = base64.b64decode(to_b64(fmd1_b64))
+        fmd2 = base64.b64decode(to_b64(fmd2_b64))
 
-            image_data = base64.b64decode(base64_data)
-            image = Image.open(BytesIO(image_data))
+        # TEMPORARY — print first 50 bytes to identify header
+        print(f"FMD1 first 50 bytes: {list(fmd1[:50])}")
+        print(f"FMD1 total bytes: {len(fmd1)}")
 
-            if image.mode != 'L':
-                image = image.convert('L')
+        # DP FMD header is 36 bytes, each minutia is 6 bytes after that
+        HEADER = 36
+        MINUTIA_SIZE = 6
 
-            return np.array(image, dtype=np.float64)
+        def extract_minutiae(fmd):
+            if len(fmd) < 39:
+                return []
+            count = (len(fmd) - 39) // 6
+            minutiae = []
+            for i in range(count):
+                offset = 37 + i * 6
+                chunk = fmd[offset:offset + 6]
+                if len(chunk) < 6:
+                    continue
+                # Standard ANSI 378 encoding
+                x = ((chunk[0] & 0x7F) << 8) | chunk[1]
+                y = ((chunk[2] & 0x7F) << 8) | chunk[3]
 
-        except Exception as e:
-            logger.error(f"Error decoding fingerprint: {e}")
-            raise ValueError(f"Invalid fingerprint data: {str(e)}")
+                angle = chunk[4]  # 0-255 = 0-360°
+                minutiae.append((x, y, angle))
+            return minutiae
 
-    def simple_normalize(self, img):
-        """Simple normalization"""
-        img_min = img.min()
-        img_max = img.max()
-        if img_max - img_min > 0:
-            return (img - img_min) / (img_max - img_min)
-        return img / 255.0
+        m1 = extract_minutiae(fmd1)
+        m2 = extract_minutiae(fmd2)
 
-    def compute_direct_similarity(self, img1, img2):
-        """
-        Direct pixel-by-pixel comparison - most reliable for same scanner
-        """
-        try:
-            # Resize both to same size
-            from PIL import Image as PILImage
-            target_size = (300, 300)  # Larger size preserves more detail
+        print(f"FMD1 bytes: {len(fmd1)}, minutiae: {len(m1)}")
+        print(f"FMD2 bytes: {len(fmd2)}, minutiae: {len(m2)}")
+        print(f"Sample m1[0]: {m1[0] if m1 else 'empty'}")
+        print(f"Sample m2[0]: {m2[0] if m2 else 'empty'}")
 
-            img1_pil = PILImage.fromarray(img1.astype(np.uint8))
-            img2_pil = PILImage.fromarray(img2.astype(np.uint8))
-
-            img1_resized = np.array(img1_pil.resize(target_size, PILImage.Resampling.LANCZOS), dtype=np.float64)
-            img2_resized = np.array(img2_pil.resize(target_size, PILImage.Resampling.LANCZOS), dtype=np.float64)
-
-            # Normalize
-            img1_norm = self.simple_normalize(img1_resized)
-            img2_norm = self.simple_normalize(img2_resized)
-
-            # Method 1: Mean Squared Error (lower is better)
-            mse = np.mean((img1_norm - img2_norm) ** 2)
-            mse_similarity = 1.0 - min(mse, 1.0)
-
-            # Method 2: Pearson Correlation
-            flat1 = img1_norm.flatten()
-            flat2 = img2_norm.flatten()
-
-            correlation = np.corrcoef(flat1, flat2)[0, 1]
-            if np.isnan(correlation):
-                correlation = 0.0
-            corr_similarity = (correlation + 1) / 2  # Scale to 0-1
-
-            # Method 3: Cosine Similarity
-            dot_product = np.sum(flat1 * flat2)
-            norm1 = np.sqrt(np.sum(flat1 ** 2))
-            norm2 = np.sqrt(np.sum(flat2 ** 2))
-
-            if norm1 > 0 and norm2 > 0:
-                cosine_sim = dot_product / (norm1 * norm2)
-                cosine_sim = (cosine_sim + 1) / 2  # Scale to 0-1
-            else:
-                cosine_sim = 0.0
-
-            # Combine scores with simple average
-            combined = (mse_similarity * 0.4 + corr_similarity * 0.4 + cosine_sim * 0.2)
-
-            return {
-                'mse_similarity': mse_similarity,
-                'correlation': corr_similarity,
-                'cosine_similarity': cosine_sim,
-                'combined': combined
-            }
-
-        except Exception as e:
-            logger.error(f"Error computing similarity: {e}", exc_info=True)
-            return {
-                'mse_similarity': 0.0,
-                'correlation': 0.0,
-                'cosine_similarity': 0.0,
-                'combined': 0.0
-            }
-
-    def compute_histogram_match(self, img1, img2):
-        """Compare intensity histograms"""
-        try:
-            # Compute normalized histograms
-            hist1, _ = np.histogram(img1.flatten(), bins=64, range=(0, 255), density=True)
-            hist2, _ = np.histogram(img2.flatten(), bins=64, range=(0, 255), density=True)
-
-            # Compute histogram intersection
-            intersection = np.minimum(hist1, hist2).sum()
-
-            return intersection
-
-        except Exception as e:
-            logger.error(f"Error computing histogram: {e}")
+        if not m1 or not m2:
             return 0.0
 
-    def match_fingerprints(self, template1_base64, template2_base64):
-        """
-        Simple fingerprint matching
-        """
-        try:
-            # Decode both images
-            img1 = self.decode_fingerprint(template1_base64)
-            img2 = self.decode_fingerprint(template2_base64)
+        # Count matching minutiae pairs within tolerance
+        X_TOL = 16
+        Y_TOL = 16
+        A_TOL = 20
+        matches = 0
 
-            # Compute direct similarity
-            similarity_scores = self.compute_direct_similarity(img1, img2)
+        for (x1, y1, a1) in m1:
+            for (x2, y2, a2) in m2:
+                if (abs(x1 - x2) <= X_TOL and
+                    abs(y1 - y2) <= Y_TOL and
+                    abs(a1 - a2) <= A_TOL):
+                    matches += 1
+                    break
 
-            # Compute histogram match
-            hist_score = self.compute_histogram_match(img1, img2)
+        score = matches / max(len(m1), len(m2))
 
-            # Final score: 70% direct similarity + 30% histogram
-            final_score = (similarity_scores['combined'] * 0.70 + hist_score * 0.30)
+        print(f"m1 first 3: {m1[:3]}")
+        print(f"m2 first 3: {m2[:3]}")
+        print(f"Score: {score}")
 
-            # Match decision
-            is_match = final_score >= self.min_match_score
-
-            details = {
-                'mse_similarity': round(similarity_scores['mse_similarity'], 3),
-                'correlation': round(similarity_scores['correlation'], 3),
-                'cosine_similarity': round(similarity_scores['cosine_similarity'], 3),
-                'histogram_match': round(hist_score, 3),
-                'direct_similarity': round(similarity_scores['combined'], 3),
-                'final_score': round(final_score, 3)
-            }
-
-            return is_match, final_score, details
-
-        except Exception as e:
-            logger.error(f"Error matching fingerprints: {e}", exc_info=True)
-            return False, 0.0, {'error': str(e)}
+        return score
 
 
-# Global matcher
-fingerprint_matcher = SimpleFingerprintMatcher()
+
+    except Exception as e:
+        logger.error(f"FMD compare error: {e}")
+        return 0.0
 
 
 @csrf_exempt
 @require_POST
 def identify_student_by_fingerprint(request):
-    """
-    Student identification with simple but effective matching
-    """
+    print('workings')
     try:
         data = json.loads(request.body)
-        scanned_template = data.get('fingerprint_data')
+        probe = data.get('fingerprint_data')
 
-        if not scanned_template:
-            return JsonResponse({
-                'success': False,
-                'message': 'No fingerprint data provided'
-            }, status=400)
+        if not probe:
+            return JsonResponse({'success': False, 'message': 'No fingerprint data'}, status=400)
 
-        # Validate
-        try:
-            fingerprint_matcher.decode_fingerprint(scanned_template)
-        except Exception as e:
-            return JsonResponse({
-                'success': False,
-                'message': f'Invalid fingerprint data: {str(e)}'
-            }, status=400)
+        THRESHOLD = 0.35  # 35% minutiae match — tune this after testing
 
-        # Threshold
-        match_threshold = 0.65  # 65% - balanced
-
-        # Get active fingerprints
-        active_fingerprints = FingerprintModel.objects.filter(
+        # Load only id + template — no joins, no heavy data
+        candidates = FingerprintModel.objects.filter(
             is_active=True,
             student__status='active'
-        ).select_related(
-            'student',
-            'student__student_wallet',
-            'student__student_class',
-            'student__parent'
-        ).order_by('-quality_score')  # Check high quality first
+        ).values_list('id', 'fingerprint_template')
 
-        logger.info(f"🔍 Checking {active_fingerprints.count()} enrolled fingerprints")
-
-        best_match = None
+        best_id = None
         best_score = 0.0
-        best_details = {}
-        all_scores = []
 
-        # Compare with each enrolled fingerprint
-        for idx, fingerprint in enumerate(active_fingerprints):
-            try:
-                is_match, score, details = fingerprint_matcher.match_fingerprints(
-                    scanned_template,
-                    fingerprint.fingerprint_template
-                )
+        for fp_id, template in candidates:
+            score = compare_fmd(probe, template)
+            if score > best_score:
+                best_score = score
+                best_id = fp_id
 
-                student_info = f"{fingerprint.student.first_name} {fingerprint.student.last_name}"
+        logger.info(f"Best score: {best_score:.3f} | ID: {best_id}")
 
-                all_scores.append({
-                    'index': idx + 1,
-                    'student': student_info,
-                    'reg_number': fingerprint.student.registration_number,
-                    'finger': fingerprint.get_finger_name_display(),
-                    'score': score,
-                    'details': details,
-                    'is_match': is_match
-                })
-
-                # Log each comparison for debugging
-                match_status = "✅" if is_match else "❌"
-                logger.info(
-                    f"  [{match_status}] #{idx + 1} {student_info} ({fingerprint.student.registration_number}) "
-                    f"- {fingerprint.get_finger_name_display()}: {score:.3f} | "
-                    f"MSE:{details['mse_similarity']:.3f} "
-                    f"Corr:{details['correlation']:.3f} "
-                    f"Cos:{details['cosine_similarity']:.3f} "
-                    f"Hist:{details['histogram_match']:.3f}"
-                )
-
-                if is_match and score > best_score:
-                    best_match = fingerprint
-                    best_score = score
-                    best_details = details
-
-            except Exception as e:
-                logger.warning(f"Error comparing fingerprint {fingerprint.id}: {e}")
-                continue
-
-        # Sort by score
-        all_scores.sort(key=lambda x: x['score'], reverse=True)
-
-        # Log summary
-        logger.info(f"\n{'=' * 60}")
-        logger.info(f"SCAN SUMMARY:")
-        logger.info(f"  Total checked: {len(all_scores)}")
-        logger.info(f"  Best score: {best_score:.3f}")
-        logger.info(f"  Threshold: {match_threshold}")
-        logger.info(f"  Result: {'✅ MATCH' if best_match else '❌ NO MATCH'}")
-        logger.info(f"{'=' * 60}\n")
-
-        # Check for ambiguous matches
-        close_matches = [s for s in all_scores if s['score'] >= (best_score - 0.10) and s['is_match']]
-        is_ambiguous = len(close_matches) > 1
-
-        if best_match and best_score >= match_threshold:
-            student = best_match.student
-
-            # Mark as used
-            best_match.mark_used()
-
-            # Wallet
-            try:
-                wallet_balance = float(student.student_wallet.balance)
-            except:
-                wallet_balance = 0.0
-
-            # Confidence
-            if best_score >= 0.85:
-                confidence = 'very_high'
-            elif best_score >= 0.75:
-                confidence = 'high'
-            elif best_score >= 0.65:
-                confidence = 'good'
-            else:
-                confidence = 'acceptable'
-
-            logger.info(
-                f"✅ AUTHENTICATED: {student.registration_number} "
-                f"({student.first_name} {student.last_name}) "
-                f"Score: {best_score:.3f} ({confidence})"
-            )
-
-            return JsonResponse({
-                'success': True,
-                'message': 'Student identified successfully',
-                'is_ambiguous': is_ambiguous,
-                'student': {
-                    'id': student.id,
-                    'name': f"{student.first_name} {student.last_name}",
-                    'reg_number': student.registration_number,
-                    'student_class': str(student.student_class) if student.student_class else 'Not Assigned',
-                    'class_section': str(student.class_section) if student.class_section else '',
-                    'status': student.get_status_display(),
-                    'wallet_balance': wallet_balance,
-                    'image_url': student.image.url if student.image else '',
-                    'parent_name': f"{student.parent.first_name} {student.parent.last_name}",
-                    'parent_mobile': student.parent.mobile or '',
-                },
-                'match_details': {
-                    'score': round(best_score, 3),
-                    'confidence': confidence,
-                    'finger_used': best_match.get_finger_name_display(),
-                    'algorithm_scores': best_details,
-                    'total_candidates': active_fingerprints.count(),
-                    'match_threshold': match_threshold,
-                    'top_5_scores': [
-                        {
-                            'rank': i + 1,
-                            'student': s['student'],
-                            'score': round(s['score'], 3)
-                        }
-                        for i, s in enumerate(all_scores[:5])
-                    ]
-                }
-            })
-
-        else:
-            # No match
-            top_score = all_scores[0]['score'] if all_scores else 0.0
-            top_student = all_scores[0]['student'] if all_scores else 'None'
-            top_details = all_scores[0]['details'] if all_scores else {}
-
-            # Diagnostic message
-            if top_score >= 0.55:
-                reason = "Close match but below security threshold"
-                suggestion = "Try again: clean scanner and finger, press firmly"
-            elif top_score >= 0.35:
-                reason = "Partial match detected"
-                suggestion = "Ensure proper finger placement and try again"
-            else:
-                reason = "No matching fingerprint found"
-                suggestion = "Student may not be enrolled or using wrong finger"
-
-            logger.warning(
-                f"❌ REJECTED: Best match {top_student}: {top_score:.3f} "
-                f"(need {match_threshold}) | Details: {top_details}"
-            )
-
+        if best_id is None or best_score < THRESHOLD:
             return JsonResponse({
                 'success': False,
-                'message': f'{reason}. {suggestion}',
-                'diagnostic': {
-                    'best_score': round(top_score, 3),
-                    'best_match': top_student,
-                    'threshold_required': match_threshold,
-                    'gap': round(match_threshold - top_score, 3),
-                    'candidates_evaluated': len(all_scores),
-                    'reason': reason,
-                    'suggestion': suggestion,
-                    'algorithm_details': top_details
-                }
+                'message': f'No match found (best score: {best_score:.2f})',
             }, status=404)
 
-    except json.JSONDecodeError:
+        # Only now fetch full student data
+        fingerprint = FingerprintModel.objects.select_related(
+            'student', 'student__student_wallet', 'student__parent'
+        ).get(id=best_id)
+
+        student = fingerprint.student
+        fingerprint.mark_used()
+
         return JsonResponse({
-            'success': False,
-            'message': 'Invalid JSON data'
-        }, status=400)
+            'success': True,
+            'student': {
+                'id': student.id,
+                'name': f"{student.first_name} {student.last_name}",
+                'reg_number': student.registration_number,
+                'student_class': str(student.student_class or 'Not Assigned'),
+                'class_section': str(student.class_section or ''),
+                'wallet_balance': float(student.student_wallet.balance),
+                'image_url': student.image.url if student.image else '',
+                'parent_name': f"{student.parent.first_name} {student.parent.last_name}",
+                'parent_mobile': student.parent.mobile or '',
+            },
+            'match_details': {
+                'score': round(best_score, 3),
+                'finger_used': fingerprint.get_finger_name_display(),
+            }
+        })
 
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: {e}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'message': 'System error during identification'
-        }, status=500)
+        logger.error(f"Identification error: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'message': 'System error'}, status=500)
+
 
 @csrf_exempt
 @require_POST
@@ -1624,6 +1411,68 @@ def delete_fingerprint(request):
             'success': False,
             'message': 'Error deleting fingerprint'
         }, status=500)
+
+
+@require_http_methods(["GET"])
+def get_fingerprint_templates(request):
+    """
+    Returns all active FMD templates so the browser can do 1:N matching locally.
+    """
+    fingerprints = FingerprintModel.objects.filter(
+        is_active=True,
+        student__status='active'
+    ).values(
+        'id',
+        'fingerprint_template',
+        'student__id',
+        'student__first_name',
+        'student__last_name',
+        'student__registration_number',
+    )
+
+    return JsonResponse({
+        'success': True,
+        'templates': list(fingerprints)
+    })
+
+
+@csrf_exempt
+@require_POST
+def confirm_fingerprint_match(request):
+    """
+    Called after JS has already found the match.
+    Just loads and returns full student data.
+    """
+    try:
+        data = json.loads(request.body)
+        fingerprint_id = data.get('fingerprint_id')
+
+        fingerprint = FingerprintModel.objects.select_related(
+            'student', 'student__student_wallet', 'student__parent'
+        ).get(id=fingerprint_id, is_active=True)
+
+        student = fingerprint.student
+        fingerprint.mark_used()
+
+        return JsonResponse({
+            'success': True,
+            'student': {
+                'id': student.id,
+                'name': f"{student.first_name} {student.last_name}",
+                'reg_number': student.registration_number,
+                'student_class': str(student.student_class or 'Not Assigned'),
+                'class_section': str(student.class_section or ''),
+                'wallet_balance': float(student.student_wallet.balance),
+                'image_url': student.image.url if student.image else '',
+            }
+        })
+
+    except FingerprintModel.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Fingerprint not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Confirm match error: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'message': 'System error'}, status=500)
+
 
 
 @require_http_methods(["GET"])

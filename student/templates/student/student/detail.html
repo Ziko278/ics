@@ -222,11 +222,6 @@
 
                                         <div id="scan-status" class="mt-3"></div>
 
-                                        <!-- Captured Image Preview -->
-                                        <div id="captured-preview" class="mt-3" style="display: none;">
-                                            <h6 class="text-muted mb-2">Captured Fingerprint:</h6>
-                                            <img id="captured-image" src="" alt="Captured fingerprint" class="img-fluid border rounded" style="max-width: 200px;">
-                                        </div>
                                      </div>
                                 </div>
                             </div>
@@ -455,7 +450,6 @@ function onAcquisitionStopped(event) {
 
 function onSamplesAcquired(event) {
     console.log('Sample acquired on:', event.deviceUid);
-    console.log('Sample data:', event.samples);
 
     try {
         const samples = JSON.parse(event.samples);
@@ -463,29 +457,15 @@ function onSamplesAcquired(event) {
         if (samples && samples.length > 0) {
             const sample = samples[0];
 
-            // Store the captured sample data (base64url encoded)
+            // Store raw FMD template — no conversion, no PNG preview
             capturedSampleData = {
-                template: sample,
+                template: sample.Data,
                 quality: 0.85,
                 deviceUid: event.deviceUid
             };
 
-            // Convert to PNG image for preview - FIXED
-            const binaryString = b64UrlToUtf8(sample);
-            const imageData = `data:image/png;base64,${btoa(binaryString)}`;
-
-            // Show preview
-            const previewDiv = document.getElementById('captured-preview');
-            const previewImg = document.getElementById('captured-image');
-            previewImg.src = imageData;
-            previewDiv.style.display = 'block';
-
             showStatus('success', '✅ Fingerprint captured! Saving to server...');
-
-            // Auto-stop capture
             stopCapture();
-
-            // Save to server
             saveFingerprintToServer();
 
         } else {
@@ -509,22 +489,14 @@ function onErrorOccurred(event) {
     stopCapture();
 }
 
-// Initialize Fingerprint API
 async function initializeFingerprintAPI() {
     try {
-        console.log('Initializing DigitalPersona Fingerprint API...');
-
-        // Check if Fingerprint API is available
         if (typeof Fingerprint === 'undefined' || !Fingerprint.WebApi) {
             throw new Error('DigitalPersona Fingerprint SDK not loaded');
         }
 
-        // Create API instance
-        fingerprintApi = new Fingerprint.WebApi({
-            debug: true
-        });
+        fingerprintApi = new Fingerprint.WebApi({ debug: true });
 
-        // Register event handlers BEFORE any API calls
         fingerprintApi.onCommunicationFailed = onCommunicationFailed;
         fingerprintApi.onDeviceConnected = onDeviceConnected;
         fingerprintApi.onDeviceDisconnected = onDeviceDisconnected;
@@ -536,20 +508,17 @@ async function initializeFingerprintAPI() {
 
         console.log('Fingerprint API initialized successfully');
 
-        // Give the API a moment to initialize before enumerating
+        // Increased delay — give agent more time after ws connects
         setTimeout(async () => {
+            const readers = await fingerprintApi.enumerateDevices();
+            console.log('RAW enumerateDevices() result:', readers);  // <-- key debug line
+            console.log('Type:', typeof readers, 'Length:', readers?.length);
             await updateReadersList();
-        }, 500);
+        }, 1500);  // increased from 500ms
 
     } catch (error) {
         console.error('Failed to initialize Fingerprint API:', error);
         updateScannerStatus(false, `Initialization failed: ${error.message}`);
-        showStatus('danger',
-            '❌ Cannot initialize scanner. Please ensure:<br>' +
-            '1. DigitalPersona Client/Agent is installed<br>' +
-            '2. Agent service is running<br>' +
-            '3. Scanner is connected'
-        );
     }
 }
 
@@ -567,11 +536,9 @@ async function startCapture() {
         console.log('Starting acquisition...');
         capturedSampleData = null;
 
-        // Hide previous preview
-        document.getElementById('captured-preview').style.display = 'none';
 
         // Start acquisition with PNG format
-        await fingerprintApi.startAcquisition(Fingerprint.SampleFormat.PngImage);
+        await fingerprintApi.startAcquisition(Fingerprint.SampleFormat.Intermediate);
 
         isCapturing = true;
 
@@ -632,15 +599,12 @@ async function saveFingerprintToServer() {
     const fingerName = fingerSelect.value;
 
     try {
-        // Get CSRF token - improved selector
         const csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]')?.value ||
                          document.querySelector('[name=csrfmiddlewaretoken]')?.value;
 
         if (!csrfToken) {
             throw new Error('CSRF token not found');
         }
-
-        const standardBase64 = base64urlToBase64(capturedSampleData.template);
 
         showStatus('info', '🔍 Assessing fingerprint quality...');
 
@@ -653,7 +617,7 @@ async function saveFingerprintToServer() {
             body: JSON.stringify({
                 student_id: studentId,
                 finger_name: fingerName,
-                fingerprint_data: standardBase64,
+                fingerprint_data: capturedSampleData.template,
                 quality_score: capturedSampleData.quality
             })
         });
