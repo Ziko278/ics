@@ -818,24 +818,27 @@ class InvoiceItemDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteV
         context = super().get_context_data(**kwargs)
         invoice_item = self.get_object()
         invoice = invoice_item.invoice
-
-        # Check if there are any confirmed payments for this invoice
-        has_confirmed_payments = invoice.payments.filter(status='confirmed').exists()
+        associated_discounts = invoice_item.discounts_applied.select_related(
+            'student', 'discount_application'
+        ).all()
 
         context['invoice'] = invoice
-        context['has_confirmed_payments'] = has_confirmed_payments
+        context['has_confirmed_payments'] = invoice.payments.filter(status='confirmed').exists()
+        context['associated_discounts'] = associated_discounts
+        context['has_associated_discounts'] = associated_discounts.exists()
         return context
 
     def delete(self, request, *args, **kwargs):
         invoice_item = self.get_object()
         invoice = invoice_item.invoice
 
-        # Check if there are any confirmed payments for this invoice
-        has_confirmed_payments = invoice.payments.filter(status='confirmed').exists()
-
-        if has_confirmed_payments:
+        if invoice.payments.filter(status='confirmed').exists():
             messages.error(request, "Cannot delete invoice item because the invoice has confirmed payments.")
             return redirect('finance_invoice_detail', pk=invoice.pk)
+
+        if invoice_item.discounts_applied.exists():
+            messages.error(request, "Cannot delete invoice item because it has associated discount records.")
+            return redirect('finance_invoice_item_delete', pk=invoice_item.pk)
 
         messages.success(request, f"Invoice item '{invoice_item.description}' has been deleted successfully.")
         return super().delete(request, *args, **kwargs)
@@ -5370,22 +5373,23 @@ class StudentDiscountIndexView(LoginRequiredMixin, PermissionRequiredMixin, List
 
 
 class StudentDiscountDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
-    """Delete a student discount with confirmation."""
     model = StudentDiscountModel
     template_name = 'finance/discount/delete_discount.html'
     permission_required = 'finance.add_feepaymentmodel'
     context_object_name = 'discount'
 
     def get_success_url(self):
-        # Redirect to the discount index page after deletion
+        next_url = self.request.POST.get('next') or self.request.GET.get('next')
+        if next_url:
+            return next_url
         return reverse('finance_discount_index')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Get the student discount object
         discount = self.get_object()
         context['discount'] = discount
         context['student'] = discount.student
+        context['next'] = self.request.GET.get('next', '')
         return context
 
 

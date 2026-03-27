@@ -6,29 +6,71 @@
     <div class="card">
         <div class="card-body">
             <h4 class="card-title">Confirm Deletion of Invoice Item</h4>
-            
+
             <p>You are about to permanently delete the following invoice item:</p>
             <h5 class="text-center my-3"><em>"{{ object.description|title }}"</em></h5>
             <p class="text-center">Amount: <strong>₦{{ object.amount|floatformat:2|intcomma }}</strong></p>
             <p class="text-center">Invoice: <strong>{{ invoice.invoice_number }}</strong></p>
 
             {% if has_confirmed_payments %}
-                 <div class="alert alert-danger">
+                <div class="alert alert-danger">
                     <strong>Warning:</strong> This invoice item cannot be deleted because the invoice has confirmed payments.
                 </div>
+
+            {% elif has_associated_discounts %}
+                <div class="alert alert-warning">
+                    <strong>Cannot delete yet.</strong> This invoice item has associated discount records that must be removed first.
+                </div>
+
+                <h6 class="mt-4 mb-2">Associated Discount Records</h6>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Student</th>
+                            <th>Discount</th>
+                            <th class="text-end">Amount Discounted</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for discount in associated_discounts %}
+                        <tr>
+                            <td>{{ discount.student }}</td>
+                            <td>{{ discount.discount_application }}</td>
+                            <td class="text-end">₦{{ discount.amount_discounted|floatformat:2|intcomma }}</td>
+                            <td>
+                                <form method="post"
+                                      action="{% url 'finance_discount_delete' discount.pk %}?next={% url 'finance_invoice_item_delete' object.pk %}"
+                                      onsubmit="return confirm('Delete this discount record for {{ discount.student }}?')">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{% url 'finance_invoice_item_delete' object.pk %}">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="bi bi-trash"></i> Delete Discount
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
             {% else %}
                 <div class="alert alert-warning">
                     <strong>Warning:</strong> This action is permanent and cannot be undone.
                 </div>
             {% endif %}
-            
-            <p>Are you sure you want to proceed?</p>
 
-            <form style="display:inline" method="post">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-danger" {% if has_confirmed_payments %}disabled{% endif %}>Yes, Delete</button>
+            <div class="mt-3">
+                <form style="display:inline" method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger"
+                        {% if has_confirmed_payments or has_associated_discounts %}disabled{% endif %}>
+                        Yes, Delete Item
+                    </button>
+                </form>
                 <a class="btn btn-secondary" href="{% url 'finance_invoice_detail' invoice.pk %}">Cancel</a>
-            </form>
+            </div>
+
         </div>
     </div>
 </div>
