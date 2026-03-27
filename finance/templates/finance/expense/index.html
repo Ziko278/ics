@@ -15,9 +15,11 @@
             </div>
 
             <!-- Filters -->
-            <form method="GET" class="mb-4">
-                <div class="row g-3">
+            <form method="GET" id="filterForm" class="mb-4">
+                <div class="row g-3 align-items-end">
+
                     <div class="col-md-3">
+                        <label class="form-label small">Category</label>
                         <select name="category" class="form-control">
                             <option value="">All Categories</option>
                             {% for cat in categories %}
@@ -27,21 +29,60 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <input type="text" name="search" class="form-control" placeholder="Search description, reference, name..." value="{{ search_query }}">
+
+                    <div class="col-md-2">
+                        <label class="form-label small">Currency</label>
+                        <select name="currency" class="form-control">
+                            <option value="">All Currencies</option>
+                            <option value="naira"  {% if request.GET.currency == "naira"  %}selected{% endif %}>Naira (NGN)</option>
+                            <option value="dollar" {% if request.GET.currency == "dollar" %}selected{% endif %}>Dollar (USD)</option>
+                        </select>
                     </div>
-                    <div class="col-md-auto">
+
+                    <div class="col-md-2">
+                        <label class="form-label small">Date From</label>
+                        <input type="date" name="date_from" class="form-control"
+                               value="{{ request.GET.date_from|default:'' }}">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label small">Date To</label>
+                        <input type="date" name="date_to" class="form-control"
+                               value="{{ request.GET.date_to|default:'' }}">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small">Search</label>
+                        <input type="text" name="search" class="form-control"
+                               placeholder="Description, reference, name..."
+                               value="{{ search_query }}">
+                    </div>
+
+                    <div class="col-md-12 d-flex gap-2">
                         <button type="submit" class="btn btn-secondary">
                             <i class="bi bi-search"></i> Filter
                         </button>
-                        <a href="{% url 'expense_index' %}" class="btn btn-outline-secondary">Clear</a>
+                        <a href="{% url 'expense_index' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Clear
+                        </a>
+                        <a href="{% url 'expense_export' %}?{{ request.GET.urlencode }}"
+                           class="btn btn-success ms-auto">
+                            <i class="bi bi-file-earmark-excel"></i> Download Excel
+                        </a>
                     </div>
+
                 </div>
             </form>
 
             <!-- Summary -->
             <div class="alert alert-info mb-3">
-                <strong>Total Expenses:</strong> ₦{{ total_amount|intcomma }}
+                <strong>Total Expenses:</strong>
+                {% if selected_currency == 'dollar' %}${% else %}₦{% endif %}{{ total_amount|intcomma }}
+                {% if selected_currency %}
+                    <span class="ms-2 badge bg-primary">
+                        {% if selected_currency == 'dollar' %}Dollar (USD){% else %}Naira (NGN){% endif %}
+                    </span>
+                {% endif %}
             </div>
 
             <!-- Expense List Table -->
@@ -53,18 +94,17 @@
                             <th width="10%">Date</th>
                             <th width="15%">Category</th>
                             <th width="12%">In Favour Of</th>
-                            <th width="25%">Description</th>
+                            <th width="22%">Description</th>
                             <th width="10%" class="text-end">Amount</th>
-                            <th width="10%">Payment Method</th>
-                            <th width="8%">Actions</th>
+                            <th width="8%">Currency</th>
+                            <th width="8%">Payment Method</th>
+                            <th width="5%">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for expense in expense_list %}
                         <tr>
-                            <td>
-                                <strong>{{ expense.voucher_number }}</strong>
-                            </td>
+                            <td><strong>{{ expense.voucher_number }}</strong></td>
                             <td>{{ expense.expense_date|date:"d M Y" }}</td>
                             <td>{{ expense.category.name }}</td>
                             <td>{{ expense.name|default:"—"|truncatewords:3 }}</td>
@@ -79,6 +119,11 @@
                                 <strong>
                                     {% if expense.currency == 'dollar' %}${% else %}₦{% endif %}{{ expense.amount|intcomma }}
                                 </strong>
+                            </td>
+                            <td>
+                                <span class="badge {% if expense.currency == 'dollar' %}bg-success{% else %}bg-primary{% endif %}">
+                                    {{ expense.get_currency_display }}
+                                </span>
                             </td>
                             <td>
                                 <span class="badge bg-secondary">{{ expense.get_payment_method_display }}</span>
@@ -99,7 +144,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-4">
+                            <td colspan="9" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                                 <p class="mb-0 mt-2">No expense records found</p>
                             </td>
@@ -115,10 +160,10 @@
                 <ul class="pagination justify-content-center">
                     {% if page_obj.has_previous %}
                         <li class="page-item">
-                            <a class="page-link" href="?page=1{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">First</a>
+                            <a class="page-link" href="?page=1&{{ request.GET.urlencode }}">First</a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a>
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}">Previous</a>
                         </li>
                     {% endif %}
 
@@ -128,15 +173,16 @@
 
                     {% if page_obj.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a>
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}">Next</a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Last</a>
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ request.GET.urlencode }}">Last</a>
                         </li>
                     {% endif %}
                 </ul>
             </nav>
             {% endif %}
+
         </div>
     </div>
 </div>

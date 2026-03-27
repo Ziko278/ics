@@ -30,13 +30,14 @@
             <div class="card mb-4" style="background-color: #f8f9fa;">
                 <div class="card-body py-3">
                     <form method="get" class="row g-3 align-items-end">
-                        <div class="col-md-5">
+
+                        <div class="col-md-4">
                             <label class="form-label small">Search</label>
                             <input type="text" name="search" value="{{ request.GET.search|default:'' }}"
                                    placeholder="Search description, reference or source..." class="form-control">
                         </div>
 
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label small">Category</label>
                             <select name="category" class="form-select">
                                 <option value="">All Categories</option>
@@ -48,18 +49,53 @@
                             </select>
                         </div>
 
-                        <div class="col-md-3">
-                            <button type="submit" class="btn btn-primary w-100">
+                        <div class="col-md-2">
+                            <label class="form-label small">Currency</label>
+                            <select name="currency" class="form-select">
+                                <option value="">All Currencies</option>
+                                <option value="naira"  {% if request.GET.currency == "naira"  %}selected{% endif %}>Naira (NGN)</option>
+                                <option value="dollar" {% if request.GET.currency == "dollar" %}selected{% endif %}>Dollar (USD)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-2">
+                            <label class="form-label small">Date From</label>
+                            <input type="date" name="date_from" class="form-control"
+                                   value="{{ request.GET.date_from|default:'' }}">
+                        </div>
+
+                        <div class="col-md-2">
+                            <label class="form-label small">Date To</label>
+                            <input type="date" name="date_to" class="form-control"
+                                   value="{{ request.GET.date_to|default:'' }}">
+                        </div>
+
+                        <div class="col-12 d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
                                 <i class="bi bi-funnel"></i> Filter
                             </button>
+                            <a href="{% url 'income_index' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Clear
+                            </a>
+                            <a href="{% url 'income_export' %}?{{ request.GET.urlencode }}"
+                               class="btn btn-success ms-auto">
+                                <i class="bi bi-file-earmark-excel"></i> Download Excel
+                            </a>
                         </div>
+
                     </form>
                 </div>
             </div>
 
             <!-- Summary -->
             <div class="alert alert-info">
-                <strong>Total Amount for Filtered Income: ₦{{ total_amount|intcomma }}</strong>
+                <strong>Total Amount for Filtered Income:</strong>
+                {% if selected_currency == 'dollar' %}${% else %}₦{% endif %}{{ total_amount|intcomma }}
+                {% if selected_currency %}
+                    <span class="ms-2 badge bg-primary">
+                        {% if selected_currency == 'dollar' %}Dollar (USD){% else %}Naira (NGN){% endif %}
+                    </span>
+                {% endif %}
             </div>
 
             <!-- Income Table -->
@@ -72,6 +108,7 @@
                             <th scope="col">Description</th>
                             <th scope="col">Source</th>
                             <th scope="col">Amount</th>
+                            <th scope="col">Currency</th>
                             <th scope="col">Date</th>
                             <th scope="col">Session</th>
                             <th scope="col">Term</th>
@@ -84,16 +121,20 @@
                             <th scope="row">
                                 {% if page_obj %}{{ forloop.counter0|add:page_obj.start_index }}{% else %}{{ forloop.counter }}{% endif %}
                             </th>
-
                             <td>{{ income.category.name|title }}</td>
                             <td>{{ income.description|default:"—"|truncatechars:60 }}</td>
                             <td>{{ income.source|default:"—" }}</td>
-                            <td>₦{{ income.amount|intcomma }}</td>
+                            <td>
+                                {% if income.currency == 'dollar' %}${% else %}₦{% endif %}{{ income.amount|intcomma }}
+                            </td>
+                            <td>
+                                <span class="badge {% if income.currency == 'dollar' %}bg-success{% else %}bg-primary{% endif %}">
+                                    {{ income.get_currency_display }}
+                                </span>
+                            </td>
                             <td>{{ income.income_date|date:"d M Y" }}</td>
                             <td>{% if income.session %}{{ income.session }}{% else %}—{% endif %}</td>
                             <td>{% if income.term %}{{ income.term }}{% else %}—{% endif %}</td>
-
-
                             <td>
                                 <a href="{% url 'income_detail' income.pk %}" class="btn btn-sm btn-outline-primary" title="View Details">
                                     <i class="bi bi-eye"></i>
@@ -101,8 +142,6 @@
                                 <a href="{% url 'income_update' income.pk %}" class="btn btn-sm btn-outline-warning" title="Edit">
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
-
-
                             </td>
                         </tr>
                         {% empty %}
@@ -148,11 +187,12 @@
                 </ul>
             </nav>
             {% endif %}
+
         </div>
     </div>
 </div>
 
-<!-- Income Helper Modal (shared) -->
+<!-- Income Helper Modal -->
 <div class="modal fade" id="incomeHelperModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">

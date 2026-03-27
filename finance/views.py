@@ -1,5 +1,6 @@
 import calendar
 import json
+import io
 import traceback
 from datetime import date, datetime, timedelta
 from calendar import monthrange
@@ -15,6 +16,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import json
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core import serializers
@@ -62,6 +64,14 @@ from finance.tasks import generate_invoices_task
 from pytz import timezone as pytz_timezone
 
 from .utility import *
+
+
+def _currency_symbol(currency_value):
+    return "$" if currency_value == "dollar" else "₦"
+
+
+def _currency_label(currency_value):
+    return "Dollar (USD)" if currency_value == "dollar" else "Naira (NGN)"
 
 
 # ===================================================================
@@ -1462,28 +1472,21 @@ class BulkFeePaymentView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
 
         return redirect('finance_student_dashboard', pk=student.pk)
 
+
 @login_required
 @permission_required('finance.add_feepaymentmodel', raise_exception=True)
 def confirm_fee_payment_view(request, payment_id):
-    """
-    Confirms a pending fee payment uploaded by parent.
-    Supports both quick payment (auto-distribute) and itemized payment (parent's allocation).
-    Staff can override parent's allocation if needed.
-    """
     payment = get_object_or_404(FeePaymentModel, pk=payment_id)
 
     if payment.status != FeePaymentModel.PaymentStatus.PENDING:
         messages.warning(request, "This payment has already been processed.")
         return redirect('finance_pending_payment_index')
 
-    # Check if this is a confirmation with override
     override_allocation = request.POST.get('override_allocation') == 'true'
 
     with transaction.atomic():
-        # Track the actual allocations made
         item_breakdown = {}
 
-        # Confirm the payment
         payment.status = FeePaymentModel.PaymentStatus.CONFIRMED
         payment.confirmed_by = request.user
         payment.save(update_fields=['status', 'confirmed_by'])
@@ -1491,18 +1494,15 @@ def confirm_fee_payment_view(request, payment_id):
         invoice = payment.invoice
         amount_to_allocate = payment.amount
 
-        # Check if parent specified item allocations
         import json
         import re
         parent_allocations = {}
 
         if payment.notes:
-            # Try to extract JSON allocation from notes
             match = re.search(r'Item Allocations:\s*(\{[^}]+\}|\[[^\]]+\])', payment.notes, re.DOTALL)
             if match:
                 try:
                     allocations_str = match.group(1)
-                    # Handle potential multi-line JSON
                     full_json_match = re.search(r'Item Allocations:\s*(\{.*?\n.*?\})', payment.notes, re.DOTALL)
                     if full_json_match:
                         allocations_str = full_json_match.group(1)
@@ -1510,105 +1510,83 @@ def confirm_fee_payment_view(request, payment_id):
                 except json.JSONDecodeError:
                     pass
 
-        # Determine allocation strategy
+        def get_unpaid_items(invoice):
+            """
+            Fetch items where amount_paid < amount (DB pre-filter),
+            then filter in Python using the property which accounts for discounts.
+            """
+            candidates = invoice.items.select_related(
+                'fee_master__fee', 'paid_by_sibling'
+            ).prefetch_related('discounts_applied').filter(
+                amount_paid__lt=F('amount')  # DB pre-screen only
+            ).order_by('id')
+            # Exact filter using the property (accounts for discounts & sibling payments)
+            return [item for item in candidates if item.balance > Decimal('0.01')]
+
+        def apply_sibling_logic(item, invoice):
+            """Handle parent-bound fee propagation to siblings."""
+            if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
+                student = invoice.student
+                if student.parent:
+                    for sibling in student.parent.wards.exclude(pk=student.pk):
+                        try:
+                            sibling_invoice = InvoiceModel.objects.get(
+                                student=sibling,
+                                session=invoice.session,
+                                term=invoice.term
+                            )
+                            sibling_item = InvoiceItemModel.objects.get(
+                                invoice=sibling_invoice,
+                                fee_master=item.fee_master
+                            )
+                            sibling_item.paid_by_sibling = student
+                            sibling_item.amount_paid = sibling_item.amount_after_discount
+                            sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
+                        except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
+                            continue
+
         if parent_allocations and not override_allocation:
-            # Use parent's specified allocations
             for item_id_str, allocation_data in parent_allocations.items():
                 try:
                     item_id = int(item_id_str)
                     allocated_amount = Decimal(str(allocation_data['amount']))
-
-                    item = InvoiceItemModel.objects.get(pk=item_id, invoice=invoice)
-
-                    # Apply payment to this specific item
+                    item = InvoiceItemModel.objects.prefetch_related('discounts_applied').get(
+                        pk=item_id, invoice=invoice
+                    )
                     payable = min(item.balance, allocated_amount)
                     item.amount_paid += payable
                     item.save(update_fields=['amount_paid'])
                     amount_to_allocate -= payable
-
-                    # Track this allocation
                     item_breakdown[str(item.pk)] = str(payable)
-
-                    # Handle parent-bound fees
-                    if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
-                        student = invoice.student
-                        if student.parent:
-                            siblings = student.parent.wards.exclude(pk=student.pk)
-                            for sibling in siblings:
-                                try:
-                                    sibling_invoice = InvoiceModel.objects.get(
-                                        student=sibling,
-                                        session=invoice.session,
-                                        term=invoice.term
-                                    )
-                                    sibling_item = InvoiceItemModel.objects.get(
-                                        invoice=sibling_invoice,
-                                        fee_master=item.fee_master
-                                    )
-                                    sibling_item.paid_by_sibling = student
-                                    sibling_item.amount_paid = sibling_item.amount_after_discount
-                                    sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
-                                except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
-                                    continue
-
+                    apply_sibling_logic(item, invoice)
                 except (ValueError, InvoiceItemModel.DoesNotExist):
                     continue
 
-            # If there's leftover amount (due to balance changes), distribute it
+            # Distribute any leftover amount
             if amount_to_allocate > Decimal('0.01'):
-                for item in invoice.items.filter(amount_paid__lt=F('amount_after_discount')).order_by('id'):
-                    if amount_to_allocate <= 0:
+                for item in get_unpaid_items(invoice):
+                    if amount_to_allocate <= Decimal('0'):
                         break
                     payable = min(item.balance, amount_to_allocate)
                     item.amount_paid += payable
                     item.save(update_fields=['amount_paid'])
                     amount_to_allocate -= payable
-
-                    # Track this allocation (add to existing or create new)
                     current = Decimal(item_breakdown.get(str(item.pk), '0'))
                     item_breakdown[str(item.pk)] = str(current + payable)
-
         else:
-            # Auto-distribute payment across items (original behavior or staff override)
-            for item in invoice.items.filter(amount_paid__lt=F('amount_after_discount')).order_by('id'):
-                if amount_to_allocate <= 0:
+            for item in get_unpaid_items(invoice):
+                if amount_to_allocate <= Decimal('0'):
                     break
-
                 payable = min(item.balance, amount_to_allocate)
                 item.amount_paid += payable
                 item.save(update_fields=['amount_paid'])
                 amount_to_allocate -= payable
-
-                # Track this allocation
                 item_breakdown[str(item.pk)] = str(payable)
+                apply_sibling_logic(item, invoice)
 
-                # Handle parent-bound fees
-                if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
-                    student = invoice.student
-                    if student.parent:
-                        siblings = student.parent.wards.exclude(pk=student.pk)
-                        for sibling in siblings:
-                            try:
-                                sibling_invoice = InvoiceModel.objects.get(
-                                    student=sibling,
-                                    session=invoice.session,
-                                    term=invoice.term
-                                )
-                                sibling_item = InvoiceItemModel.objects.get(
-                                    invoice=sibling_invoice,
-                                    fee_master=item.fee_master
-                                )
-                                sibling_item.paid_by_sibling = student
-                                sibling_item.amount_paid = sibling_item.amount_after_discount
-                                sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
-                            except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
-                                continue
-
-        # Save the actual breakdown to the payment record
         payment.item_breakdown = item_breakdown
         payment.save(update_fields=['item_breakdown'])
 
-        # Update invoice status
         invoice.refresh_from_db()
         if invoice.balance <= Decimal('0.01'):
             invoice.status = InvoiceModel.Status.PAID
@@ -1616,8 +1594,7 @@ def confirm_fee_payment_view(request, payment_id):
             invoice.status = InvoiceModel.Status.PARTIALLY_PAID
         invoice.save(update_fields=['status'])
 
-    allocation_method = "auto-distributed" if (
-            not parent_allocations or override_allocation) else "parent's specified items"
+    allocation_method = "auto-distributed" if (not parent_allocations or override_allocation) else "parent's specified items"
     messages.success(request, f"Payment of ₦{payment.amount:,.2f} confirmed successfully ({allocation_method}).")
     return redirect('finance_pending_payment_index')
 
@@ -1857,53 +1834,234 @@ class ExpenseCategoryDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Del
 # -------------------------
 class ExpenseListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = ExpenseModel
-    permission_required = 'finance.view_expensemodel'
-    template_name = 'finance/expense/index.html'
+    permission_required = "finance.view_expensemodel"
+    template_name = "finance/expense/index.html"
     context_object_name = "expense_list"
     paginate_by = 20
 
     def get_queryset(self):
-        # Select related fields that exist on your model
         queryset = ExpenseModel.objects.select_related(
-            'category', 'session', 'term', 'created_by', 'bank_account',
-            'prepared_by', 'authorised_by', 'collected_by'
-        ).order_by('-expense_date')
+            "category", "session", "term", "created_by", "bank_account",
+            "prepared_by", "authorised_by", "collected_by",
+        ).order_by("-expense_date")
 
-        # Filter by category, session, term
-        category = self.request.GET.get('category')
+        category = self.request.GET.get("category")
         if category:
             queryset = queryset.filter(category_id=category)
 
-        session = self.request.GET.get('session')
+        session = self.request.GET.get("session")
         if session:
             queryset = queryset.filter(session_id=session)
 
-        term = self.request.GET.get('term')
+        term = self.request.GET.get("term")
         if term:
             queryset = queryset.filter(term_id=term)
 
-        # Search over description, reference, name, and voucher_number
-        search = self.request.GET.get('search')
+        currency = self.request.GET.get("currency")
+        if currency:
+            queryset = queryset.filter(currency=currency)
+
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            queryset = queryset.filter(expense_date__gte=date_from)
+
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            queryset = queryset.filter(expense_date__lte=date_to)
+
+        search = self.request.GET.get("search")
         if search:
             queryset = queryset.filter(
-                Q(description__icontains=search) |
-                Q(reference__icontains=search) |
-                Q(name__icontains=search) |
-                Q(voucher_number__icontains=search) |
-                Q(notes__icontains=search)
+                Q(description__icontains=search)
+                | Q(reference__icontains=search)
+                | Q(name__icontains=search)
+                | Q(voucher_number__icontains=search)
+                | Q(notes__icontains=search)
             )
 
         return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['categories'] = ExpenseCategoryModel.objects.all().order_by('name')
-        context['total_amount'] = self.get_queryset().aggregate(Sum('amount'))['amount__sum'] or 0
-
-        # Pass search query back to template
-        context['search_query'] = self.request.GET.get('search', '')
-
+        context["categories"] = ExpenseCategoryModel.objects.all().order_by("name")
+        context["total_amount"] = (
+                self.get_queryset().aggregate(Sum("amount"))["amount__sum"] or 0
+        )
+        context["search_query"] = self.request.GET.get("search", "")
+        context["selected_currency"] = self.request.GET.get("currency", "")
         return context
+
+
+# ──────────────────────────────────────────────────────────────
+# EXPENSE EXCEL EXPORT VIEW
+# ──────────────────────────────────────────────────────────────
+
+class ExpenseExportView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "finance.view_expensemodel"
+
+    def get(self, request, *args, **kwargs):
+        # --- Apply same filters as list view ---
+        queryset = ExpenseModel.objects.select_related(
+            "category", "session", "term", "prepared_by", "authorised_by", "collected_by",
+        ).order_by("-expense_date")
+
+        category = request.GET.get("category")
+        if category:
+            queryset = queryset.filter(category_id=category)
+
+        currency = request.GET.get("currency")
+        if currency:
+            queryset = queryset.filter(currency=currency)
+
+        date_from = request.GET.get("date_from")
+        if date_from:
+            queryset = queryset.filter(expense_date__gte=date_from)
+
+        date_to = request.GET.get("date_to")
+        if date_to:
+            queryset = queryset.filter(expense_date__lte=date_to)
+
+        search = request.GET.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(description__icontains=search)
+                | Q(reference__icontains=search)
+                | Q(name__icontains=search)
+                | Q(voucher_number__icontains=search)
+                | Q(notes__icontains=search)
+            )
+
+        multi_currency = not bool(currency)  # True = no filter → show currency column
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Expenses"
+
+        # ── Styles ──
+        header_font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill("solid", start_color="2E4057")
+        title_font = Font(name="Arial", bold=True, size=13)
+        center = Alignment(horizontal="center", vertical="center")
+        thin = Side(style="thin", color="CCCCCC")
+        cell_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        currency_label = _currency_label(currency) if currency else "Mixed"
+        amount_col_header = (
+            f"Amount ({_currency_symbol(currency)})" if not multi_currency else "Amount"
+        )
+
+        # ── Title rows ──
+        ws.merge_cells("A1:I1") if multi_currency else ws.merge_cells("A1:H1")
+        title_cell = ws["A1"]
+        title_cell.value = "Expense Records Export"
+        title_cell.font = title_font
+        title_cell.alignment = center
+
+        filter_parts = []
+        if currency:
+            filter_parts.append(f"Currency: {currency_label}")
+        if date_from or date_to:
+            filter_parts.append(f"Date: {date_from or '—'} → {date_to or '—'}")
+        ws["A2"] = "Filters: " + (", ".join(filter_parts) if filter_parts else "None")
+        ws["A2"].font = Font(name="Arial", italic=True, color="555555", size=10)
+
+        ws.row_dimensions[1].height = 22
+        ws.row_dimensions[2].height = 16
+
+        # ── Column headers (row 3) ──
+        base_headers = [
+            "Voucher #", "Date", "Category", "In Favour Of",
+            "Description", amount_col_header, "Payment Method",
+            "Session", "Term",
+        ]
+        if multi_currency:
+            base_headers.insert(6, "Currency")  # after Amount
+
+        header_row = 3
+        for col_idx, header in enumerate(base_headers, start=1):
+            cell = ws.cell(row=header_row, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center
+            cell.border = cell_border
+
+        # ── Data rows ──
+        row_fill_even = PatternFill("solid", start_color="F5F7FA")
+        data_font = Font(name="Arial", size=10)
+
+        for row_idx, expense in enumerate(queryset, start=header_row + 1):
+            fill = row_fill_even if row_idx % 2 == 0 else None
+            symbol = _currency_symbol(expense.currency)
+
+            row_data = [
+                expense.voucher_number,
+                expense.expense_date.strftime("%d %b %Y") if expense.expense_date else "",
+                expense.category.name if expense.category else "",
+                expense.name or "",
+                expense.description or "",
+                float(expense.amount),
+            ]
+            if multi_currency:
+                row_data.append(expense.get_currency_display())
+            row_data += [
+                expense.get_payment_method_display(),
+                str(expense.session) if expense.session else "",
+                str(expense.term) if expense.term else "",
+            ]
+
+            for col_idx, value in enumerate(row_data, start=1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.font = data_font
+                cell.border = cell_border
+                if fill:
+                    cell.fill = fill
+
+            # Format amount column
+            amount_col = 7 if multi_currency else 6
+            amount_cell = ws.cell(row=row_idx, column=amount_col)
+            amount_cell.number_format = '#,##0.00'
+            amount_cell.alignment = Alignment(horizontal="right")
+
+        # ── Totals row ──
+        total_row = queryset.count() + header_row + 1
+        amount_col = 7 if multi_currency else 6
+        amount_col_letter = get_column_letter(amount_col)
+
+        total_label_cell = ws.cell(row=total_row, column=amount_col - 1, value="TOTAL")
+        total_label_cell.font = Font(name="Arial", bold=True, size=10)
+        total_label_cell.alignment = Alignment(horizontal="right")
+
+        total_cell = ws.cell(
+            row=total_row,
+            column=amount_col,
+            value=f"=SUM({amount_col_letter}{header_row + 1}:{amount_col_letter}{total_row - 1})",
+        )
+        total_cell.font = Font(name="Arial", bold=True, size=10)
+        total_cell.number_format = '#,##0.00'
+        total_cell.alignment = Alignment(horizontal="right")
+        total_cell.border = cell_border
+
+        # ── Column widths ──
+        col_widths = [15, 14, 20, 20, 35, 14, 20, 16, 16]
+        if multi_currency:
+            col_widths.insert(6, 14)
+        for i, width in enumerate(col_widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+
+        # ── Freeze panes ──
+        ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+
+        # ── Response ──
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        filename = "expenses_export.xlsx"
+        response = HttpResponse(
+            output,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
 
 
 class ExpenseCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
@@ -2028,46 +2186,213 @@ class IncomeCategoryDeleteView(LoginRequiredMixin, PermissionRequiredMixin, Dele
 # -------------------------
 class IncomeListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = IncomeModel
-    permission_required = 'finance.view_expensemodel'
-    template_name = 'finance/income/index.html'
+    permission_required = "finance.view_expensemodel"
+    template_name = "finance/income/index.html"
     context_object_name = "income_list"
     paginate_by = 20
 
     def get_queryset(self):
         queryset = IncomeModel.objects.select_related(
-            'category', 'session', 'term', 'created_by'
-        ).order_by('-income_date')
+            "category", "session", "term", "created_by"
+        ).order_by("-income_date")
 
-        # Filter by category, session, term
-        category = self.request.GET.get('category')
+        category = self.request.GET.get("category")
         if category:
             queryset = queryset.filter(category_id=category)
 
-        session = self.request.GET.get('session')
+        session = self.request.GET.get("session")
         if session:
             queryset = queryset.filter(session_id=session)
 
-        term = self.request.GET.get('term')
+        term = self.request.GET.get("term")
         if term:
             queryset = queryset.filter(term_id=term)
 
-        # Search over description, reference, source
-        search = self.request.GET.get('search')
+        currency = self.request.GET.get("currency")
+        if currency:
+            queryset = queryset.filter(currency=currency)
+
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            queryset = queryset.filter(income_date__gte=date_from)
+
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            queryset = queryset.filter(income_date__lte=date_to)
+
+        search = self.request.GET.get("search")
         if search:
             queryset = queryset.filter(
-                Q(description__icontains=search) |
-                Q(reference__icontains=search) |
-                Q(source__icontains=search)
+                Q(description__icontains=search)
+                | Q(reference__icontains=search)
+                | Q(source__icontains=search)
             )
 
         return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['categories'] = IncomeCategoryModel.objects.all().order_by('name')
-        # removed departments
-        context['total_amount'] = self.get_queryset().aggregate(Sum('amount'))['amount__sum'] or 0
+        context["categories"] = IncomeCategoryModel.objects.all().order_by("name")
+        context["total_amount"] = (
+                self.get_queryset().aggregate(Sum("amount"))["amount__sum"] or 0
+        )
+        context["selected_currency"] = self.request.GET.get("currency", "")
         return context
+
+
+# ──────────────────────────────────────────────────────────────
+# INCOME EXCEL EXPORT VIEW
+# ──────────────────────────────────────────────────────────────
+
+class IncomeExportView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "finance.view_expensemodel"
+
+    def get(self, request, *args, **kwargs):
+        queryset = IncomeModel.objects.select_related(
+            "category", "session", "term"
+        ).order_by("-income_date")
+
+        category = request.GET.get("category")
+        if category:
+            queryset = queryset.filter(category_id=category)
+
+        currency = request.GET.get("currency")
+        if currency:
+            queryset = queryset.filter(currency=currency)
+
+        date_from = request.GET.get("date_from")
+        if date_from:
+            queryset = queryset.filter(income_date__gte=date_from)
+
+        date_to = request.GET.get("date_to")
+        if date_to:
+            queryset = queryset.filter(income_date__lte=date_to)
+
+        search = request.GET.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(description__icontains=search)
+                | Q(reference__icontains=search)
+                | Q(source__icontains=search)
+            )
+
+        multi_currency = not bool(currency)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Income"
+
+        header_font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill("solid", start_color="1A6B3C")
+        title_font = Font(name="Arial", bold=True, size=13)
+        center = Alignment(horizontal="center", vertical="center")
+        thin = Side(style="thin", color="CCCCCC")
+        cell_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        currency_label = _currency_label(currency) if currency else "Mixed"
+        amount_col_header = (
+            f"Amount ({_currency_symbol(currency)})" if not multi_currency else "Amount"
+        )
+
+        ws.merge_cells("A1:H1") if multi_currency else ws.merge_cells("A1:G1")
+        title_cell = ws["A1"]
+        title_cell.value = "Income Records Export"
+        title_cell.font = title_font
+        title_cell.alignment = center
+
+        filter_parts = []
+        if currency:
+            filter_parts.append(f"Currency: {currency_label}")
+        if date_from or date_to:
+            filter_parts.append(f"Date: {date_from or '—'} → {date_to or '—'}")
+        ws["A2"] = "Filters: " + (", ".join(filter_parts) if filter_parts else "None")
+        ws["A2"].font = Font(name="Arial", italic=True, color="555555", size=10)
+
+        ws.row_dimensions[1].height = 22
+        ws.row_dimensions[2].height = 16
+
+        base_headers = [
+            "Date", "Category", "Description", "Source",
+            "Reference", amount_col_header, "Session", "Term",
+        ]
+        if multi_currency:
+            base_headers.insert(6, "Currency")
+
+        header_row = 3
+        for col_idx, header in enumerate(base_headers, start=1):
+            cell = ws.cell(row=header_row, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center
+            cell.border = cell_border
+
+        row_fill_even = PatternFill("solid", start_color="F0FAF4")
+        data_font = Font(name="Arial", size=10)
+
+        for row_idx, income in enumerate(queryset, start=header_row + 1):
+            fill = row_fill_even if row_idx % 2 == 0 else None
+
+            row_data = [
+                income.income_date.strftime("%d %b %Y") if income.income_date else "",
+                income.category.name if income.category else "",
+                income.description or "",
+                income.source or "",
+                income.reference or "",
+                float(income.amount),
+            ]
+            if multi_currency:
+                row_data.append(income.get_currency_display())
+            row_data += [
+                str(income.session) if income.session else "",
+                str(income.term) if income.term else "",
+            ]
+
+            for col_idx, value in enumerate(row_data, start=1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.font = data_font
+                cell.border = cell_border
+                if fill:
+                    cell.fill = fill
+
+            amount_col = 7 if multi_currency else 6
+            amount_cell = ws.cell(row=row_idx, column=amount_col)
+            amount_cell.number_format = '#,##0.00'
+            amount_cell.alignment = Alignment(horizontal="right")
+
+        total_row = queryset.count() + header_row + 1
+        amount_col = 7 if multi_currency else 6
+        amount_col_letter = get_column_letter(amount_col)
+
+        total_label_cell = ws.cell(row=total_row, column=amount_col - 1, value="TOTAL")
+        total_label_cell.font = Font(name="Arial", bold=True, size=10)
+        total_label_cell.alignment = Alignment(horizontal="right")
+
+        total_cell = ws.cell(
+            row=total_row,
+            column=amount_col,
+            value=f"=SUM({amount_col_letter}{header_row + 1}:{amount_col_letter}{total_row - 1})",
+        )
+        total_cell.font = Font(name="Arial", bold=True, size=10)
+        total_cell.number_format = '#,##0.00'
+        total_cell.alignment = Alignment(horizontal="right")
+        total_cell.border = cell_border
+
+        col_widths = [14, 20, 35, 20, 20, 14, 16, 16]
+        if multi_currency:
+            col_widths.insert(6, 14)
+        for i, width in enumerate(col_widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+
+        ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        response = HttpResponse(
+            output,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="income_export.xlsx"'
+        return response
 
 
 class IncomeCreateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView):
@@ -9749,7 +10074,7 @@ def download_bank_payment_excel(request):
     import calendar
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-    from openpyxl.utils import get_column_letter
+
     from django.http import HttpResponse
 
     today = datetime.now()

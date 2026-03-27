@@ -607,8 +607,17 @@ class IncomeCategoryModel(models.Model):
 
 
 class IncomeModel(models.Model):
+    class Currency(models.TextChoices):
+        NAIRA  = 'naira',  'Naira (NGN)'
+        DOLLAR = 'dollar', 'Dollar (USD)'
+
     category = models.ForeignKey(
         IncomeCategoryModel, on_delete=models.PROTECT, related_name="incomes"
+    )
+    currency = models.CharField(
+        max_length=20,
+        choices=Currency.choices,
+        default=Currency.NAIRA,
     )
     description = models.CharField(max_length=255, blank=True, default='')
     amount = models.DecimalField(

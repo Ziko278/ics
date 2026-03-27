@@ -58,6 +58,13 @@
                                         {{ form.bank_account }}
                                     </div>
 
+                                     <div class="col-md-6 mb-3">
+                                        <label for="{{ form.currency.id_for_label }}" class="form-label">
+                                            Currency <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.currency }}
+                                    </div>
+
                                     <!-- Source -->
                                     <div class="col-md-12 mb-3">
                                         <label for="{{ form.source.id_for_label }}" class="form-label">Source of Income</label>

@@ -102,7 +102,7 @@ urlpatterns = [
     path("expenses/<int:pk>/edit/", ExpenseUpdateView.as_view(), name="expense_update"),
     path("expenses/<int:pk>/", ExpenseDetailView.as_view(), name="expense_detail"),
     path('expense/<int:pk>/print-voucher/', ExpensePrintVoucherView.as_view(), name='expense_print_voucher'),
-
+    path("expenses/export/", ExpenseExportView.as_view(), name="expense_export"),
 
     # Income Category URLs
     path("income-categories/", IncomeCategoryListView.as_view(), name="income_category_index"),
@@ -115,6 +115,7 @@ urlpatterns = [
     path("incomes/create/", IncomeCreateView.as_view(), name="income_create"),
     path("incomes/<int:pk>/edit/", IncomeUpdateView.as_view(), name="income_update"),
     path("incomes/<int:pk>/", IncomeDetailView.as_view(), name="income_detail"),
+    path("income/export/",   IncomeExportView.as_view(),  name="income_export"),
 
     path('finance/staff-bank/', StaffBankDetailListView.as_view(), name='finance_staff_bank_detail_list'),
     path('finance/staff-bank/create/', StaffBankDetailCreateView.as_view(), name='finance_staff_bank_detail_create'),
