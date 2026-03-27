@@ -2033,10 +2033,11 @@ class ExpenseExportView(LoginRequiredMixin, PermissionRequiredMixin, View):
         total_label_cell.font = Font(name="Arial", bold=True, size=10)
         total_label_cell.alignment = Alignment(horizontal="right")
 
+        total_value = queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0')
         total_cell = ws.cell(
             row=total_row,
             column=amount_col,
-            value=f"=SUM({amount_col_letter}{header_row + 1}:{amount_col_letter}{total_row - 1})",
+            value=float(total_value),
         )
         total_cell.font = Font(name="Arial", bold=True, size=10)
         total_cell.number_format = '#,##0.00'
@@ -2369,10 +2370,11 @@ class IncomeExportView(LoginRequiredMixin, PermissionRequiredMixin, View):
         total_label_cell.font = Font(name="Arial", bold=True, size=10)
         total_label_cell.alignment = Alignment(horizontal="right")
 
+        total_value = queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0')
         total_cell = ws.cell(
             row=total_row,
             column=amount_col,
-            value=f"=SUM({amount_col_letter}{header_row + 1}:{amount_col_letter}{total_row - 1})",
+            value=float(total_value),
         )
         total_cell.font = Font(name="Arial", bold=True, size=10)
         total_cell.number_format = '#,##0.00'
