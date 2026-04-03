@@ -93,7 +93,7 @@ class DepartmentCreateView(
     CreateView
 ):
     model = DepartmentModel
-    permission_required = 'human_resource.add_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     form_class = DepartmentForm
     template_name = 'human_resource/department/index.html'
     success_message = 'Department Successfully Registered'
@@ -110,7 +110,7 @@ class DepartmentCreateView(
 
 class DepartmentListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = DepartmentModel
-    permission_required = 'human_resource.view_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     template_name = 'human_resource/department/index.html'
     context_object_name = "department_list"
 
@@ -127,7 +127,7 @@ class DepartmentUpdateView(
     LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView
 ):
     model = DepartmentModel
-    permission_required = 'human_resource.add_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     form_class = DepartmentForm
     template_name = 'human_resource/department/index.html'
     success_message = 'Department Successfully Updated'
@@ -143,7 +143,7 @@ class DepartmentUpdateView(
 
 class DepartmentDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = DepartmentModel
-    permission_required = 'human_resource.view_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     template_name = 'human_resource/department/detail.html'
     context_object_name = "department"
 
@@ -168,7 +168,7 @@ class DepartmentDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailVi
 
 class DepartmentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
     model = DepartmentModel
-    permission_required = 'human_resource.delete_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     template_name = 'human_resource/department/delete.html'
     context_object_name = "department"
     success_message = 'Department Successfully Deleted'
@@ -179,7 +179,7 @@ class DepartmentDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteVi
 
 class PositionCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, CreateView):
     model = PositionModel
-    permission_required = 'human_resource.add_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     form_class = PositionForm
     template_name = 'human_resource/position/index.html'
     success_message = 'Position Successfully Registered'
@@ -197,7 +197,7 @@ class PositionCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMes
 
 class PositionListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = PositionModel
-    permission_required = 'human_resource.view_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     fields = '__all__'
     template_name = 'human_resource/position/index.html'
     context_object_name = "position_list"
@@ -215,7 +215,7 @@ class PositionListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
 
 class PositionUpdateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, UpdateView):
     model = PositionModel
-    permission_required = 'human_resource.add_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     form_class = PositionForm
     template_name = 'human_resource/position/index.html'
     success_message = 'Position Successfully Updated'
@@ -230,7 +230,7 @@ class PositionUpdateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMes
 
 class PositionDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, DeleteView):
     model = PositionModel
-    permission_required = 'human_resource.add_departmentmodel'
+    permission_required = 'human_resource.add_staffmodel'
     fields = '__all__'
     template_name = 'human_resource/position/delete.html'
     context_object_name = "position"
@@ -249,7 +249,7 @@ class PositionDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMes
 # -------------------------
 class StaffListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = StaffModel
-    permission_required = 'human_resource.view_staffmodel'
+    permission_required = 'human_resource.add_staffmodel'
     template_name = 'human_resource/staff/index.html'
     context_object_name = "staff_list"
 
