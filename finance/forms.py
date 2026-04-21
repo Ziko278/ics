@@ -1311,6 +1311,13 @@ class SalarySettingForm(forms.ModelForm):
         help_text='JSON format for other deductions configuration'
     )
 
+    # Additional Fields as JSON
+    additional_fields_json = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 6, 'class': 'form-control font-monospace'}),
+        required=False,
+        help_text='JSON format for additional salary profile fields'
+    )
+
     class Meta:
         model = SalarySetting
         fields = [
@@ -1353,6 +1360,9 @@ class SalarySettingForm(forms.ModelForm):
             self.other_deductions_config_data = json.dumps(
                 self.instance.other_deductions_config or [], indent=2
             )
+            self.additional_fields_data = json.dumps(
+                self.instance.additional_fields or [], indent=2
+            )
 
             # Also set the form field initial values
             self.fields['basic_components_json'].initial = self.basic_components_data
@@ -1362,6 +1372,7 @@ class SalarySettingForm(forms.ModelForm):
             self.fields['income_items_json'].initial = self.income_items_data
             self.fields['statutory_deductions_json'].initial = self.statutory_deductions_data
             self.fields['other_deductions_config_json'].initial = self.other_deductions_config_data
+            self.fields['additional_fields_json'].initial = self.additional_fields_data
 
     def clean_basic_components_json(self):
         """Validate and parse basic components JSON"""
@@ -1454,6 +1465,17 @@ class SalarySettingForm(forms.ModelForm):
         except json.JSONDecodeError as e:
             raise ValidationError(f'Invalid JSON: {str(e)}')
 
+    def clean_additional_fields_json(self):
+        """Validate and parse additional fields JSON"""
+        data = self.cleaned_data.get('additional_fields_json', '[]')
+        try:
+            parsed = json.loads(data)
+            if not isinstance(parsed, list):
+                raise ValidationError('Additional fields must be a JSON array')
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
+
     def save(self, commit=True):
         instance = super().save(commit=False)
 
@@ -1465,6 +1487,7 @@ class SalarySettingForm(forms.ModelForm):
         instance.income_items = self.cleaned_data['income_items_json']
         instance.statutory_deductions = self.cleaned_data['statutory_deductions_json']
         instance.other_deductions_config = self.cleaned_data['other_deductions_config_json']
+        instance.additional_fields = self.cleaned_data['additional_fields_json']
 
         if commit:
             instance.save()
@@ -1474,6 +1497,9 @@ class SalarySettingForm(forms.ModelForm):
 
 class SalaryStructureForm(forms.ModelForm):
     """Form for creating/editing salary structures"""
+
+    # Hidden field to store additional values as JSON
+    additional_values_json = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
         model = SalaryStructure
@@ -1516,6 +1542,42 @@ class SalaryStructureForm(forms.ModelForm):
         self.fields['account_name'].required = False
         self.fields['beneficiary_code'].required = False  # <- Add
         self.fields['branch_sort_code'].required = False  # <- Add
+
+        # Add dynamic fields for additional field values if a salary setting is active
+        # This is tricky because the salary_setting can change in the UI
+        # For existing instances, we can load them
+        if self.instance and self.instance.pk and self.instance.salary_setting:
+            for field_config in self.instance.salary_setting.additional_fields:
+                code = field_config.get('code')
+                name = field_config.get('name')
+                if code:
+                    field_name = f"add_field_{code}"
+                    self.fields[field_name] = forms.DecimalField(
+                        required=False,
+                        initial=self.instance.additional_field_values.get(code, 0),
+                        widget=forms.NumberInput(attrs={
+                            'class': 'form-control additional-field-input',
+                            'step': '0.01',
+                            'data-code': code
+                        }),
+                        label=name
+                    )
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        
+        # Save additional field values
+        additional_values = {}
+        for field_name, value in self.cleaned_data.items():
+            if field_name.startswith('add_field_'):
+                code = field_name.replace('add_field_', '')
+                additional_values[code] = float(value or 0)
+        
+        instance.additional_field_values = additional_values
+        
+        if commit:
+            instance.save()
+        return instance
 
 
 class SalaryRecordForm(forms.ModelForm):

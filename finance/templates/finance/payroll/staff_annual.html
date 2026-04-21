@@ -112,6 +112,31 @@
         </div>
       </div>
 
+      <!-- Additional Information Section -->
+      {% if structure.salary_setting.additional_fields and structure.additional_field_values %}
+      <div class="card mb-4 border-info">
+        <div class="card-header text-white" style="background-color: #6f42c1;">
+          <h5 class="mb-0">Additional Salary Profile Fields (Annual Total)</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            {% for field in structure.salary_setting.additional_fields %}
+              {% with code=field.code %}
+              <div class="col-md-4 mb-2">
+                <strong>{{ field.name }}:</strong><br>
+                <span class="text-muted">
+                  ₦{% with val=structure.additional_field_values|get_item:code|default:0 %}
+                    {{ val|multiply:annual_data.months_count|floatformat:2|intcomma }}
+                  {% endwith %}
+                </span>
+              </div>
+              {% endwith %}
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Annual Summary -->
       <div class="row">
         <!-- Income Breakdown -->

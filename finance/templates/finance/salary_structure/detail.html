@@ -1,6 +1,7 @@
 {% extends 'admin_site/layout.html' %}
 {% load static %}
 {% load humanize %}
+{% load finance_filters %}
 
 {% block 'main' %}
 <div class="col-lg-12 grid-margin stretch-card">
@@ -57,6 +58,28 @@
                   <span class="text-muted">{{ structure.branch_sort_code }}</span>
                 </div>
                 {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if structure.additional_field_values %}
+          <div class="card border-primary mt-3">
+            <div class="card-header text-white py-2" style="background-color: #6f42c1 !important;">
+              <h6 class="mb-0"><i class="bi bi-plus-square"></i> Additional Salary Profile Fields</h6>
+            </div>
+            <div class="card-body py-2">
+              <div class="row g-3">
+                {% for field in structure.salary_setting.additional_fields %}
+                  {% with code=field.code %}
+                    <div class="col-md-4">
+                      <strong>{{ field.name }}:</strong><br>
+                      <span class="text-muted">
+                        ₦{{ structure.additional_field_values|get_item:code|default:0|floatformat:2|intcomma }}
+                      </span>
+                    </div>
+                  {% endwith %}
+                {% endfor %}
               </div>
             </div>
           </div>
@@ -189,7 +212,21 @@
               <tbody>
                 {% for deduction in calculation.statutory_deductions %}
                 <tr>
-                  <td>{{ deduction.name }}{% if deduction.percentage %} ({{ deduction.percentage|floatformat:2 }}%){% endif %}</td>
+                  <td>
+                    {{ deduction.name }}
+                    {% if deduction.percentage %}
+                      ({{ deduction.percentage|floatformat:2 }}%
+                      {% if deduction.based_on %}
+                        of
+                        {% if deduction.based_on_type == 'additional_field' %}
+                          {{ deduction.based_on }}
+                        {% else %}
+                          {{ deduction.based_on|upper }}
+                        {% endif %}
+                      {% endif %}
+                      )
+                    {% endif %}
+                  </td>
                   <td class="text-end">₦{{ deduction.annual|floatformat:2|intcomma }}</td>
                 </tr>
                 {% endfor %}

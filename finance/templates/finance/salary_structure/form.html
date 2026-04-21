@@ -106,6 +106,18 @@
           </div>
         </div>
 
+        <!-- Additional Salary Fields Section (Dynamic) -->
+        <div class="card border-light mb-4" id="additionalFieldsSection" style="display: none;">
+          <div class="card-header text-white" style="background-color: #6f42c1;">
+            <h6 class="mb-0"><i class="bi bi-plus-square"></i> Additional Salary Profile Fields (Monthly)</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-3" id="additionalFieldsContainer">
+              <!-- Dynamically populated from selected salary setting -->
+            </div>
+          </div>
+        </div>
+
         <!-- Monthly Salary Input Section -->
         <div class="card border-light mb-4">
           <div class="card-header bg-info text-white">
@@ -152,9 +164,7 @@
                       <th style="width: 20%;">Annual (₦)</th>
                     </tr>
                   </thead>
-                  <tbody id="salaryLeaveTableBody">
-                    <!-- Will be populated by JavaScript -->
-                  </tbody>
+                  <tbody id="salaryLeaveTableBody"></tbody>
                 </table>
               </div>
 
@@ -172,9 +182,7 @@
                       <th style="width: 20%;">Percentage</th>
                     </tr>
                   </thead>
-                  <tbody id="incomeBreakdownTableBody">
-                    <!-- Will be populated by JavaScript -->
-                  </tbody>
+                  <tbody id="incomeBreakdownTableBody"></tbody>
                 </table>
               </div>
 
@@ -198,9 +206,7 @@
                       <th colspan="2" class="text-center bg-warning text-dark">RELIEF & EXEMPTION</th>
                     </tr>
                   </thead>
-                  <tbody id="reliefExemptionTableBody">
-                    <!-- Will be populated by JavaScript -->
-                  </tbody>
+                  <tbody id="reliefExemptionTableBody"></tbody>
                 </table>
               </div>
 
@@ -212,9 +218,7 @@
                       <th colspan="3" class="text-center bg-danger text-white">PAYE TAX CALCULATION</th>
                     </tr>
                   </thead>
-                  <tbody id="payeTaxTableBody">
-                    <!-- Will be populated by JavaScript -->
-                  </tbody>
+                  <tbody id="payeTaxTableBody"></tbody>
                 </table>
               </div>
 
@@ -285,8 +289,11 @@
 <!-- Salary Settings Data -->
 <script id="salary_settings_data" type="application/json">{{ salary_settings_json|safe }}</script>
 
+<!-- Additional Field Values (populated on edit, empty on create) -->
+<script id="additional_field_values_data" type="application/json">{{ additional_field_values_json|default:"{}"|safe }}</script>
+
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   const monthlySalaryInput = document.querySelector('[name="monthly_salary"]');
   const settingSelect = document.querySelector('[name="salary_setting"]');
   const previewLoading = document.getElementById('previewLoading');
@@ -304,6 +311,29 @@ document.addEventListener('DOMContentLoaded', function() {
     console.error('Failed to parse salary settings data:', e);
   }
 
+  // Parse initial additional field values from DB (used to pre-fill on edit)
+  let initialAdditionalFieldValues = {};
+  try {
+    const el = document.getElementById('additional_field_values_data');
+    if (el && el.textContent.trim()) {
+      initialAdditionalFieldValues = JSON.parse(el.textContent);
+    }
+  } catch (e) {
+    console.error('Failed to parse additional field values:', e);
+  }
+
+  // Get current additional field values from dynamic inputs (typed by user)
+  function getAdditionalFieldValues() {
+    const values = {};
+    document.querySelectorAll('.additional-field-input').forEach(input => {
+      const code = input.dataset.code;
+      if (code) {
+        values[code] = parseFloat(input.value) || 0;
+      }
+    });
+    return values;
+  }
+
   // Format currency with proper rounding
   function formatCurrency(amount) {
     const roundedAmount = Math.round(amount * 100) / 100;
@@ -313,39 +343,37 @@ document.addEventListener('DOMContentLoaded', function() {
     }).format(roundedAmount);
   }
 
-  // Helper function to calculate amount based on component codes
-  function calculateAmountBasedOnComponents(basicComponents, basedOn) {
+  // Helper function to calculate amount based on components or additional fields
+  function calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary) {
     if (!basedOn) return 0;
 
-    // Handle special cases
+    if (basedOnType === 'additional_field') {
+      return additionalValues[basedOn] || 0;
+    }
+
     if (basedOn.toUpperCase() === 'TOTAL') {
-      // Return total of all basic components
-      return Object.values(basicComponents).reduce((sum, comp) => sum + comp.monthly, 0);
+      return monthlySalary;
     }
 
     if (basedOn.toUpperCase() === 'GROSS_INCOME') {
-      // This would be calculated after we know gross income
-      // Return 0 for now, will be handled in calling function
-      return 0;
+      return 0; // Handled separately in calculation flow
     }
 
-    // Handle component codes (case-insensitive)
     const codes = basedOn.split('+').map(code => code.trim().toUpperCase());
     let totalAmount = 0;
-
     codes.forEach(code => {
       if (basicComponents[code]) {
         totalAmount += basicComponents[code].monthly;
       }
     });
-
-    return totalAmount * 12;
+    return totalAmount;
   }
 
   // Calculate complete salary
   function calculateSalary(monthlySalary, setting) {
     monthlySalary = Math.round(monthlySalary * 100) / 100;
     const annualSalary = Math.round((monthlySalary * 12) * 100) / 100;
+    const additionalValues = getAdditionalFieldValues();
 
     // Calculate basic components
     const basicComponents = {};
@@ -367,15 +395,13 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
-    // Calculate leave allowance - use leave_allowance_percentage from setting
+    // Calculate leave allowance
     let leaveAllowanceMonthly = 0;
     let leaveAllowanceAnnual = 0;
     let leaveAllowancePercentage = 0;
 
-    // Use leave_allowance_percentage from setting
     if (setting.leave_allowance_percentage !== undefined) {
       leaveAllowancePercentage = parseFloat(setting.leave_allowance_percentage) || 0;
-      // Leave allowance is calculated on annual basic salary (sum of basic components)
       const annualBasicSalary = Object.values(basicComponents).reduce((sum, comp) => sum + comp.annual, 0);
       leaveAllowanceAnnual = Math.round((annualBasicSalary * leaveAllowancePercentage / 100) * 100) / 100;
       leaveAllowanceMonthly = Math.round((leaveAllowanceAnnual / 12) * 100) / 100;
@@ -390,24 +416,24 @@ document.addEventListener('DOMContentLoaded', function() {
       setting.allowances.forEach(allowance => {
         if (allowance.is_active) {
           let monthlyAmount = 0;
-          if (allowance.calculation_type === 'fixed') {
-            monthlyAmount = Math.round((parseFloat(allowance.fixed_amount) || 0) * 100) / 100;
-          } else if (allowance.calculation_type === 'percentage') {
+          const calcType = allowance.calculation_type || 'percentage';
+          const basedOn = allowance.based_on || 'TOTAL';
+          const basedOnType = allowance.based_on_type || 'component';
+
+          const baseAmount = calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary);
+
+          if (calcType === 'fixed') {
+            monthlyAmount = parseFloat(allowance.fixed_amount) || 0;
+          } else if (calcType === 'percentage') {
             const percentage = parseFloat(allowance.percentage) || 0;
-            if (allowance.based_on.toUpperCase() === 'TOTAL') {
-              monthlyAmount = Math.round((monthlySalary * percentage / 100) * 100) / 100;
-            } else if (allowance.based_on.toUpperCase() === 'GROSS_INCOME') {
-              // Calculate based on gross income (we'll need to handle this recursively)
-              // For now, use monthly salary + other allowances
-              const tempGross = monthlySalary + totalOtherAllowancesMonthly;
-              monthlyAmount = Math.round((tempGross * percentage / 100) * 100) / 100;
-            } else {
-              // Handle component codes with + separator
-              const baseAmount = calculateAmountBasedOnComponents(basicComponents, allowance.based_on);
-              monthlyAmount = Math.round((baseAmount * percentage / 100) * 100) / 100;
-            }
+            monthlyAmount = (baseAmount * percentage / 100);
+          } else if (calcType === 'combined') {
+            const percentage = parseFloat(allowance.percentage) || 0;
+            const fixed = parseFloat(allowance.fixed_amount) || 0;
+            monthlyAmount = (baseAmount * percentage / 100) + fixed;
           }
 
+          monthlyAmount = Math.round(monthlyAmount * 100) / 100;
           const annualAmount = Math.round((monthlyAmount * 12) * 100) / 100;
 
           allowances.push({
@@ -422,7 +448,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
-    // Calculate gross income based on include_leave_in_gross setting
+    // Gross income calculation
     let grossIncomeMonthly;
     let grossIncomeAnnual;
 
@@ -434,77 +460,80 @@ document.addEventListener('DOMContentLoaded', function() {
       grossIncomeAnnual = Math.round((annualSalary + totalOtherAllowancesAnnual) * 100) / 100;
     }
 
-    // Calculate statutory deductions
+    // Statutory deductions
     const statutoryDeductions = [];
     let totalStatutoryDeductions = 0;
     let totalReliefs = 0;
 
     if (setting.statutory_deductions) {
       setting.statutory_deductions.forEach(deduction => {
-        if (deduction.is_active !== false) {  // Default to true if not specified
-          const percentage = parseFloat(deduction.percentage) || 0;
-          const baseAmount = calculateAmountBasedOnComponents(basicComponents, deduction.based_on);
-          const amount = Math.round((baseAmount * percentage / 100) * 100) / 100;
+        if (deduction.is_active !== false) {
+          const calcType = deduction.calculation_type || 'percentage';
+          const basedOn = deduction.based_on || 'B';
+          const basedOnType = deduction.based_on_type || 'component';
 
+          const baseAmount = calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary);
+          let amount = 0;
+
+          if (calcType === 'percentage') {
+            const percentage = parseFloat(deduction.percentage) || 0;
+            amount = (baseAmount * percentage / 100);
+          } else if (calcType === 'fixed') {
+            amount = parseFloat(deduction.fixed_amount) || 0;
+          } else if (calcType === 'combined') {
+            const percentage = parseFloat(deduction.percentage) || 0;
+            const fixed = parseFloat(deduction.fixed_amount) || 0;
+            amount = (baseAmount * percentage / 100) + fixed;
+          }
+
+          amount = Math.round(amount * 100) / 100;
           statutoryDeductions.push({
             name: deduction.name,
-            percentage: percentage,
-             based_on: deduction.based_on,
             monthly: amount,
-            annual: Math.round((amount) * 100) / 100
+            annual: Math.round((amount * 12) * 100) / 100,
+            percentage: parseFloat(deduction.percentage) || null,
+            basedOn: basedOn,
+            basedOnType: basedOnType,
+            calcType: calcType
           });
           totalStatutoryDeductions += amount;
-          totalReliefs += amount;
+          totalReliefs += (amount * 12);
         }
       });
     }
 
-    // Calculate reliefs and exemptions
-
+    // Reliefs and exemptions
     const reliefs = [];
-
-    if (setting.reliefs_exemptions && setting.reliefs_exemptions.length > 0) {
+    if (setting.reliefs_exemptions) {
       setting.reliefs_exemptions.forEach(relief => {
-        let amount = 0;
+        if (relief.is_active !== false) {
+          const calcType = relief.calculation_type || (relief.formula_type === 'percentage_plus_fixed' ? 'combined' : relief.formula_type || 'fixed');
+          const basedOn = relief.based_on || 'gross_income';
+          const basedOnType = relief.based_on_type || 'component';
 
-        // First determine the base amount based on 'based_on' property
-        let baseAmount = 0;
-        if (relief.based_on) {
-          if (relief.based_on.toUpperCase() === 'GROSS_INCOME') {
+          let baseAmount = 0;
+          if (basedOn === 'gross_income') {
             baseAmount = grossIncomeAnnual;
           } else {
-            // Handle component codes (case-insensitive)
-            baseAmount = calculateAmountBasedOnComponents(basicComponents, relief.based_on, monthlySalary, totalOtherAllowancesMonthly);
+            baseAmount = calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary) * 12;
           }
-        } else {
-          // If no based_on specified, use gross income
-          baseAmount = grossIncomeAnnual;
-        }
 
-        // Now calculate the relief amount based on the base amount
-        if (relief.formula_type === 'percentage_plus_fixed') {
-          // Handle percentage + fixed amount
-          if (relief.percentage) {
-            amount = Math.round((baseAmount * parseFloat(relief.percentage) / 100) * 100) / 100;
+          let amount = 0;
+          if (calcType === 'percentage') {
+            const percentage = parseFloat(relief.percentage) || 0;
+            amount = (baseAmount * percentage / 100);
+          } else if (calcType === 'fixed') {
+            amount = parseFloat(relief.fixed_amount) || 0;
+          } else if (calcType === 'combined') {
+            const percentage = parseFloat(relief.percentage) || 0;
+            const fixed = parseFloat(relief.fixed_amount) || 0;
+            amount = (baseAmount * percentage / 100) + fixed;
           }
-          if (relief.fixed_amount) {
-            amount += Math.round((parseFloat(relief.fixed_amount) || 0) * 100) / 100;
-          }
-        } else {
-          // Handle standard percentage or fixed
-          if (relief.percentage) {
-            amount = Math.round((baseAmount * parseFloat(relief.percentage) / 100) * 100) / 100;
-          }
-          if (relief.fixed_amount) {
-            amount += Math.round((parseFloat(relief.fixed_amount) || 0) * 100) / 100;
-          }
-        }
 
-        reliefs.push({
-          name: relief.name,
-          amount: amount
-        });
-        totalReliefs += amount;
+          amount = Math.round(amount * 100) / 100;
+          reliefs.push({ name: relief.name, amount: amount });
+          totalReliefs += amount;
+        }
       });
     }
 
@@ -520,10 +549,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
       setting.tax_brackets.forEach((bracket, index) => {
         if (remainingIncome > 0) {
-          // Each bracket limit is the SIZE of that bracket, not cumulative
           const bracketSize = bracket.limit !== null && bracket.limit !== undefined
             ? parseFloat(bracket.limit)
-            : remainingIncome; // null limit means "all remaining"
+            : remainingIncome;
 
           const taxableAmount = Math.min(remainingIncome, bracketSize);
           const taxRate = parseFloat(bracket.rate) || 0;
@@ -539,12 +567,7 @@ document.addEventListener('DOMContentLoaded', function() {
               description = `Next ${formatCurrency(bracketSize)} @ ${taxRate}%`;
             }
 
-            taxBreakdown.push({
-              description: description,
-              rate: taxRate,
-              amount: taxAmount
-            });
-
+            taxBreakdown.push({ description: description, rate: taxRate, amount: taxAmount });
             annualTax += taxAmount;
             remainingIncome -= taxableAmount;
           }
@@ -552,11 +575,10 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
-
     const monthlyTax = Math.round((annualTax / 12) * 100) / 100;
-
-    // Calculate effective tax rate
-    const effectiveTaxRate = grossIncomeMonthly > 0 ? Math.round((monthlyTax / grossIncomeMonthly * 100) * 100) / 100 : 0;
+    const effectiveTaxRate = grossIncomeMonthly > 0
+      ? Math.round((monthlyTax / grossIncomeMonthly * 100) * 100) / 100
+      : 0;
 
     return {
       basicComponents,
@@ -607,11 +629,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const calculation = calculateSalary(monthlySalary, setting);
 
-    // Update salary & leave allowance table
+    // Salary & leave allowance table
     const salaryLeaveTableBody = document.getElementById('salaryLeaveTableBody');
     salaryLeaveTableBody.innerHTML = '';
 
-    // Salary row
     const salaryRow = document.createElement('tr');
     salaryRow.innerHTML = `
       <td><strong>Salary</strong></td>
@@ -621,7 +642,6 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
     salaryLeaveTableBody.appendChild(salaryRow);
 
-    // Leave allowance row
     const leaveAllowanceRow = document.createElement('tr');
     leaveAllowanceRow.innerHTML = `
       <td><strong>Leave Allowance</strong></td>
@@ -631,11 +651,10 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
     salaryLeaveTableBody.appendChild(leaveAllowanceRow);
 
-    // Update income breakdown table
+    // Income breakdown table
     const incomeBreakdownTableBody = document.getElementById('incomeBreakdownTableBody');
     incomeBreakdownTableBody.innerHTML = '';
 
-    // Add basic components
     Object.values(calculation.basicComponents).forEach(component => {
       const row = document.createElement('tr');
       row.innerHTML = `
@@ -647,16 +666,11 @@ document.addEventListener('DOMContentLoaded', function() {
       incomeBreakdownTableBody.appendChild(row);
     });
 
-    // Add 100% separator
     const separatorRow = document.createElement('tr');
     separatorRow.className = 'table-secondary fw-bold';
-    separatorRow.innerHTML = `
-      <td colspan="3" class="text-center">100%</td>
-      <td></td>
-    `;
+    separatorRow.innerHTML = `<td colspan="3" class="text-center">100%</td><td></td>`;
     incomeBreakdownTableBody.appendChild(separatorRow);
 
-    // Add other allowances
     calculation.allowances.forEach(allowance => {
       const row = document.createElement('tr');
       const monthlyPercentage = monthlySalary > 0 ? (allowance.monthly / monthlySalary * 100).toFixed(2) : 0;
@@ -669,24 +683,30 @@ document.addEventListener('DOMContentLoaded', function() {
       incomeBreakdownTableBody.appendChild(row);
     });
 
-    // Update gross income
     document.getElementById('annualGrossIncome').textContent = formatCurrency(calculation.grossIncomeAnnual);
 
-    // Update relief & exemption table
+    // Relief & exemption table
     const reliefExemptionTableBody = document.getElementById('reliefExemptionTableBody');
     reliefExemptionTableBody.innerHTML = '';
 
-    // Add statutory deductions first
     calculation.statutoryDeductions.forEach(deduction => {
       const row = document.createElement('tr');
+      let label = deduction.name;
+      if (deduction.calcType === 'fixed') {
+        label += ` (Fixed)`;
+      } else if (deduction.percentage !== null) {
+        const basis = deduction.basedOnType === 'additional_field'
+          ? deduction.basedOn
+          : deduction.basedOn.toUpperCase();
+        label += ` (${deduction.percentage}% of ${basis})`;
+      }
       row.innerHTML = `
-        <td>${deduction.name} (${deduction.percentage}% of ${deduction.based_on})</td>
+        <td>${label}</td>
         <td class="text-end">${formatCurrency(deduction.annual)}</td>
       `;
       reliefExemptionTableBody.appendChild(row);
     });
 
-    // Add reliefs
     calculation.reliefs.forEach(relief => {
       const row = document.createElement('tr');
       row.innerHTML = `
@@ -696,7 +716,6 @@ document.addEventListener('DOMContentLoaded', function() {
       reliefExemptionTableBody.appendChild(row);
     });
 
-    // Add total relief
     const totalReliefRow = document.createElement('tr');
     totalReliefRow.className = 'table-warning fw-bold';
     totalReliefRow.innerHTML = `
@@ -705,82 +724,129 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
     reliefExemptionTableBody.appendChild(totalReliefRow);
 
-    // Update PAYE tax table
+    // PAYE tax table
     const payeTaxTableBody = document.getElementById('payeTaxTableBody');
     payeTaxTableBody.innerHTML = '';
 
-    // Add annual gross
-    const annualGrossRow = document.createElement('tr');
-    annualGrossRow.innerHTML = `
-      <td>Annual Gross Income</td>
-      <td class="text-end">${formatCurrency(calculation.grossIncomeAnnual)}</td>
-      <td></td>
-    `;
-    payeTaxTableBody.appendChild(annualGrossRow);
-
-    // Add tax free pay
-    const taxFreePayRow = document.createElement('tr');
-    taxFreePayRow.innerHTML = `
-      <td>Less: Tax Free Pay</td>
-      <td class="text-end">${formatCurrency(calculation.totalReliefs)}</td>
-      <td></td>
-    `;
-    payeTaxTableBody.appendChild(taxFreePayRow);
-
-    // Add taxable income
-    const taxableIncomeRow = document.createElement('tr');
-    taxableIncomeRow.className = 'table-warning fw-bold';
-    taxableIncomeRow.innerHTML = `
-      <td>Taxable Income</td>
-      <td class="text-end">${formatCurrency(calculation.taxableIncome)}</td>
-      <td></td>
-    `;
-    payeTaxTableBody.appendChild(taxableIncomeRow);
-
-    // Add tax breakdown
-    calculation.taxBreakdown.forEach(breakdown => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${breakdown.description} </td>
-        <td class="text-end">${formatCurrency(breakdown.amount)}</td>
+    payeTaxTableBody.innerHTML += `
+      <tr>
+        <td>Annual Gross Income</td>
+        <td class="text-end">${formatCurrency(calculation.grossIncomeAnnual)}</td>
         <td></td>
+      </tr>
+      <tr>
+        <td>Less: Tax Free Pay</td>
+        <td class="text-end">${formatCurrency(calculation.totalReliefs)}</td>
+        <td></td>
+      </tr>
+      <tr class="table-warning fw-bold">
+        <td>Taxable Income</td>
+        <td class="text-end">${formatCurrency(calculation.taxableIncome)}</td>
+        <td></td>
+      </tr>
+    `;
+
+    calculation.taxBreakdown.forEach(breakdown => {
+      payeTaxTableBody.innerHTML += `
+        <tr>
+          <td>${breakdown.description}</td>
+          <td class="text-end">${formatCurrency(breakdown.amount)}</td>
+          <td></td>
+        </tr>
       `;
-      payeTaxTableBody.appendChild(row);
     });
 
-    // Add total PAYE
-    const totalPayeRow = document.createElement('tr');
-    totalPayeRow.className = 'table-danger fw-bold';
-    totalPayeRow.innerHTML = `
-      <td>Total PAYE (Annual)</td>
-      <td class="text-end">${formatCurrency(calculation.annualTax)}</td>
-      <td class="text-end">${formatCurrency(calculation.monthlyTax)} (per month)</td>
+    payeTaxTableBody.innerHTML += `
+      <tr class="table-danger fw-bold">
+        <td>Total PAYE (Annual)</td>
+        <td class="text-end">${formatCurrency(calculation.annualTax)}</td>
+        <td class="text-end">${formatCurrency(calculation.monthlyTax)} (per month)</td>
+      </tr>
     `;
-    payeTaxTableBody.appendChild(totalPayeRow);
 
-    // Update summary cards
+    // Summary cards
     document.getElementById('monthlyIncome').textContent = formatCurrency(calculation.grossIncomeMonthly);
     document.getElementById('monthlyPayeTax').textContent = formatCurrency(calculation.monthlyTax);
     document.getElementById('netSalary').textContent = formatCurrency(calculation.grossIncomeMonthly - calculation.monthlyTax);
     document.getElementById('effectiveTaxRate').textContent = formatCurrency(calculation.effectiveTaxRate);
-
     document.getElementById('annualGross').textContent = formatCurrency(calculation.grossIncomeAnnual);
     document.getElementById('taxFreePay').textContent = formatCurrency(calculation.totalReliefs);
     document.getElementById('taxableIncome').textContent = formatCurrency(calculation.taxableIncome);
     document.getElementById('totalPayeTax').textContent = formatCurrency(calculation.annualTax);
   }
 
+  // Render additional fields based on selected setting
+  function renderAdditionalFields() {
+    const settingId = settingSelect.value;
+    const container = document.getElementById('additionalFieldsContainer');
+    const section = document.getElementById('additionalFieldsSection');
+
+    if (!settingId || !salarySettingsData || !salarySettingsData[settingId]) {
+      section.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    const setting = salarySettingsData[settingId];
+    const fields = setting.additional_fields || [];
+
+    if (fields.length === 0) {
+      section.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    section.style.display = 'block';
+
+    // Get values already typed into existing inputs (takes priority over DB values)
+    const currentInputValues = getAdditionalFieldValues();
+
+    container.innerHTML = '';
+    fields.forEach(field => {
+      const code = field.code;
+      const name = field.name;
+
+      // Priority: 1) value already in current inputs (user typed), 2) DB value, 3) zero
+      let value = 0;
+      if (currentInputValues[code] !== undefined) {
+        value = currentInputValues[code];
+      } else if (initialAdditionalFieldValues[code] !== undefined) {
+        value = initialAdditionalFieldValues[code];
+      }
+
+      const col = document.createElement('div');
+      col.className = 'col-md-4';
+      col.innerHTML = `
+        <label class="form-label">${name}</label>
+        <input type="number" name="add_field_${code}" class="form-control additional-field-input"
+               step="0.01" data-code="${code}" value="${value}">
+      `;
+      container.appendChild(col);
+    });
+
+    // Re-attach event listeners to new inputs
+    document.querySelectorAll('.additional-field-input').forEach(input => {
+      input.addEventListener('input', renderPreview);
+    });
+  }
+
   // Attach event listeners
   if (monthlySalaryInput) monthlySalaryInput.addEventListener('input', renderPreview);
-  if (settingSelect) settingSelect.addEventListener('change', renderPreview);
+  if (settingSelect) {
+    settingSelect.addEventListener('change', function () {
+      renderAdditionalFields();
+      renderPreview();
+    });
+  }
 
   // Initial render
+  renderAdditionalFields();
   renderPreview();
 
   // Form validation
   const form = document.getElementById('salaryStructureForm');
   if (form) {
-    form.addEventListener('submit', function(e) {
+    form.addEventListener('submit', function (e) {
       const monthly = parseFloat(monthlySalaryInput.value) || 0;
       if (monthly <= 0) {
         e.preventDefault();
@@ -792,22 +858,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
-
-
 </script>
+
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
 // Bank API Integration with Select2
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   const bankSelect = document.getElementById('bankSelect');
   const bankCodeInput = document.getElementById('bankCode');
   const bankLoading = document.getElementById('bankLoading');
 
-  // Current values for edit mode
   const currentBankName = "{{ form.bank_name.value|default:'' }}";
   const currentBankCode = "{{ form.bank_code.value|default:'' }}";
 
-  // Fetch banks from API
   if (bankSelect) {
     bankLoading.style.display = 'block';
 
@@ -815,33 +878,25 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(response => response.json())
       .then(banks => {
         bankLoading.style.display = 'none';
-
-        // Clear existing options except the first
         bankSelect.innerHTML = '<option value="">Select Bank</option>';
 
-        // Populate dropdown
         banks.forEach(bank => {
           const option = document.createElement('option');
           option.value = bank.bank_name;
           option.textContent = bank.bank_name;
           option.setAttribute('data-code', bank.code);
-
-          // Select current bank if editing
           if (bank.bank_name === currentBankName) {
             option.selected = true;
           }
-
           bankSelect.appendChild(option);
         });
 
-        // Initialize Select2 for searchable dropdown
         $(bankSelect).select2({
           placeholder: 'Select Bank',
           allowClear: true,
           width: '100%'
         });
 
-        // Set current bank code if editing
         if (currentBankCode && bankCodeInput) {
           bankCodeInput.value = currentBankCode;
         }
@@ -852,8 +907,7 @@ document.addEventListener('DOMContentLoaded', function() {
         bankSelect.innerHTML = '<option value="">Failed to load banks</option>';
       });
 
-    // Update bank code when selection changes
-    $(bankSelect).on('change', function() {
+    $(bankSelect).on('change', function () {
       const selectedOption = this.options[this.selectedIndex];
       const code = selectedOption.getAttribute('data-code');
       if (bankCodeInput && code) {
@@ -864,22 +918,19 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<!-- 4. Add Select2 styling for consistency -->
 <style>
 .select2-container--default .select2-selection--single {
-    height: 38px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
+  height: 38px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
 }
 .select2-container--default .select2-selection--single .select2-selection__rendered {
-    line-height: 36px;
-    padding-left: 12px;
+  line-height: 36px;
+  padding-left: 12px;
 }
 .select2-container--default .select2-selection--single .select2-selection__arrow {
-    height: 36px;
+  height: 36px;
 }
-</style>
-<style>
 .table th {
   border: 1px solid #dee2e6;
 }

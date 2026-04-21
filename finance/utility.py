@@ -13,6 +13,7 @@ class SalaryCalculator:
         self.month = month
         self.year = year
         self.staff = salary_structure.staff
+        self.additional_values = salary_structure.additional_field_values or {}
 
     def calculate_basic_components(self):
         """
@@ -37,6 +38,16 @@ class SalaryCalculator:
 
         return breakdown
 
+    def _get_base_amount(self, based_on, based_on_type, basic_components):
+        """Helper to get base amount for calculation"""
+        if based_on_type == 'additional_field':
+            return Decimal(str(self.additional_values.get(based_on, 0)))
+        
+        # Default to component based
+        if based_on == 'TOTAL':
+            return self.salary_structure.monthly_salary
+        return self._calculate_combined_base(based_on, basic_components)
+
     def calculate_allowances(self):
         """
         Calculate all allowances based on configuration
@@ -50,29 +61,27 @@ class SalaryCalculator:
                 continue
 
             name = allowance.get('name', 'Unknown')
-            calc_type = allowance.get('calculation_type', 'fixed')
+            calc_type = allowance.get('calculation_type', 'percentage')
             annual_only = allowance.get('annual_only', False)
+            based_on = allowance.get('based_on', 'TOTAL')
+            based_on_type = allowance.get('based_on_type', 'component')
 
             amount = Decimal('0.00')
+            base_amount = self._get_base_amount(based_on, based_on_type, basic_components)
 
             if calc_type == 'percentage':
-                based_on = allowance.get('based_on', 'TOTAL')
                 percentage = Decimal(str(allowance.get('percentage', 0)))
-
-                if based_on == 'TOTAL':
-                    base_amount = self.salary_structure.monthly_salary
-                else:
-                    # Calculate combined components (e.g., "B+H")
-                    base_amount = self._calculate_combined_base(based_on, basic_components)
-
                 amount = (base_amount * percentage) / Decimal('100')
-
-                # If annual only, multiply by 12
-                if annual_only:
-                    amount = amount * 12
-
             elif calc_type == 'fixed':
                 amount = Decimal(str(allowance.get('fixed_amount', 0)))
+            elif calc_type == 'combined':
+                percentage = Decimal(str(allowance.get('percentage', 0)))
+                fixed_amount = Decimal(str(allowance.get('fixed_amount', 0)))
+                amount = ((base_amount * percentage) / Decimal('100')) + fixed_amount
+
+            # If annual only, multiply by 12
+            if annual_only:
+                amount = amount * 12
 
             breakdown[name] = {
                 'calculation_type': calc_type,
@@ -95,18 +104,28 @@ class SalaryCalculator:
                 continue
 
             name = deduction.get('name', 'Unknown')
-            percentage = Decimal(str(deduction.get('percentage', 0)))
-            based_on = deduction.get('based_on', 'B')  # Default to Basic
+            calc_type = deduction.get('calculation_type', 'percentage')
+            based_on = deduction.get('based_on', 'B')
+            based_on_type = deduction.get('based_on_type', 'component')
 
-            # Calculate base amount from specified components
-            base_amount = self._calculate_combined_base(based_on, basic_components)
+            base_amount = self._get_base_amount(based_on, based_on_type, basic_components)
+            amount = Decimal('0.00')
 
-            amount = (base_amount * percentage) / Decimal('100')
+            if calc_type == 'percentage':
+                percentage = Decimal(str(deduction.get('percentage', 0)))
+                amount = (base_amount * percentage) / Decimal('100')
+            elif calc_type == 'fixed':
+                amount = Decimal(str(deduction.get('fixed_amount', 0)))
+            elif calc_type == 'combined':
+                percentage = Decimal(str(deduction.get('percentage', 0)))
+                fixed_amount = Decimal(str(deduction.get('fixed_amount', 0)))
+                amount = ((base_amount * percentage) / Decimal('100')) + fixed_amount
 
             breakdown[name] = {
-                'percentage': float(percentage),
+                'calculation_type': calc_type,
+                'amount': amount,
                 'based_on': based_on,
-                'amount': amount
+                'based_on_type': based_on_type
             }
 
         return breakdown
@@ -325,49 +344,41 @@ class SalaryCalculator:
 
     def _calculate_reliefs(self, annual_gross_income):
         """Calculate total tax reliefs and exemptions"""
-
         total_reliefs = Decimal('0.00')
+        basic_components = self.calculate_basic_components()
 
         for relief in self.salary_setting.reliefs_exemptions:
             if not relief.get('is_active', True):
                 continue
 
-            formula_type = relief.get('formula_type', 'fixed')
+            calc_type = relief.get('calculation_type', 'fixed')
+            based_on = relief.get('based_on', 'gross_income')
+            based_on_type = relief.get('based_on_type', 'component')
 
-            if formula_type == 'percentage_plus_fixed':
+            relief_amount = Decimal('0.00')
+            
+            # Get base amount
+            if based_on == 'gross_income':
+                base_amount = annual_gross_income
+            else:
+                base_amount = self._get_base_amount(based_on, based_on_type, basic_components)
+                # If it's a monthly component/field, convert to annual
+                if based_on != 'gross_income':
+                    base_amount = base_amount * 12
+
+            if calc_type == 'percentage':
+                percentage = Decimal(str(relief.get('percentage', 0)))
+                relief_amount = (base_amount * percentage) / Decimal('100')
+            elif calc_type == 'fixed':
+                relief_amount = Decimal(str(relief.get('fixed_amount', 0)))
+            elif calc_type == 'combined':
                 percentage = Decimal(str(relief.get('percentage', 0)))
                 fixed_amount = Decimal(str(relief.get('fixed_amount', 0)))
-                based_on = relief.get('based_on', 'gross_income')
-
-                if based_on == 'gross_income':
-                    base = annual_gross_income
-                else:
-                    base = annual_gross_income  # Default
-
-                relief_amount = (base * percentage / 100) + fixed_amount
-
-            elif formula_type == 'percentage':
-                percentage = Decimal(str(relief.get('percentage', 0)))
-                based_on = relief.get('based_on', 'gross_income')
-
-                # For percentage of specific components (like Pension from B+H+T)
-                if '+' in str(based_on):
-                    basic_components = self.calculate_basic_components()
-                    base = self._calculate_combined_base(based_on, basic_components) * 12
-                else:
-                    base = annual_gross_income
-
-                relief_amount = base * percentage / 100
-
-            elif formula_type == 'fixed':
-                relief_amount = Decimal(str(relief.get('fixed_amount', 0)))
-
-            else:
-                relief_amount = Decimal('0.00')
+                relief_amount = ((base_amount * percentage) / Decimal('100')) + fixed_amount
 
             total_reliefs += relief_amount
 
-        # ADD THIS SECTION - Add statutory deductions to reliefs
+        # Add statutory deductions to reliefs (typically they are tax exempt)
         statutory_deductions = self.calculate_statutory_deductions()
         annual_statutory = sum(s['amount'] for s in statutory_deductions.values()) * 12
         total_reliefs += annual_statutory
@@ -393,6 +404,11 @@ class SalaryCalculator:
 
         return total_deduction
 
+    def _calculate_loan_repayment(self, amount):
+        """Record loan repayment in the system"""
+        # Logic to record repayment
+        pass
+
     def _calculate_advance_deduction(self):
         """Calculate total salary advance deduction for this month"""
         from .models import SalaryAdvance  # Import here to avoid circular import
@@ -401,8 +417,8 @@ class SalaryCalculator:
         advances = SalaryAdvance.objects.filter(
             staff=self.staff,
             status=SalaryAdvance.Status.DISBURSED,
-            request_date__year=self.year,
-            request_date__month=self.month
+            repayment_year=self.year,
+            repayment_month=self.month
         )
 
         total_advance = advances.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
@@ -454,6 +470,7 @@ def create_salary_record(salary_structure, month, year, bonus=Decimal('0.00'),
         total_taxation=salary_data['total_taxation'],
         effective_tax_rate=salary_data['effective_tax_rate'],
         net_salary=salary_data['net_salary'],
+        additional_field_values=salary_structure.additional_field_values,  # New: snapshot values
         created_by=created_by
     )
 

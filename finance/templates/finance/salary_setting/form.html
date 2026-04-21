@@ -128,6 +128,27 @@
                     </div>
                 </div>
 
+                <!-- Additional Salary Profile Fields -->
+                <div class="card border-light mb-4">
+                    <div class="card-header bg-primary text-white" style="background-color: #6f42c1 !important;">
+                        <h5 class="mb-0">
+                            <i class="bi bi-plus-square"></i> Additional Salary Profile Fields
+                            <button type="button" class="btn btn-sm btn-outline-light float-end" data-bs-toggle="tooltip" title="Extra fields for staff salary profile (e.g., Rent for relief calculation)">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Extra fields to be captured for each staff member (e.g., actual Rent paid, which can then be used for relief calculation).</p>
+
+                        <div id="additionalFieldsContainer" class="container-empty" data-empty-message="No additional fields added yet. Click 'Add Field' to begin."></div>
+
+                        <button type="button" class="btn btn-primary btn-sm" id="addAdditionalFieldBtn" style="background-color: #6f42c1; border-color: #6f42c1;">
+                            <i class="bi bi-plus"></i> Add Field
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Allowances -->
                 <div class="card border-light mb-4">
                     <div class="card-header bg-info text-white">
@@ -262,6 +283,7 @@
                 <input type="hidden" id="id_income_items_json" name="income_items_json" value="{{ form.income_items_json.value|default:'[]' }}">
                 <input type="hidden" id="id_statutory_deductions_json" name="statutory_deductions_json" value="{{ form.statutory_deductions_json.value|default:'[]' }}">
                 <input type="hidden" id="id_other_deductions_config_json" name="other_deductions_config_json" value="{{ form.other_deductions_config_json.value|default:'[]' }}">
+                <input type="hidden" id="id_additional_fields_json" name="additional_fields_json" value="{{ form.additional_fields_json.value|default:'[]' }}">
 
                 <div class="mt-4">
                     <button type="submit" class="btn btn-primary me-2" id="saveButton">

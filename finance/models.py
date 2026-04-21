@@ -1504,6 +1504,14 @@ class SalarySetting(models.Model):
         help_text="Other deduction items configuration"
     )
 
+    # Additional Salary Profile Fields
+    # Format: [{"name": "Rent", "code": "rent"}, ...]
+    additional_fields = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Extra fields for staff salary profile (e.g., Rent for relief calculation)"
+    )
+
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_salary_settings')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1589,6 +1597,14 @@ class SalaryStructure(models.Model):
         max_digits=12,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))]
+    )
+
+    # Additional Field Values
+    # Format: {"rent": 50000.0, "pension_voluntary": 10000.0}
+    additional_field_values = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Values for the extra fields defined in SalarySetting"
     )
 
     # Optional bank details
@@ -1792,6 +1808,13 @@ class SalaryRecord(models.Model):
 
     # Net salary
     net_salary = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    # Snapshot of additional field values used for calculation
+    additional_field_values = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Snapshot of additional field values (e.g., Rent) used for this payslip"
+    )
 
     # Payment tracking
     payment_status = models.CharField(

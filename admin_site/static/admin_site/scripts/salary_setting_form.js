@@ -1,5 +1,4 @@
-// salary_setting_form.js - Save this in your static/js/ directory
-// Completed version — loads existing data, wires buttons, validates before submit.
+// salary_setting_form.js
 
 document.addEventListener('DOMContentLoaded', function() {
     // Containers
@@ -10,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const statutoryDeductionsContainer = document.getElementById('statutoryDeductionsContainer');
     const otherDeductionsContainer = document.getElementById('otherDeductionsContainer');
     const incomeItemsContainer = document.getElementById('incomeItemsContainer');
+    const additionalFieldsContainer = document.getElementById('additionalFieldsContainer');
 
     // Hidden inputs
     const hiddenBasicComponents = document.getElementById('id_basic_components_json');
@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const hiddenIncomeItems = document.getElementById('id_income_items_json');
     const hiddenStatutoryDeductions = document.getElementById('id_statutory_deductions_json');
     const hiddenOtherDeductions = document.getElementById('id_other_deductions_config_json');
+    const hiddenAdditionalFields = document.getElementById('id_additional_fields_json');
 
     // Buttons
     const addBasicComponentBtn = document.getElementById('addBasicComponentBtn');
@@ -28,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const addStatutoryDeductionBtn = document.getElementById('addStatutoryDeductionBtn');
     const addOtherDeductionBtn = document.getElementById('addOtherDeductionBtn');
     const addIncomeItemBtn = document.getElementById('addIncomeItemBtn');
+    const addAdditionalFieldBtn = document.getElementById('addAdditionalFieldBtn');
 
     // Error modal
     const errorModalEl = document.getElementById('errorModal');
@@ -39,7 +41,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let componentCounter = 0;
 
-    // Utility function to show error
+    // ========================================
+    // UTILITY: Show error
+    // ========================================
     function showError(message) {
         if (errorModal && errorModalMessage) {
             errorModalMessage.textContent = message;
@@ -48,6 +52,130 @@ document.addEventListener('DOMContentLoaded', function() {
             alert(message);
         }
     }
+
+    // ========================================
+    // UTILITY: Get current additional field codes/names
+    // ========================================
+    function getAdditionalFields() {
+        const fields = [];
+        additionalFieldsContainer.querySelectorAll('.component-item').forEach(item => {
+            const name = (item.querySelector('.add-field-name')?.value || '').trim();
+            const code = (item.querySelector('.add-field-code')?.value || '').trim();
+            if (name && code) fields.push({ name, code });
+        });
+        return fields;
+    }
+
+    // ========================================
+    // UTILITY: Get current basic component codes
+    // ========================================
+    function getBasicComponentCodes() {
+        const codes = [];
+        basicComponentsContainer.querySelectorAll('.component-item').forEach(item => {
+            const code = (item.querySelector('.comp-code')?.value || '').trim().toUpperCase();
+            if (code) codes.push(code);
+        });
+        return codes;
+    }
+
+    // ========================================
+    // UTILITY: Build a <select> for additional fields
+    // ========================================
+    function buildAdditionalFieldSelect(selectedValue, cssClass) {
+        const fields = getAdditionalFields();
+        let options = fields.map(f =>
+            `<option value="${escapeHtml(f.code)}" ${f.code === selectedValue ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.code)})</option>`
+        ).join('');
+        if (!options) options = '<option value="">-- No additional fields defined --</option>';
+        return `<select class="form-control ${cssClass}">${options}</select>`;
+    }
+
+    // ========================================
+    // UTILITY: Switch based-on field between text and select
+    // ========================================
+    function applyBasedOnType(item, type, currentValue, inputClass, labelText) {
+        const container = item.querySelector(`.${inputClass}-wrapper`);
+        if (!container) return;
+
+        if (type === 'additional_field') {
+            const fields = getAdditionalFields();
+            let options = fields.map(f =>
+                `<option value="${escapeHtml(f.code)}" ${f.code === currentValue ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.code)})</option>`
+            ).join('');
+            if (!options) options = '<option value="">-- No additional fields defined --</option>';
+            container.innerHTML = `
+                <div class="form-floating mb-2">
+                    <select class="form-control ${inputClass}">${options}</select>
+                    <label>${escapeHtml(labelText)}</label>
+                </div>`;
+        } else {
+            // Salary component text input
+            container.innerHTML = `
+                <div class="form-floating mb-2">
+                    <input type="text" class="form-control ${inputClass}" placeholder="Based On" value="${escapeHtml(currentValue || '')}">
+                    <label>${escapeHtml(labelText)}</label>
+                </div>`;
+        }
+    }
+
+    // ========================================
+    // UTILITY: Refresh all based-on selects when additional fields change
+    // ========================================
+    function refreshAllAdditionalFieldSelects() {
+        const fields = getAdditionalFields();
+
+        // For each section, find items where based-on-type = additional_field and rebuild the select
+        [
+            { container: allowancesContainer, typeClass: 'allow-based-on-type', inputClass: 'allow-based-on', wrapperClass: 'allow-based-on-wrapper', label: 'Based On (field)' },
+            { container: reliefsContainer, typeClass: 'relief-based-on-type', inputClass: 'relief-based-on', wrapperClass: 'relief-based-on-wrapper', label: 'Based On (field)' },
+            { container: statutoryDeductionsContainer, typeClass: 'stat-based-on-type', inputClass: 'stat-based-on', wrapperClass: 'stat-based-on-wrapper', label: 'Based On (field)' },
+        ].forEach(({ container, typeClass, inputClass, wrapperClass, label }) => {
+            container.querySelectorAll('.component-item').forEach(item => {
+                const typeSelect = item.querySelector(`.${typeClass}`);
+                if (!typeSelect || typeSelect.value !== 'additional_field') return;
+
+                const currentSelect = item.querySelector(`.${inputClass}`);
+                const currentValue = currentSelect ? currentSelect.value : '';
+                const wrapper = item.querySelector(`.${wrapperClass}`);
+                if (!wrapper) return;
+
+                let options = fields.map(f =>
+                    `<option value="${escapeHtml(f.code)}" ${f.code === currentValue ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.code)})</option>`
+                ).join('');
+                if (!options) options = '<option value="">-- No additional fields defined --</option>';
+
+                const floatingDiv = wrapper.querySelector('.form-floating');
+                if (floatingDiv) {
+                    const selectEl = floatingDiv.querySelector('select');
+                    if (selectEl) selectEl.innerHTML = options;
+                    else floatingDiv.innerHTML = `<select class="form-control ${inputClass}">${options}</select><label>${escapeHtml(label)}</label>`;
+                }
+            });
+        });
+    }
+
+    // ========================================
+    // BASIC SALARY COMPONENTS TOOLTIP TEXT
+    // ========================================
+    const BASIC_COMPONENT_HELP = `
+        <strong>Basic Salary Components</strong><br>
+        Split the monthly salary into named components. Each component gets a <strong>Code</strong> (e.g. <code>B</code>, <code>H</code>, <code>T</code>) and a <strong>Percentage</strong>. All percentages must total 100%.<br><br>
+        <strong>Component codes</strong> are used throughout the form to reference these components (e.g. in allowances, statutory deductions, and tax reliefs).<br><br>
+        <strong>Rules:</strong><br>
+        • Code must be <strong>unique</strong> and <strong>max 3 characters</strong><br>
+        • Codes are case-insensitive (<code>B</code> = <code>b</code>)
+    `;
+
+    const BASED_ON_HELP = `
+        <strong>Based On — Syntax Guide</strong><br>
+        Controls what amount the percentage is calculated against:<br><br>
+        <code>TOTAL</code> — Total monthly salary (all basic components)<br>
+        <code>GROSS_INCOME</code> — Full gross income (including allowances)<br>
+        <code>B</code> — A single component by its code (e.g. Basic salary)<br>
+        <code>B+H+T</code> — Sum of multiple components by code<br>
+        <em>additional field code</em> — e.g. <code>rent</code> (select "Additional Field" as Base Type)<br><br>
+        <strong>Note:</strong> Component codes must exactly match those defined in the Basic Salary Components section.
+    `;
 
     // ========================================
     // BASIC COMPONENTS
@@ -59,7 +187,7 @@ document.addEventListener('DOMContentLoaded', function() {
         item.dataset.id = componentCounter;
 
         item.innerHTML = `
-            <div class="row">
+            <div class="row align-items-start">
                 <div class="col-md-3">
                     <div class="form-floating mb-2">
                         <input type="text" class="form-control comp-name" placeholder="Name" value="${escapeHtml(data?.name || '')}">
@@ -68,8 +196,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <div class="col-md-2">
                     <div class="form-floating mb-2">
-                        <input type="text" class="form-control comp-code" placeholder="Code" value="${escapeHtml(data?.code || '')}">
-                        <label>Code *</label>
+                        <input type="text" class="form-control comp-code" placeholder="Code" maxlength="3" value="${escapeHtml(data?.code || '')}" style="text-transform:uppercase;">
+                        <label>Code * <small class="text-muted">(max 3)</small></label>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -80,8 +208,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <small class="text-muted d-block mb-2">Current: <strong class="comp-amount">₦0.00</strong></small>
-                    <small class="text-muted">Example based on ₦500,000 salary</small>
+                    <small class="text-muted d-block mb-1 mt-2">Example (₦500k): <strong class="comp-amount">₦0.00</strong></small>
                 </div>
                 <div class="col-md-1">
                     <button type="button" class="btn btn-danger btn-sm remove-btn mt-2" aria-label="Remove component">
@@ -97,6 +224,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function attachBasicComponentEvents(item) {
+        // Force code to uppercase and max 3 chars
+        const codeInput = item.querySelector('.comp-code');
+        if (codeInput) {
+            codeInput.addEventListener('input', function() {
+                this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+                updateBasicComponentsJSON();
+                refreshAllAdditionalFieldSelects(); // codes changed, update tooltip mentions
+            });
+        }
+
         const inputs = item.querySelectorAll('input');
         inputs.forEach(input => {
             input.addEventListener('input', updateBasicComponentsJSON);
@@ -118,43 +255,73 @@ document.addEventListener('DOMContentLoaded', function() {
 
         basicComponentsContainer.querySelectorAll('.component-item').forEach(item => {
             const name = (item.querySelector('.comp-name')?.value || '').trim();
-            const code = (item.querySelector('.comp-code')?.value || '').trim();
+            const code = (item.querySelector('.comp-code')?.value || '').trim().toUpperCase();
             const percentage = parseFloat(item.querySelector('.comp-percentage')?.value) || 0;
 
             if (name && code) {
                 const key = name.toLowerCase().replace(/\s+/g, '_');
-                components[key] = {
-                    code: code,
-                    percentage: percentage,
-                    name: name
-                };
+                components[key] = { code, percentage, name };
                 totalPercentage += percentage;
 
-                // Update example amount (based on 500,000 sample)
                 const amount = (500000 * percentage) / 100;
                 const amountEl = item.querySelector('.comp-amount');
                 if (amountEl) {
                     amountEl.textContent = `₦${amount.toLocaleString('en-NG', {minimumFractionDigits: 2})}`;
                 }
             } else {
-                // If missing name or code, show 0.00 example
                 const amountEl = item.querySelector('.comp-amount');
                 if (amountEl) amountEl.textContent = `₦0.00`;
             }
         });
 
-        // Update total percentage display
         const totalSpan = document.getElementById('totalPercentage');
-        totalSpan.textContent = totalPercentage.toFixed(2);
-
-        if (Math.abs(totalPercentage - 100) < 0.01) {
-            totalSpan.className = 'percentage-valid';
-        } else {
-            totalSpan.className = 'percentage-invalid';
+        if (totalSpan) {
+            totalSpan.textContent = totalPercentage.toFixed(2);
+            totalSpan.className = Math.abs(totalPercentage - 100) < 0.01 ? 'percentage-valid' : 'percentage-invalid';
         }
 
         hiddenBasicComponents.value = JSON.stringify(components, null, 2);
         updateContainerState(basicComponentsContainer);
+    }
+
+    // ========================================
+    // BASED-ON FIELD BUILDER (shared for allowances, reliefs, statutory)
+    // ========================================
+    /**
+     * Renders the based-on input/select into the wrapper element.
+     * @param {HTMLElement} wrapper - the .xxx-based-on-wrapper div
+     * @param {string} type - 'component' | 'additional_field'
+     * @param {string} currentValue - the current based_on value
+     * @param {string} inputClass - CSS class to put on the input/select (e.g. 'allow-based-on')
+     * @param {string} labelText - text for the floating label
+     * @param {Function} onChangeCallback - called on input/change
+     */
+    function renderBasedOnField(wrapper, type, currentValue, inputClass, labelText, onChangeCallback) {
+        let inner = '';
+        if (type === 'additional_field') {
+            const fields = getAdditionalFields();
+            let options = fields.map(f =>
+                `<option value="${escapeHtml(f.code)}" ${f.code === currentValue ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.code)})</option>`
+            ).join('');
+            if (!options) options = '<option value="">-- No additional fields defined --</option>';
+            inner = `
+                <div class="form-floating mb-2">
+                    <select class="form-control ${inputClass}">${options}</select>
+                    <label>${escapeHtml(labelText)}</label>
+                </div>`;
+        } else {
+            inner = `
+                <div class="form-floating mb-2">
+                    <input type="text" class="form-control ${inputClass}" placeholder="Based On" value="${escapeHtml(currentValue || '')}">
+                    <label>${escapeHtml(labelText)}</label>
+                </div>`;
+        }
+        wrapper.innerHTML = inner;
+        const el = wrapper.querySelector(`.${inputClass}`);
+        if (el && onChangeCallback) {
+            el.addEventListener('input', onChangeCallback);
+            el.addEventListener('change', onChangeCallback);
+        }
     }
 
     // ========================================
@@ -166,9 +333,13 @@ document.addEventListener('DOMContentLoaded', function() {
         item.className = 'component-item border rounded p-3 mb-3';
         item.dataset.id = componentCounter;
 
+        const calcType = data?.calculation_type || 'percentage';
+        const basedOnType = data?.based_on_type || 'component';
+        const basedOnValue = data?.based_on || 'TOTAL';
+
         item.innerHTML = `
             <div class="row">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <div class="form-floating mb-2">
                         <input type="text" class="form-control allow-name" placeholder="Name" value="${escapeHtml(data?.name || '')}">
                         <label>Allowance Name *</label>
@@ -177,8 +348,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="col-md-3">
                     <div class="form-floating mb-2">
                         <select class="form-control allow-calc-type">
-                            <option value="percentage" ${data?.calculation_type === 'percentage' ? 'selected' : ''}>Percentage</option>
-                            <option value="fixed" ${data?.calculation_type === 'fixed' ? 'selected' : ''}>Fixed Amount</option>
+                            <option value="percentage" ${calcType === 'percentage' ? 'selected' : ''}>Percentage</option>
+                            <option value="fixed" ${calcType === 'fixed' ? 'selected' : ''}>Fixed Amount</option>
+                            <option value="combined" ${calcType === 'combined' ? 'selected' : ''}>Combined (Fixed + %)</option>
                         </select>
                         <label>Calculation Type</label>
                     </div>
@@ -195,35 +367,40 @@ document.addEventListener('DOMContentLoaded', function() {
                         <label class="form-check-label">Annual Only</label>
                     </div>
                 </div>
-                <div class="col-md-1">
+                <div class="col-md-2 text-end">
                     <button type="button" class="btn btn-danger btn-sm remove-btn mt-2" aria-label="Remove allowance">
                         <i class="bi bi-x"></i>
                     </button>
                 </div>
             </div>
 
-            <div class="percentage-fields" style="display: ${data?.calculation_type === 'fixed' ? 'none' : 'block'};">
+            <div class="calc-details">
                 <div class="row">
-                    <div class="col-md-4">
+                    <div class="col-md-3 percentage-group" style="display: ${calcType === 'fixed' ? 'none' : 'block'};">
                         <div class="form-floating mb-2">
                             <input type="number" class="form-control allow-percentage" step="0.01" min="0"
                                    placeholder="%" value="${data?.percentage ?? ''}">
                             <label>Percentage %</label>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3 percentage-group" style="display: ${calcType === 'fixed' ? 'none' : 'block'};">
                         <div class="form-floating mb-2">
-                            <input type="text" class="form-control allow-based-on" placeholder="Based On"
-                                   value="${escapeHtml(data?.based_on || 'TOTAL')}">
-                            <label>Based On (e.g., B, B+H, TOTAL)</label>
+                            <select class="form-control allow-based-on-type">
+                                <option value="component" ${basedOnType === 'component' ? 'selected' : ''}>Salary Component
+                                    <button type="button" class="btn btn-sm btn-outline-secondary ms-1 based-on-help-btn"
+                                        data-bs-toggle="popover" data-bs-html="true" data-bs-trigger="click"
+                                        data-bs-content="${escapeHtml(BASED_ON_HELP)}" title="Based On Help"
+                                        style="padding:1px 5px;font-size:0.75rem;">?</button>
+                                </option>
+                                <option value="additional_field" ${basedOnType === 'additional_field' ? 'selected' : ''}>Additional Field</option>
+                            </select>
+                            <label>Base Type</label>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div class="fixed-fields" style="display: ${data?.calculation_type === 'fixed' ? 'block' : 'none'};">
-                <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-3 percentage-group allow-based-on-wrapper" style="display: ${calcType === 'fixed' ? 'none' : 'block'};">
+                        <!-- rendered by renderBasedOnField() -->
+                    </div>
+                    <div class="col-md-3 fixed-group" style="display: ${calcType === 'percentage' ? 'none' : 'block'};">
                         <div class="form-floating mb-2">
                             <input type="number" class="form-control allow-fixed-amount" step="0.01" min="0"
                                    placeholder="Amount" value="${data?.fixed_amount ?? ''}">
@@ -235,18 +412,34 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
 
         allowancesContainer.appendChild(item);
+
+        // Render the based-on field
+        const wrapper = item.querySelector('.allow-based-on-wrapper');
+        renderBasedOnField(wrapper, basedOnType, basedOnValue, 'allow-based-on', 'Based On', updateAllowancesJSON);
+
         attachAllowanceEvents(item);
         updateAllowancesJSON();
     }
 
     function attachAllowanceEvents(item) {
         const calcType = item.querySelector('.allow-calc-type');
-        const percentageFields = item.querySelector('.percentage-fields');
-        const fixedFields = item.querySelector('.fixed-fields');
+        const percentageGroups = item.querySelectorAll('.percentage-group');
+        const fixedGroups = item.querySelectorAll('.fixed-group');
+        const basedOnTypeSelect = item.querySelector('.allow-based-on-type');
 
         calcType.addEventListener('change', function() {
-            percentageFields.style.display = this.value === 'percentage' ? 'block' : 'none';
-            fixedFields.style.display = this.value === 'fixed' ? 'block' : 'none';
+            const isFixed = this.value === 'fixed';
+            const isPercentage = this.value === 'percentage';
+            percentageGroups.forEach(el => el.style.display = isFixed ? 'none' : 'block');
+            fixedGroups.forEach(el => el.style.display = isPercentage ? 'none' : 'block');
+            updateAllowancesJSON();
+        });
+
+        basedOnTypeSelect.addEventListener('change', function() {
+            const wrapper = item.querySelector('.allow-based-on-wrapper');
+            const currentInput = item.querySelector('.allow-based-on');
+            const currentValue = currentInput ? currentInput.value : '';
+            renderBasedOnField(wrapper, this.value, currentValue, 'allow-based-on', 'Based On', updateAllowancesJSON);
             updateAllowancesJSON();
         });
 
@@ -272,19 +465,24 @@ document.addEventListener('DOMContentLoaded', function() {
             const name = (item.querySelector('.allow-name')?.value || '').trim();
             if (!name) return;
 
+            const calcType = item.querySelector('.allow-calc-type')?.value || 'percentage';
             const allowance = {
-                name: name,
+                name,
                 is_active: !!item.querySelector('.allow-active')?.checked,
-                calculation_type: item.querySelector('.allow-calc-type')?.value || 'percentage',
+                calculation_type: calcType,
                 annual_only: !!item.querySelector('.allow-annual')?.checked
             };
 
-            if (allowance.calculation_type === 'percentage') {
+            if (calcType !== 'fixed') {
                 const percentage = parseFloat(item.querySelector('.allow-percentage')?.value);
                 const basedOn = (item.querySelector('.allow-based-on')?.value || '').trim();
+                const basedOnType = item.querySelector('.allow-based-on-type')?.value || 'component';
                 if (!isNaN(percentage)) allowance.percentage = percentage;
                 if (basedOn) allowance.based_on = basedOn;
-            } else {
+                allowance.based_on_type = basedOnType;
+            }
+
+            if (calcType !== 'percentage') {
                 const fixedAmount = parseFloat(item.querySelector('.allow-fixed-amount')?.value);
                 if (!isNaN(fixedAmount)) allowance.fixed_amount = fixedAmount;
             }
@@ -305,6 +503,11 @@ document.addEventListener('DOMContentLoaded', function() {
         item.className = 'component-item border rounded p-3 mb-3';
         item.dataset.id = componentCounter;
 
+        const calcType = data?.calculation_type || (data?.formula_type === 'percentage_plus_fixed' ? 'combined' : data?.formula_type || 'combined');
+        const basedOnType = data?.based_on_type || 'component';
+        const basedOnValue = data?.based_on || 'GROSS_INCOME';
+        const isFixed = calcType === 'fixed';
+
         item.innerHTML = `
             <div class="row">
                 <div class="col-md-4">
@@ -315,12 +518,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <div class="col-md-3">
                     <div class="form-floating mb-2">
-                        <select class="form-control relief-formula-type">
-                            <option value="percentage_plus_fixed" ${data?.formula_type === 'percentage_plus_fixed' ? 'selected' : ''}>Percentage + Fixed</option>
-                            <option value="percentage" ${data?.formula_type === 'percentage' ? 'selected' : ''}>Percentage Only</option>
-                            <option value="fixed" ${data?.formula_type === 'fixed' ? 'selected' : ''}>Fixed Only</option>
+                        <select class="form-control relief-calc-type">
+                            <option value="combined" ${calcType === 'combined' ? 'selected' : ''}>Percentage + Fixed</option>
+                            <option value="percentage" ${calcType === 'percentage' ? 'selected' : ''}>Percentage Only</option>
+                            <option value="fixed" ${isFixed ? 'selected' : ''}>Fixed Only</option>
                         </select>
-                        <label>Formula Type</label>
+                        <label>Calculation Type</label>
                     </div>
                 </div>
                 <div class="col-md-2">
@@ -329,35 +532,35 @@ document.addEventListener('DOMContentLoaded', function() {
                         <label class="form-check-label">Active</label>
                     </div>
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-2 text-end">
                     <button type="button" class="btn btn-danger btn-sm remove-btn mt-2" aria-label="Remove relief">
                         <i class="bi bi-x"></i>
                     </button>
                 </div>
             </div>
 
-            <div class="relief-percentage-fields" style="display: ${data?.formula_type === 'fixed' ? 'none' : 'block'};">
+            <div class="calc-details">
                 <div class="row">
-                    <div class="col-md-4">
+                    <div class="col-md-3 percentage-group" style="display: ${isFixed ? 'none' : 'block'};">
                         <div class="form-floating mb-2">
                             <input type="number" class="form-control relief-percentage" step="0.01" min="0"
                                    value="${data?.percentage ?? ''}">
                             <label>Percentage %</label>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3 percentage-group" style="display: ${isFixed ? 'none' : 'block'};">
                         <div class="form-floating mb-2">
-                            <input type="text" class="form-control relief-based-on"
-                                   value="${escapeHtml(data?.based_on || 'gross_income')}">
-                            <label>Based On</label>
+                            <select class="form-control relief-based-on-type">
+                                <option value="component" ${basedOnType === 'component' ? 'selected' : ''}>Salary Component</option>
+                                <option value="additional_field" ${basedOnType === 'additional_field' ? 'selected' : ''}>Additional Field</option>
+                            </select>
+                            <label>Base Type</label>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div class="relief-fixed-fields" style="display: ${data?.formula_type === 'percentage' ? 'none' : 'block'};">
-                <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-3 percentage-group relief-based-on-wrapper" style="display: ${isFixed ? 'none' : 'block'};">
+                        <!-- rendered by renderBasedOnField() -->
+                    </div>
+                    <div class="col-md-3 fixed-group" style="display: ${calcType === 'percentage' ? 'none' : 'block'};">
                         <div class="form-floating mb-2">
                             <input type="number" class="form-control relief-fixed-amount" step="0.01" min="0"
                                    value="${data?.fixed_amount ?? ''}">
@@ -369,18 +572,33 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
 
         reliefsContainer.appendChild(item);
+
+        const wrapper = item.querySelector('.relief-based-on-wrapper');
+        renderBasedOnField(wrapper, basedOnType, basedOnValue, 'relief-based-on', 'Based On', updateReliefsJSON);
+
         attachReliefEvents(item);
         updateReliefsJSON();
     }
 
     function attachReliefEvents(item) {
-        const formulaType = item.querySelector('.relief-formula-type');
-        const percentageFields = item.querySelector('.relief-percentage-fields');
-        const fixedFields = item.querySelector('.relief-fixed-fields');
+        const calcType = item.querySelector('.relief-calc-type');
+        const percentageGroups = item.querySelectorAll('.percentage-group');
+        const fixedGroups = item.querySelectorAll('.fixed-group');
+        const basedOnTypeSelect = item.querySelector('.relief-based-on-type');
 
-        formulaType.addEventListener('change', function() {
-            percentageFields.style.display = this.value === 'percentage' ? 'block' : this.value === 'percentage_plus_fixed' ? 'block' : 'none';
-            fixedFields.style.display = this.value === 'fixed' ? 'block' : this.value === 'percentage_plus_fixed' ? 'block' : 'none';
+        calcType.addEventListener('change', function() {
+            const isFixed = this.value === 'fixed';
+            const isPercentage = this.value === 'percentage';
+            percentageGroups.forEach(el => el.style.display = isFixed ? 'none' : 'block');
+            fixedGroups.forEach(el => el.style.display = isPercentage ? 'none' : 'block');
+            updateReliefsJSON();
+        });
+
+        basedOnTypeSelect.addEventListener('change', function() {
+            const wrapper = item.querySelector('.relief-based-on-wrapper');
+            const currentInput = item.querySelector('.relief-based-on');
+            const currentValue = currentInput ? currentInput.value : '';
+            renderBasedOnField(wrapper, this.value, currentValue, 'relief-based-on', 'Based On', updateReliefsJSON);
             updateReliefsJSON();
         });
 
@@ -406,20 +624,23 @@ document.addEventListener('DOMContentLoaded', function() {
             const name = (item.querySelector('.relief-name')?.value || '').trim();
             if (!name) return;
 
+            const calcType = item.querySelector('.relief-calc-type')?.value || 'combined';
             const relief = {
-                name: name,
+                name,
                 is_active: !!item.querySelector('.relief-active')?.checked,
-                formula_type: item.querySelector('.relief-formula-type')?.value || 'percentage_plus_fixed'
+                calculation_type: calcType
             };
 
-            if (relief.formula_type !== 'fixed') {
+            if (calcType !== 'fixed') {
                 const percentage = parseFloat(item.querySelector('.relief-percentage')?.value);
                 const basedOn = (item.querySelector('.relief-based-on')?.value || '').trim();
+                const basedOnType = item.querySelector('.relief-based-on-type')?.value || 'component';
                 if (!isNaN(percentage)) relief.percentage = percentage;
                 if (basedOn) relief.based_on = basedOn;
+                relief.based_on_type = basedOnType;
             }
 
-            if (relief.formula_type !== 'percentage') {
+            if (calcType !== 'percentage') {
                 const fixedAmount = parseFloat(item.querySelector('.relief-fixed-amount')?.value);
                 if (!isNaN(fixedAmount)) relief.fixed_amount = fixedAmount;
             }
@@ -440,24 +661,26 @@ document.addEventListener('DOMContentLoaded', function() {
         item.className = 'component-item border rounded p-3 mb-3';
         item.dataset.id = componentCounter;
 
+        // FIX #4: Separate the label and hint to avoid overflow/overlap
         item.innerHTML = `
-            <div class="row">
+            <div class="row align-items-end">
                 <div class="col-md-5">
-                    <div class="form-floating mb-2">
-                        <input type="number" class="form-control bracket-limit" step="1" min="0"
-                               placeholder="Limit" value="${data?.limit !== null && data?.limit !== undefined ? data.limit : ''}">
-                        <label>Income Limit (₦) - Leave empty for remaining</label>
-                    </div>
+                    <label class="form-label fw-semibold mb-1">
+                        Income Limit (₦)
+                        <small class="text-muted fw-normal ms-1">— leave empty for "remaining"</small>
+                    </label>
+                    <input type="number" class="form-control bracket-limit" step="1" min="0"
+                           placeholder="e.g. 300000" value="${data?.limit !== null && data?.limit !== undefined ? data.limit : ''}">
                 </div>
                 <div class="col-md-5">
-                    <div class="form-floating mb-2">
+                    <div class="form-floating mb-0">
                         <input type="number" class="form-control bracket-rate" step="0.01" min="0" max="100"
                                placeholder="Rate" value="${data?.rate ?? ''}">
                         <label>Tax Rate % *</label>
                     </div>
                 </div>
                 <div class="col-md-2">
-                    <button type="button" class="btn btn-danger btn-sm remove-btn mt-2" aria-label="Remove bracket">
+                    <button type="button" class="btn btn-danger btn-sm remove-btn" aria-label="Remove bracket">
                         <i class="bi bi-x"></i>
                     </button>
                 </div>
@@ -492,11 +715,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const rate = parseFloat(item.querySelector('.bracket-rate')?.value);
 
             if (!isNaN(rate)) {
-                const bracket = {
+                brackets.push({
                     limit: limitInput === '' ? null : parseFloat(limitInput),
-                    rate: rate
-                };
-                brackets.push(bracket);
+                    rate
+                });
             }
         });
 
@@ -513,9 +735,14 @@ document.addEventListener('DOMContentLoaded', function() {
         item.className = 'component-item border rounded p-3 mb-3';
         item.dataset.id = componentCounter;
 
+        const calcType = data?.calculation_type || 'percentage';
+        const basedOnType = data?.based_on_type || 'component';
+        const basedOnValue = data?.based_on || 'B';
+        const isFixed = calcType === 'fixed';
+
         item.innerHTML = `
             <div class="row">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <div class="form-floating mb-2">
                         <input type="text" class="form-control stat-name" placeholder="Name" value="${escapeHtml(data?.name || '')}">
                         <label>Deduction Name *</label>
@@ -523,39 +750,91 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <div class="col-md-3">
                     <div class="form-floating mb-2">
-                        <input type="number" class="form-control stat-percentage" step="0.01" min="0"
-                               value="${data?.percentage ?? ''}">
-                        <label>Percentage % *</label>
+                        <select class="form-control stat-calc-type">
+                            <option value="percentage" ${calcType === 'percentage' ? 'selected' : ''}>Percentage</option>
+                            <option value="fixed" ${calcType === 'fixed' ? 'selected' : ''}>Fixed Amount</option>
+                            <option value="combined" ${calcType === 'combined' ? 'selected' : ''}>Combined (Fixed + %)</option>
+                        </select>
+                        <label>Calculation Type</label>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="form-floating mb-2">
-                        <input type="text" class="form-control stat-based-on"
-                               value="${escapeHtml(data?.based_on || 'B')}">
-                        <label>Based On (e.g., B+H+T)</label>
-                    </div>
-                </div>
-                <div class="col-md-1">
+                <div class="col-md-2">
                     <div class="form-check mt-3">
                         <input type="checkbox" class="form-check-input stat-active" ${data?.is_active !== false ? 'checked' : ''}>
                         <label class="form-check-label">Active</label>
                     </div>
                 </div>
-                <div class="col-md-1">
+                <div class="col-md-4 text-end">
                     <button type="button" class="btn btn-danger btn-sm remove-btn mt-2" aria-label="Remove statutory deduction">
                         <i class="bi bi-x"></i>
                     </button>
                 </div>
             </div>
+
+            <div class="calc-details">
+                <div class="row">
+                    <div class="col-md-3 percentage-group" style="display: ${isFixed ? 'none' : 'block'};">
+                        <div class="form-floating mb-2">
+                            <input type="number" class="form-control stat-percentage" step="0.01" min="0"
+                                   value="${data?.percentage ?? ''}">
+                            <label>Percentage %</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 percentage-group" style="display: ${isFixed ? 'none' : 'block'};">
+                        <div class="form-floating mb-2">
+                            <select class="form-control stat-based-on-type">
+                                <option value="component" ${basedOnType === 'component' ? 'selected' : ''}>Salary Component</option>
+                                <option value="additional_field" ${basedOnType === 'additional_field' ? 'selected' : ''}>Additional Field</option>
+                            </select>
+                            <label>Base Type</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 percentage-group stat-based-on-wrapper" style="display: ${isFixed ? 'none' : 'block'};">
+                        <!-- rendered by renderBasedOnField() -->
+                    </div>
+                    <div class="col-md-3 fixed-group" style="display: ${calcType === 'percentage' ? 'none' : 'block'};">
+                        <div class="form-floating mb-2">
+                            <input type="number" class="form-control stat-fixed-amount" step="0.01" min="0"
+                                   value="${data?.fixed_amount ?? ''}">
+                            <label>Fixed Amount (₦)</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
         `;
 
         statutoryDeductionsContainer.appendChild(item);
+
+        const wrapper = item.querySelector('.stat-based-on-wrapper');
+        renderBasedOnField(wrapper, basedOnType, basedOnValue, 'stat-based-on', 'Based On', updateStatutoryDeductionsJSON);
+
         attachStatutoryDeductionEvents(item);
         updateStatutoryDeductionsJSON();
     }
 
     function attachStatutoryDeductionEvents(item) {
-        const inputs = item.querySelectorAll('input');
+        const calcType = item.querySelector('.stat-calc-type');
+        const percentageGroups = item.querySelectorAll('.percentage-group');
+        const fixedGroups = item.querySelectorAll('.fixed-group');
+        const basedOnTypeSelect = item.querySelector('.stat-based-on-type');
+
+        calcType.addEventListener('change', function() {
+            const isFixed = this.value === 'fixed';
+            const isPercentage = this.value === 'percentage';
+            percentageGroups.forEach(el => el.style.display = isFixed ? 'none' : 'block');
+            fixedGroups.forEach(el => el.style.display = isPercentage ? 'none' : 'block');
+            updateStatutoryDeductionsJSON();
+        });
+
+        basedOnTypeSelect.addEventListener('change', function() {
+            const wrapper = item.querySelector('.stat-based-on-wrapper');
+            const currentInput = item.querySelector('.stat-based-on');
+            const currentValue = currentInput ? currentInput.value : '';
+            renderBasedOnField(wrapper, this.value, currentValue, 'stat-based-on', 'Based On', updateStatutoryDeductionsJSON);
+            updateStatutoryDeductionsJSON();
+        });
+
+        const inputs = item.querySelectorAll('input, select');
         inputs.forEach(input => {
             input.addEventListener('input', updateStatutoryDeductionsJSON);
             input.addEventListener('change', updateStatutoryDeductionsJSON);
@@ -575,17 +854,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
         statutoryDeductionsContainer.querySelectorAll('.component-item').forEach(item => {
             const name = (item.querySelector('.stat-name')?.value || '').trim();
-            const percentage = parseFloat(item.querySelector('.stat-percentage')?.value);
-            const basedOn = (item.querySelector('.stat-based-on')?.value || '').trim();
+            if (!name) return;
 
-            if (name && !isNaN(percentage)) {
-                deductions.push({
-                    name: name,
-                    is_active: !!item.querySelector('.stat-active')?.checked,
-                    percentage: percentage,
-                    based_on: basedOn || 'B'
-                });
+            const calcType = item.querySelector('.stat-calc-type')?.value || 'percentage';
+            const deduction = {
+                name,
+                is_active: !!item.querySelector('.stat-active')?.checked,
+                calculation_type: calcType
+            };
+
+            if (calcType !== 'fixed') {
+                const percentage = parseFloat(item.querySelector('.stat-percentage')?.value);
+                const basedOn = (item.querySelector('.stat-based-on')?.value || '').trim();
+                const basedOnType = item.querySelector('.stat-based-on-type')?.value || 'component';
+                if (!isNaN(percentage)) deduction.percentage = percentage;
+                if (basedOn) deduction.based_on = basedOn;
+                deduction.based_on_type = basedOnType;
             }
+
+            if (calcType !== 'percentage') {
+                const fixedAmount = parseFloat(item.querySelector('.stat-fixed-amount')?.value);
+                if (!isNaN(fixedAmount)) deduction.fixed_amount = fixedAmount;
+            }
+
+            deductions.push(deduction);
         });
 
         hiddenStatutoryDeductions.value = JSON.stringify(deductions, null, 2);
@@ -672,15 +964,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const linkedTo = (item.querySelector('.other-linked-to')?.value || '').trim();
             const deduction = {
-                name: name,
+                name,
                 display_rule: item.querySelector('.other-display-rule')?.value || 'show_if_filled',
                 order: parseInt(item.querySelector('.other-order')?.value) || 1
             };
 
-            if (linkedTo) {
-                deduction.linked_to = linkedTo;
-            }
-
+            if (linkedTo) deduction.linked_to = linkedTo;
             deductions.push(deduction);
         });
 
@@ -757,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!name) return;
 
             items.push({
-                name: name,
+                name,
                 display_rule: item.querySelector('.income-display-rule')?.value || 'show_if_filled',
                 order: parseInt(item.querySelector('.income-order')?.value) || 1
             });
@@ -765,6 +1054,78 @@ document.addEventListener('DOMContentLoaded', function() {
 
         hiddenIncomeItems.value = JSON.stringify(items, null, 2);
         updateContainerState(incomeItemsContainer);
+    }
+
+    // ========================================
+    // ADDITIONAL FIELDS
+    // ========================================
+    function addAdditionalField(data = null) {
+        componentCounter++;
+        const item = document.createElement('div');
+        item.className = 'component-item border rounded p-3 mb-3';
+        item.dataset.id = componentCounter;
+
+        item.innerHTML = `
+            <div class="row">
+                <div class="col-md-5">
+                    <div class="form-floating mb-2">
+                        <input type="text" class="form-control add-field-name" placeholder="Name" value="${escapeHtml(data?.name || '')}">
+                        <label>Field Name * (e.g., Rent)</label>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="form-floating mb-2">
+                        <input type="text" class="form-control add-field-code" placeholder="Code" value="${escapeHtml(data?.code || '')}">
+                        <label>Field Code * (e.g., rent)</label>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-danger btn-sm remove-btn mt-2" aria-label="Remove field">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        additionalFieldsContainer.appendChild(item);
+        attachAdditionalFieldEvents(item);
+        updateAdditionalFieldsJSON();
+    }
+
+    function attachAdditionalFieldEvents(item) {
+        const inputs = item.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.addEventListener('input', function() {
+                updateAdditionalFieldsJSON();
+                refreshAllAdditionalFieldSelects();
+            });
+            input.addEventListener('change', function() {
+                updateAdditionalFieldsJSON();
+                refreshAllAdditionalFieldSelects();
+            });
+        });
+
+        const removeBtn = item.querySelector('.remove-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function() {
+                item.remove();
+                updateAdditionalFieldsJSON();
+                refreshAllAdditionalFieldSelects();
+            });
+        }
+    }
+
+    function updateAdditionalFieldsJSON() {
+        const fields = [];
+
+        additionalFieldsContainer.querySelectorAll('.component-item').forEach(item => {
+            const name = (item.querySelector('.add-field-name')?.value || '').trim();
+            const code = (item.querySelector('.add-field-code')?.value || '').trim();
+            if (name && code) fields.push({ name, code });
+        });
+
+        hiddenAdditionalFields.value = JSON.stringify(fields, null, 2);
+        updateContainerState(additionalFieldsContainer);
     }
 
     // ========================================
@@ -778,118 +1139,79 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-     function loadExistingData() {
-    // Clear all containers first
-    basicComponentsContainer.innerHTML = '';
-    allowancesContainer.innerHTML = '';
-    reliefsContainer.innerHTML = '';
-    taxBracketsContainer.innerHTML = '';
-    statutoryDeductionsContainer.innerHTML = '';
-    otherDeductionsContainer.innerHTML = '';
-    incomeItemsContainer.innerHTML = '';
+    function loadExistingData() {
+        basicComponentsContainer.innerHTML = '';
+        allowancesContainer.innerHTML = '';
+        reliefsContainer.innerHTML = '';
+        taxBracketsContainer.innerHTML = '';
+        statutoryDeductionsContainer.innerHTML = '';
+        otherDeductionsContainer.innerHTML = '';
+        incomeItemsContainer.innerHTML = '';
+        additionalFieldsContainer.innerHTML = '';
 
-    // Check if we're in edit mode by checking if there's data in the hidden fields
-    const isEditMode = hiddenBasicComponents.value && hiddenBasicComponents.value !== '{}';
+        const isEditMode = hiddenBasicComponents.value && hiddenBasicComponents.value !== '{}';
 
-    // Load basic components
-    try {
-        const basicComponents = JSON.parse(hiddenBasicComponents.value || '{}');
-        if (Object.keys(basicComponents).length > 0) {
-            // basicComponents is an object keyed by name-key
-            Object.values(basicComponents).forEach(comp => {
-                addBasicComponent({
-                    name: comp.name,
-                    code: comp.code,
-                    percentage: comp.percentage
+        // Load additional fields FIRST so they are available when other sections render
+        try {
+            const addFields = JSON.parse(hiddenAdditionalFields.value || '[]');
+            if (Array.isArray(addFields) && addFields.length > 0) {
+                addFields.forEach(f => addAdditionalField(f));
+            }
+        } catch (e) {
+            console.warn('Failed to parse additional fields JSON', e);
+        }
+
+        // Load basic components
+        try {
+            const basicComponents = JSON.parse(hiddenBasicComponents.value || '{}');
+            if (Object.keys(basicComponents).length > 0) {
+                Object.values(basicComponents).forEach(comp => {
+                    addBasicComponent({ name: comp.name, code: comp.code, percentage: comp.percentage });
                 });
-            });
-        } else if (!isEditMode) {
-            // Only add default template if not in edit mode
-            addBasicComponent();
+            } else if (!isEditMode) {
+                addBasicComponent();
+            }
+        } catch (e) {
+            console.warn('Failed to parse basic components JSON', e);
+            if (!isEditMode) addBasicComponent();
         }
-    } catch (e) {
-        console.warn('Failed to parse basic components JSON', e);
-        if (!isEditMode) addBasicComponent();
-    }
 
-    // Load allowances
-    try {
-        const allowances = JSON.parse(hiddenAllowances.value || '[]');
-        if (Array.isArray(allowances) && allowances.length > 0) {
-            allowances.forEach(a => addAllowance(a));
-        } else if (!isEditMode) {
-            addAllowance();
-        }
-    } catch (e) {
-        console.warn('Failed to parse allowances JSON', e);
-        if (!isEditMode) addAllowance();
-    }
+        // Load allowances
+        try {
+            const allowances = JSON.parse(hiddenAllowances.value || '[]');
+            if (Array.isArray(allowances) && allowances.length > 0) allowances.forEach(a => addAllowance(a));
+        } catch (e) { console.warn('Failed to parse allowances JSON', e); }
 
-    // Load reliefs
-    try {
-        const reliefs = JSON.parse(hiddenReliefs.value || '[]');
-        if (Array.isArray(reliefs) && reliefs.length > 0) {
-            reliefs.forEach(r => addRelief(r));
-        } else if (!isEditMode) {
-            addRelief();
-        }
-    } catch (e) {
-        console.warn('Failed to parse reliefs JSON', e);
-        if (!isEditMode) addRelief();
-    }
+        // Load reliefs
+        try {
+            const reliefs = JSON.parse(hiddenReliefs.value || '[]');
+            if (Array.isArray(reliefs) && reliefs.length > 0) reliefs.forEach(r => addRelief(r));
+        } catch (e) { console.warn('Failed to parse reliefs JSON', e); }
 
-    // Load tax brackets
-    try {
-        const brackets = JSON.parse(hiddenTaxBrackets.value || '[]');
-        if (Array.isArray(brackets) && brackets.length > 0) {
-            brackets.forEach(b => addTaxBracket(b));
-        } else if (!isEditMode) {
-            addTaxBracket();
-        }
-    } catch (e) {
-        console.warn('Failed to parse tax brackets JSON', e);
-        if (!isEditMode) addTaxBracket();
-    }
+        // Load tax brackets
+        try {
+            const brackets = JSON.parse(hiddenTaxBrackets.value || '[]');
+            if (Array.isArray(brackets) && brackets.length > 0) brackets.forEach(b => addTaxBracket(b));
+        } catch (e) { console.warn('Failed to parse tax brackets JSON', e); }
 
-    // Load statutory deductions
-    try {
-        const statutory = JSON.parse(hiddenStatutoryDeductions.value || '[]');
-        if (Array.isArray(statutory) && statutory.length > 0) {
-            statutory.forEach(s => addStatutoryDeduction(s));
-        } else if (!isEditMode) {
-            addStatutoryDeduction();
-        }
-    } catch (e) {
-        console.warn('Failed to parse statutory deductions JSON', e);
-        if (!isEditMode) addStatutoryDeduction();
-    }
+        // Load statutory deductions
+        try {
+            const statutory = JSON.parse(hiddenStatutoryDeductions.value || '[]');
+            if (Array.isArray(statutory) && statutory.length > 0) statutory.forEach(s => addStatutoryDeduction(s));
+        } catch (e) { console.warn('Failed to parse statutory deductions JSON', e); }
 
-    // Load other deductions
-    try {
-        const others = JSON.parse(hiddenOtherDeductions.value || '[]');
-        if (Array.isArray(others) && others.length > 0) {
-            others.forEach(o => addOtherDeduction(o));
-        } else if (!isEditMode) {
-            addOtherDeduction();
-        }
-    } catch (e) {
-        console.warn('Failed to parse other deductions JSON', e);
-        if (!isEditMode) addOtherDeduction();
-    }
+        // Load other deductions
+        try {
+            const others = JSON.parse(hiddenOtherDeductions.value || '[]');
+            if (Array.isArray(others) && others.length > 0) others.forEach(o => addOtherDeduction(o));
+        } catch (e) { console.warn('Failed to parse other deductions JSON', e); }
 
-    // Load income items
-    try {
-        const incomeItems = JSON.parse(hiddenIncomeItems.value || '[]');
-        if (Array.isArray(incomeItems) && incomeItems.length > 0) {
-            incomeItems.forEach(i => addIncomeItem(i));
-        } else if (!isEditMode) {
-            addIncomeItem();
-        }
-    } catch (e) {
-        console.warn('Failed to parse income items JSON', e);
-        if (!isEditMode) addIncomeItem();
+        // Load income items
+        try {
+            const incomeItems = JSON.parse(hiddenIncomeItems.value || '[]');
+            if (Array.isArray(incomeItems) && incomeItems.length > 0) incomeItems.forEach(i => addIncomeItem(i));
+        } catch (e) { console.warn('Failed to parse income items JSON', e); }
     }
-}
 
     function escapeHtml(unsafe) {
         if (unsafe === undefined || unsafe === null) return '';
@@ -901,47 +1223,197 @@ document.addEventListener('DOMContentLoaded', function() {
             .replace(/'/g, "&#039;");
     }
 
-    // Detect locked state (either via form data-locked attribute, a hidden input, or global var)
     function isFormLocked() {
-        // 1. data-locked attribute on the form
-        if (salarySettingForm && salarySettingForm.dataset && salarySettingForm.dataset.locked === 'true') {
-            return true;
-        }
-
-        // 2. hidden input named is_locked (if backend renders it)
+        if (salarySettingForm?.dataset?.locked === 'true') return true;
         const isLockedInput = document.querySelector('input[name="is_locked"], #id_is_locked');
         if (isLockedInput) {
             const val = (isLockedInput.value || '').toLowerCase();
             if (val === 'true' || val === '1' || val === 'on') return true;
         }
-
-        // 3. a global variable rendered into template could be used (not relied on)
         if (window.SALARY_SETTING_LOCKED === true) return true;
-
         return false;
     }
 
     function disableEditing() {
-        // Disable add buttons
-        [addBasicComponentBtn, addAllowanceBtn, addReliefBtn, addTaxBracketBtn, addStatutoryDeductionBtn, addOtherDeductionBtn, addIncomeItemBtn].forEach(btn => {
+        [addBasicComponentBtn, addAllowanceBtn, addReliefBtn, addTaxBracketBtn, addStatutoryDeductionBtn, addOtherDeductionBtn, addIncomeItemBtn, addAdditionalFieldBtn].forEach(btn => {
             if (btn) btn.setAttribute('disabled', 'disabled');
         });
 
-        // Disable all inputs/selects and hide remove buttons
         document.querySelectorAll('#salarySettingForm input, #salarySettingForm select, #salarySettingForm textarea, #salarySettingForm button').forEach(el => {
-            // Keep CSRF, submit and cancel buttons enabled/visible
-            if (el.type === 'submit' || el.type === 'button' && el.classList.contains('btn-danger') === false) return;
-            // but disable inputs and selects
-            if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'select' || el.tagName.toLowerCase() === 'textarea' || el.tagName.toLowerCase() === 'button') {
-                el.setAttribute('disabled', 'disabled');
-            }
+            if (el.type === 'submit' || (el.type === 'button' && !el.classList.contains('btn-danger'))) return;
+            el.setAttribute('disabled', 'disabled');
         });
 
-        // Hide remove buttons specifically
         document.querySelectorAll('.remove-btn').forEach(rb => rb.style.display = 'none');
     }
 
-    // Attach top-level add button handlers (if present)
+    // ========================================
+    // VALIDATION: Basic component codes unique + max 3 chars
+    // ========================================
+    function validateBasicComponentCodes() {
+        const codes = [];
+        let error = null;
+
+        basicComponentsContainer.querySelectorAll('.component-item').forEach(item => {
+            const code = (item.querySelector('.comp-code')?.value || '').trim().toUpperCase();
+            const name = (item.querySelector('.comp-name')?.value || '').trim();
+            if (!code && name) {
+                error = `Component "${name}" is missing a code.`;
+                return;
+            }
+            if (code.length > 3) {
+                error = `Component code "${code}" exceeds 3 characters.`;
+                return;
+            }
+            if (codes.includes(code)) {
+                error = `Duplicate component code "${code}". Each code must be unique.`;
+                return;
+            }
+            if (code) codes.push(code);
+        });
+
+        return error;
+    }
+
+    // ========================================
+    // VALIDATION: based_on references valid codes
+    // ========================================
+    const VALID_KEYWORDS = ['TOTAL', 'GROSS_INCOME'];
+
+    function validateBasedOnValue(value, basedOnType, fieldName) {
+        if (!value || basedOnType === 'additional_field') return null;
+
+        const upperVal = value.trim().toUpperCase();
+
+        // Keywords are always valid
+        if (VALID_KEYWORDS.includes(upperVal)) return null;
+
+        // Otherwise treat as component code expression (e.g. B+H+T)
+        const codes = upperVal.split('+').map(c => c.trim()).filter(Boolean);
+        const existingCodes = getBasicComponentCodes();
+
+        for (const code of codes) {
+            if (!existingCodes.includes(code)) {
+                return `"${fieldName}": Based On code "${code}" does not match any defined basic component. Valid codes: ${existingCodes.join(', ') || 'none defined'}. Use TOTAL or GROSS_INCOME for keywords.`;
+            }
+        }
+        return null;
+    }
+
+    function validateAllBasedOnFields() {
+        const errors = [];
+
+        // Allowances
+        allowancesContainer.querySelectorAll('.component-item').forEach(item => {
+            const name = (item.querySelector('.allow-name')?.value || '').trim();
+            const basedOnType = item.querySelector('.allow-based-on-type')?.value || 'component';
+            const basedOn = (item.querySelector('.allow-based-on')?.value || '').trim();
+            const calcType = item.querySelector('.allow-calc-type')?.value;
+            if (calcType !== 'fixed' && basedOn) {
+                const err = validateBasedOnValue(basedOn, basedOnType, `Allowance "${name}"`);
+                if (err) errors.push(err);
+            }
+        });
+
+        // Reliefs
+        reliefsContainer.querySelectorAll('.component-item').forEach(item => {
+            const name = (item.querySelector('.relief-name')?.value || '').trim();
+            const basedOnType = item.querySelector('.relief-based-on-type')?.value || 'component';
+            const basedOn = (item.querySelector('.relief-based-on')?.value || '').trim();
+            const calcType = item.querySelector('.relief-calc-type')?.value;
+            if (calcType !== 'fixed' && basedOn) {
+                const err = validateBasedOnValue(basedOn, basedOnType, `Relief "${name}"`);
+                if (err) errors.push(err);
+            }
+        });
+
+        // Statutory deductions
+        statutoryDeductionsContainer.querySelectorAll('.component-item').forEach(item => {
+            const name = (item.querySelector('.stat-name')?.value || '').trim();
+            const basedOnType = item.querySelector('.stat-based-on-type')?.value || 'component';
+            const basedOn = (item.querySelector('.stat-based-on')?.value || '').trim();
+            const calcType = item.querySelector('.stat-calc-type')?.value;
+            if (calcType !== 'fixed' && basedOn) {
+                const err = validateBasedOnValue(basedOn, basedOnType, `Statutory Deduction "${name}"`);
+                if (err) errors.push(err);
+            }
+        });
+
+        return errors;
+    }
+
+    // ========================================
+    // HELP POPOVERS: inject ? buttons into section headers
+    // ========================================
+    function initHelpPopovers() {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(btn => {
+            const section = btn.closest('.card');
+            if (!section) return;
+
+            const header = section.querySelector('.card-header');
+            if (!header) return;
+
+            // Destroy any existing tooltip the template inline script may have created
+            const existingTooltip = bootstrap.Tooltip.getInstance(btn);
+            if (existingTooltip) existingTooltip.dispose();
+
+            const content = header.classList.contains('bg-success')
+                ? BASIC_COMPONENT_HELP
+                : BASED_ON_HELP;
+
+            btn.removeAttribute('data-bs-toggle');
+            btn.removeAttribute('data-bs-original-title');
+            btn.removeAttribute('title');
+            btn.classList.add('salary-help-btn');
+
+            const pop = new bootstrap.Popover(btn, {
+                html: true,
+                content: content,
+                title: 'Help',
+                placement: 'left',
+                trigger: 'manual',
+                sanitize: false
+            });
+
+            btn._salaryPopoverVisible = false;
+
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                // Close all other open popovers
+                document.querySelectorAll('.salary-help-btn').forEach(other => {
+                    if (other !== btn && other._salaryPopoverVisible) {
+                        bootstrap.Popover.getInstance(other)?.hide();
+                        other._salaryPopoverVisible = false;
+                    }
+                });
+                // Toggle this one
+                if (btn._salaryPopoverVisible) {
+                    pop.hide();
+                    btn._salaryPopoverVisible = false;
+                } else {
+                    pop.show();
+                    btn._salaryPopoverVisible = true;
+                }
+            });
+        });
+
+        // Capture phase: fires before any child stopPropagation
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.salary-help-btn')) return;
+            if (e.target.closest('.popover')) return;
+            document.querySelectorAll('.salary-help-btn').forEach(btn => {
+                if (btn._salaryPopoverVisible) {
+                    bootstrap.Popover.getInstance(btn)?.hide();
+                    btn._salaryPopoverVisible = false;
+                }
+            });
+        }, true);
+    }
+
+
+    // ========================================
+    // BUTTON HANDLERS
+    // ========================================
     if (addBasicComponentBtn) addBasicComponentBtn.addEventListener('click', () => addBasicComponent());
     if (addAllowanceBtn) addAllowanceBtn.addEventListener('click', () => addAllowance());
     if (addReliefBtn) addReliefBtn.addEventListener('click', () => addRelief());
@@ -949,11 +1421,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (addStatutoryDeductionBtn) addStatutoryDeductionBtn.addEventListener('click', () => addStatutoryDeduction());
     if (addOtherDeductionBtn) addOtherDeductionBtn.addEventListener('click', () => addOtherDeduction());
     if (addIncomeItemBtn) addIncomeItemBtn.addEventListener('click', () => addIncomeItem());
+    if (addAdditionalFieldBtn) addAdditionalFieldBtn.addEventListener('click', () => addAdditionalField());
 
-    // On form submit: ensure we update hidden fields and validate basic components sum == 100
+    // ========================================
+    // FORM SUBMIT VALIDATION
+    // ========================================
     if (salarySettingForm) {
         salarySettingForm.addEventListener('submit', function(event) {
-            // Ensure latest values are serialized
+            // Serialize all sections
             updateBasicComponentsJSON();
             updateAllowancesJSON();
             updateReliefsJSON();
@@ -961,8 +1436,9 @@ document.addEventListener('DOMContentLoaded', function() {
             updateStatutoryDeductionsJSON();
             updateOtherDeductionsJSON();
             updateIncomeItemsJSON();
+            updateAdditionalFieldsJSON();
 
-            // Validate basic components add up to 100 (client-side)
+            // 1. Validate basic components total 100%
             const total = parseFloat(document.getElementById('totalPercentage')?.textContent || '0');
             if (isNaN(total) || Math.abs(total - 100) > 0.01) {
                 event.preventDefault();
@@ -971,29 +1447,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
 
-            // Optionally you can add more client-side validations here
+            // 2. Validate component codes are unique and max 3 chars
+            const codeError = validateBasicComponentCodes();
+            if (codeError) {
+                event.preventDefault();
+                event.stopPropagation();
+                showError(codeError);
+                return false;
+            }
+
+            // 3. Validate all based_on references are valid
+            const basedOnErrors = validateAllBasedOnFields();
+            if (basedOnErrors.length > 0) {
+                event.preventDefault();
+                event.stopPropagation();
+                showError(basedOnErrors[0]); // Show first error
+                return false;
+            }
 
             return true;
         });
     }
 
-    // Initialize: load existing JSON and set disabled state if locked
+    // ========================================
+    // INIT
+    // ========================================
     loadExistingData();
+    initHelpPopovers();
 
-    // After loading, if form should be locked, disable editing
     if (isFormLocked()) {
         disableEditing();
     }
 
-    // Minor enhancement: recalc totals if user pastes JSON directly into hidden fields from admin dev tools
-    // (Not typical, but safe)
-    [hiddenBasicComponents, hiddenAllowances, hiddenReliefs, hiddenTaxBrackets, hiddenIncomeItems, hiddenStatutoryDeductions, hiddenOtherDeductions].forEach(h => {
+    // Re-sync on hidden field change (dev tools edge case)
+    [hiddenBasicComponents, hiddenAllowances, hiddenReliefs, hiddenTaxBrackets, hiddenIncomeItems, hiddenStatutoryDeductions, hiddenOtherDeductions, hiddenAdditionalFields].forEach(h => {
         if (h) {
             h.addEventListener('change', () => {
-                // re-render is not attempted here; just update values
                 updateBasicComponentsJSON();
                 updateAllowancesJSON();
                 updateReliefsJSON();
+                updateAdditionalFieldsJSON();
             });
         }
     });

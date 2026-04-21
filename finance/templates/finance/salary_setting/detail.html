@@ -132,6 +132,7 @@
             <script id="income_items" type="application/json">{{ income_items_json|safe }}</script>
             <script id="statutory_deductions" type="application/json">{{ statutory_deductions_json|safe }}</script>
             <script id="other_deductions_config" type="application/json">{{ other_deductions_json|safe }}</script>
+            <script id="additional_fields" type="application/json">{{ additional_fields_json|safe }}</script>
 
             <!-- Main JSON / sections -->
             <div class="accordion" id="salarySettingAccordion">
@@ -250,6 +251,20 @@
                     </div>
                 </div>
 
+                <!-- Additional Salary Profile Fields -->
+                <div class="accordion-item mb-3">
+                    <h2 class="accordion-header" id="headingAddFields">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAddFields" aria-expanded="false" aria-controls="collapseAddFields">
+                            <i class="bi bi-plus-square me-2"></i> Additional Salary Profile Fields
+                        </button>
+                    </h2>
+                    <div id="collapseAddFields" class="accordion-collapse collapse" aria-labelledby="headingAddFields" data-bs-parent="#salarySettingAccordion">
+                        <div class="accordion-body">
+                            <div id="detailAdditionalFields" class="row gy-2"></div>
+                        </div>
+                    </div>
+                </div>
+
             </div> <!-- /accordion -->
 
             <!-- Hidden combined JSON container (for downloading/copying) -->
@@ -267,7 +282,8 @@
     "tax_brackets": setting.tax_brackets,
     "income_items": setting.income_items,
     "statutory_deductions": setting.statutory_deductions,
-    "other_deductions_config": setting.other_deductions_config
+    "other_deductions_config": setting.other_deductions_config,
+    "additional_fields": setting.additional_fields
 } | safe }}
             </textarea>
 
@@ -316,13 +332,19 @@
     const statutory = readJson('statutory_deductions') || [];
     const otherDeductions = readJson('other_deductions_config') || [];
     const incomeItems = readJson('income_items') || [];
+    const additionalFields = readJson('additional_fields') || [];
 
-    function fmtMoney(n) {
-        try {
-            return new Intl.NumberFormat('en-NG', {minimumFractionDigits:2, maximumFractionDigits:2}).format(Number(n));
-        } catch(e) {
-            return n;
-        }
+    function getComponentName(code) {
+        const components = Object.values(basic || {});
+        const comp = components.find(c => c.code.toUpperCase() === code.toUpperCase());
+        return comp ? comp.name : code;
+    }
+
+    function resolveBasedOnNames(basedOn) {
+        if (basedOn.toUpperCase() === 'TOTAL') return 'Total Salary';
+        if (basedOn.toUpperCase() === 'GROSS_INCOME') return 'Gross Income';
+        const codes = basedOn.split('+').map(c => c.trim().toUpperCase());
+        return codes.map(c => getComponentName(c)).join(' + ');
     }
 
     // BASIC COMPONENTS
@@ -372,13 +394,20 @@
             const col = document.createElement('div');
             col.className = 'col-md-6';
             const isActive = a.is_active ? 'Active' : 'Inactive';
+            const calcType = a.calculation_type || 'percentage';
+            const basedOnType = a.based_on_type || 'component';
+            
             let rightText = '';
-            if (a.calculation_type === 'fixed') {
+            if (calcType === 'fixed') {
                 rightText = `Fixed: ₦${fmtMoney(a.fixed_amount || 0)}`;
-            } else {
+            } else if (calcType === 'percentage') {
                 const pct = Number(a.percentage || 0);
-                rightText = `${pct.toFixed(2)}% of ${a.based_on || 'TOTAL'}`;
+                rightText = `${pct.toFixed(2)}% of ${a.based_on || 'TOTAL'} (${basedOnType})`;
+            } else if (calcType === 'combined') {
+                const pct = Number(a.percentage || 0);
+                rightText = `₦${fmtMoney(a.fixed_amount || 0)} + ${pct.toFixed(2)}% of ${a.based_on || 'TOTAL'} (${basedOnType})`;
             }
+
             col.innerHTML = `
                 <div class="card border-light">
                     <div class="card-body p-2 d-flex align-items-start">
@@ -405,10 +434,18 @@
         reliefs.forEach(r => {
             const col = document.createElement('div');
             col.className = 'col-md-6';
-            let desc = r.formula_type || '';
-            if (r.percentage) desc += ` • ${Number(r.percentage).toFixed(2)}%`;
-            if (r.fixed_amount) desc += ` • ₦${fmtMoney(r.fixed_amount)}`;
-            if (r.based_on) desc += ` • based on ${r.based_on}`;
+            const calcType = r.calculation_type || (r.formula_type === 'percentage_plus_fixed' ? 'combined' : r.formula_type || 'fixed');
+            const basedOnType = r.based_on_type || 'component';
+
+            let desc = '';
+            if (calcType === 'percentage') {
+                desc = `${Number(r.percentage).toFixed(2)}% of ${r.based_on || 'gross_income'} (${basedOnType})`;
+            } else if (calcType === 'fixed') {
+                desc = `Fixed: ₦${fmtMoney(r.fixed_amount)}`;
+            } else if (calcType === 'combined') {
+                desc = `₦${fmtMoney(r.fixed_amount)} + ${Number(r.percentage).toFixed(2)}% of ${r.based_on || 'gross_income'} (${basedOnType})`;
+            }
+
             col.innerHTML = `
                 <div class="card border-light">
                     <div class="card-body p-2">
@@ -452,27 +489,25 @@
         statutory.forEach(s => {
             const col = document.createElement('div');
             col.className = 'col-md-6';
-            const pct = Number(s.percentage || 0);
+            const calcType = s.calculation_type || 'percentage';
             const basedOn = s.based_on || 'B';
-            // compute sample amount for display
-            let amount = 0;
-            if (basedOn && typeof basedOn === 'string') {
-                const codes = basedOn.split('+').map(x => x.trim());
-                let totalPct = 0;
-                codes.forEach(code => { totalPct += (codeMap[code] || 0); });
-                amount = sampleSalary * (totalPct / 100) * (pct / 100);
-            } else {
-                amount = sampleSalary * (pct / 100);
+            const basedOnType = s.based_on_type || 'component';
+
+            let desc = '';
+            if (calcType === 'percentage') {
+                desc = `${Number(s.percentage || 0).toFixed(2)}% of ${basedOn} (${basedOnType})`;
+            } else if (calcType === 'fixed') {
+                desc = `Fixed: ₦${fmtMoney(s.fixed_amount || 0)}`;
+            } else if (calcType === 'combined') {
+                desc = `₦${fmtMoney(s.fixed_amount || 0)} + ${Number(s.percentage || 0).toFixed(2)}% of ${basedOn} (${basedOnType})`;
             }
+
             col.innerHTML = `
                 <div class="card border-light">
                     <div class="card-body p-2 d-flex align-items-start">
                         <div class="me-auto">
                             <strong>${s.name}</strong>
-                            <div class="small text-muted">${s.is_active ? 'Active' : 'Inactive'} • ${pct.toFixed(2)}% of ${basedOn}</div>
-                        </div>
-                        <div class="text-end">
-                            <div class="h6 mb-0">₦${fmtMoney(amount)}</div>
+                            <div class="small text-muted">${s.is_active ? 'Active' : 'Inactive'} • ${desc}</div>
                         </div>
                     </div>
                 </div>
@@ -528,6 +563,29 @@
         });
     }
 
+    // ADDITIONAL FIELDS
+    const detailAdditionalFields = document.getElementById('detailAdditionalFields');
+    function renderAdditionalFields() {
+        detailAdditionalFields.innerHTML = '';
+        if (!additionalFields || additionalFields.length === 0) {
+            detailAdditionalFields.innerHTML = '<p class="text-muted">No additional fields configured.</p>';
+            return;
+        }
+        additionalFields.forEach(f => {
+            const col = document.createElement('div');
+            col.className = 'col-md-6';
+            col.innerHTML = `
+                <div class="card border-light">
+                    <div class="card-body p-2">
+                        <strong>${f.name}</strong>
+                        <div class="small text-muted">Code: ${f.code}</div>
+                    </div>
+                </div>
+            `;
+            detailAdditionalFields.appendChild(col);
+        });
+    }
+
     // Initial render with preview salary
     const salaryInput = document.getElementById('previewSalary');
     let sampleSalary = Number(salaryInput?.value || 500000);
@@ -538,6 +596,7 @@
     renderStatutory(sampleSalary);
     renderOtherDeductions();
     renderIncomeItems();
+    renderAdditionalFields();
 
     // Re-render salary-dependent parts on input change
     if (salaryInput) {

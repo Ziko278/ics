@@ -304,12 +304,11 @@
   </div>
 </div>
 
-<!-- Salary Setting Data for JavaScript -->
 <script id="salarySettingData" type="application/json">{{ salary_setting_data|safe }}</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  const basicSalary = {{ structure.monthly_salary }};
+  const monthlySalary = {{ structure.monthly_salary }};
   const bonusInput = document.getElementById('bonus');
 
   // Parse salary setting data
@@ -341,13 +340,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const cancelDeductionBtn = document.getElementById('cancelDeductionBtn');
   const deductionsTable = document.getElementById('deductionsTable').querySelector('tbody');
 
-  // Helper function to calculate amount based on component codes
-  function calculateAmountBasedOnComponents(basedOn) {
+  // Helper function to calculate base amount (components or additional fields)
+  function calculateBaseAmount(basedOn, basedOnType) {
     if (!basedOn) return 0;
+    
+    if (basedOnType === 'additional_field') {
+      return (salarySettingData.additional_values || {})[basedOn] || 0;
+    }
 
-    // Handle special cases
     if (basedOn.toUpperCase() === 'TOTAL') {
-      return basicSalary;
+      return monthlySalary;
     }
 
     // Handle component codes (case-insensitive)
@@ -355,10 +357,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let totalAmount = 0;
 
     codes.forEach(code => {
-      // Find component by code
       {% for code, component in structure.salary_setting.basic_components.items %}
       if (code === '{{ component.code|upper }}') {
-        totalAmount += basicSalary * ({{ component.percentage }} / 100);
+        totalAmount += monthlySalary * ({{ component.percentage }} / 100);
       }
       {% endfor %}
     });
@@ -366,333 +367,170 @@ document.addEventListener('DOMContentLoaded', function() {
     return totalAmount;
   }
 
-  // Calculate initial values
-  updateCalculations();
-
-  // Add event listeners
-  bonusInput.addEventListener('input', updateCalculations);
-
   // Allowance management
-  addAllowanceBtn.addEventListener('click', function() {
-    allowanceSelection.style.display = 'block';
-    allowanceSelect.focus();
-  });
-
-  cancelAllowanceBtn.addEventListener('click', function() {
-    allowanceSelection.style.display = 'none';
-    allowanceSelect.value = '';
-    allowanceAmount.value = '';
-  });
-
-  confirmAllowanceBtn.addEventListener('click', function() {
-    const allowanceName = allowanceSelect.value;
-    const amount = parseFloat(allowanceAmount.value) || 0;
-
-    if (!allowanceName) {
-      alert('Please select an allowance');
-      return;
-    }
-
-    if (amount <= 0) {
-      alert('Please enter a valid amount');
-      return;
-    }
-
-    // Check if allowance already exists
-    if (document.querySelector(`[data-allowance="${allowanceName}"]`)) {
-      alert('This allowance has already been added');
-      return;
-    }
-
-    // Add allowance to table
-    const row = document.createElement('tr');
-    row.setAttribute('data-allowance', allowanceName);
-    row.innerHTML = `
-      <td>${allowanceName}</td>
-      <td>
-        <input type="number" class="form-control form-control-sm allowance-input"
-               name="allowance_${allowanceName}"
-               value="${amount.toFixed(2)}"
-               step="0.01" min="0" data-allowance="${allowanceName}">
-      </td>
-      <td>
-        <button type="button" class="btn btn-sm btn-outline-danger remove-allowance">
-          <i class="bi bi-trash"></i>
-        </button>
-      </td>
-    `;
-
-    allowancesTable.appendChild(row);
-
-    // Add event listener to the new input
-    const newInput = row.querySelector('.allowance-input');
-    newInput.addEventListener('input', updateCalculations);
-
-    // Add event listener to the remove button
-    const removeBtn = row.querySelector('.remove-allowance');
-    removeBtn.addEventListener('click', function() {
-      row.remove();
-      updateCalculations();
-      checkEmptyTable('allowancesTable', 'No allowances added yet. Click "Add Allowance" to add one.');
+  if (addAllowanceBtn) {
+    addAllowanceBtn.addEventListener('click', () => {
+      allowanceSelection.style.display = 'block';
+      allowanceSelect.focus();
     });
+  }
 
-    // Reset selection form
-    allowanceSelection.style.display = 'none';
-    allowanceSelect.value = '';
-    allowanceAmount.value = '';
-
-    // Hide empty message if shown
-    const emptyMessage = allowancesTable.parentElement.querySelector('.text-muted');
-    if (emptyMessage) {
-      emptyMessage.style.display = 'none';
-    }
-
-    // Update calculations
-    updateCalculations();
-  });
-
-  // Deduction management
-  addDeductionBtn.addEventListener('click', function() {
-    deductionSelection.style.display = 'block';
-    deductionSelect.focus();
-  });
-
-  cancelDeductionBtn.addEventListener('click', function() {
-    deductionSelection.style.display = 'none';
-    deductionSelect.value = '';
-    deductionAmount.value = '';
-  });
-
-  confirmDeductionBtn.addEventListener('click', function() {
-    const deductionName = deductionSelect.value;
-    const amount = parseFloat(deductionAmount.value) || 0;
-
-    if (!deductionName) {
-      alert('Please select a deduction');
-      return;
-    }
-
-    if (amount <= 0) {
-      alert('Please enter a valid amount');
-      return;
-    }
-
-    // Check if deduction already exists
-    if (document.querySelector(`[data-deduction="${deductionName}"]`)) {
-      alert('This deduction has already been added');
-      return;
-    }
-
-    // Add deduction to table
-    const row = document.createElement('tr');
-    row.setAttribute('data-deduction', deductionName);
-    row.innerHTML = `
-      <td>${deductionName}</td>
-      <td>
-        <input type="number" class="form-control form-control-sm deduction-input"
-               name="deduction_${deductionName}"
-               value="${amount.toFixed(2)}"
-               step="0.01" min="0" data-deduction="${deductionName}">
-      </td>
-      <td>
-        <button type="button" class="btn btn-sm btn-outline-danger remove-deduction">
-          <i class="bi bi-trash"></i>
-        </button>
-      </td>
-    `;
-
-    deductionsTable.appendChild(row);
-
-    // Add event listener to the new input
-    const newInput = row.querySelector('.deduction-input');
-    newInput.addEventListener('input', updateCalculations);
-
-    // Add event listener to the remove button
-    const removeBtn = row.querySelector('.remove-deduction');
-    removeBtn.addEventListener('click', function() {
-      row.remove();
-      updateCalculations();
-      checkEmptyTable('deductionsTable', 'No deductions added yet. Click "Add Deduction" to add one.');
+  if (cancelAllowanceBtn) {
+    cancelAllowanceBtn.addEventListener('click', () => {
+      allowanceSelection.style.display = 'none';
+      allowanceSelect.value = '';
+      allowanceAmount.value = '';
     });
+  }
 
-    // Reset selection form
-    deductionSelection.style.display = 'none';
-    deductionSelect.value = '';
-    deductionAmount.value = '';
-
-    // Hide empty message if shown
-    const emptyMessage = deductionsTable.parentElement.querySelector('.text-muted');
-    if (emptyMessage) {
-      emptyMessage.style.display = 'none';
-    }
-
-    // Update calculations
-    updateCalculations();
-  });
-
-  // Add event listeners to existing inputs
-  document.querySelectorAll('.allowance-input').forEach(input => {
-    input.addEventListener('input', updateCalculations);
-  });
-
-  document.querySelectorAll('.deduction-input').forEach(input => {
-    input.addEventListener('input', updateCalculations);
-  });
-
-  // Add event listeners to existing remove buttons
-  document.querySelectorAll('.remove-allowance').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const row = btn.closest('tr');
-      row.remove();
+  if (confirmAllowanceBtn) {
+    confirmAllowanceBtn.addEventListener('click', function() {
+      const name = allowanceSelect.value;
+      const amount = parseFloat(allowanceAmount.value) || 0;
+      if (!name || amount <= 0) return;
+      
+      const row = document.createElement('tr');
+      row.dataset.allowance = name;
+      row.innerHTML = `
+        <td>${name}</td>
+        <td>
+          <input type="number" class="form-control form-control-sm allowance-input"
+                 name="allowance_${name}" value="${amount.toFixed(2)}"
+                 step="0.01" min="0">
+        </td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-allowance"><i class="bi bi-trash"></i></button></td>
+      `;
+      allowancesTable.appendChild(row);
+      row.querySelector('.allowance-input').addEventListener('input', updateCalculations);
+      row.querySelector('.remove-allowance').addEventListener('click', () => { row.remove(); updateCalculations(); });
+      
+      allowanceSelection.style.display = 'none';
+      allowanceSelect.value = ''; allowanceAmount.value = '';
       updateCalculations();
-      checkEmptyTable('allowancesTable', 'No allowances added yet. Click "Add Allowance" to add one.');
     });
-  });
+  }
 
-  document.querySelectorAll('.remove-deduction').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const row = btn.closest('tr');
-      row.remove();
-      updateCalculations();
-      checkEmptyTable('deductionsTable', 'No deductions added yet. Click "Add Deduction" to add one.');
+  // Deduction management (Similar logic)
+  if (addDeductionBtn) {
+    addDeductionBtn.addEventListener('click', () => {
+      deductionSelection.style.display = 'block';
+      deductionSelect.focus();
     });
-  });
+  }
+  if (cancelDeductionBtn) {
+    cancelDeductionBtn.addEventListener('click', () => {
+      deductionSelection.style.display = 'none';
+      deductionSelect.value = ''; deductionAmount.value = '';
+    });
+  }
+  if (confirmDeductionBtn) {
+    confirmDeductionBtn.addEventListener('click', function() {
+      const name = deductionSelect.value;
+      const amount = parseFloat(deductionAmount.value) || 0;
+      if (!name || amount <= 0) return;
+
+      const row = document.createElement('tr');
+      row.dataset.deduction = name;
+      row.innerHTML = `
+        <td>${name}</td>
+        <td>
+          <input type="number" class="form-control form-control-sm deduction-input"
+                 name="deduction_${name}" value="${amount.toFixed(2)}"
+                 step="0.01" min="0">
+        </td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-deduction"><i class="bi bi-trash"></i></button></td>
+      `;
+      deductionsTable.appendChild(row);
+      row.querySelector('.deduction-input').addEventListener('input', updateCalculations);
+      row.querySelector('.remove-deduction').addEventListener('click', () => { row.remove(); updateCalculations(); });
+
+      deductionSelection.style.display = 'none';
+      deductionSelect.value = ''; deductionAmount.value = '';
+      updateCalculations();
+    });
+  }
 
   function updateCalculations() {
     const bonus = parseFloat(bonusInput.value) || 0;
-
-    // Calculate allowances total
+    
     let allowancesTotal = 0;
-    document.querySelectorAll('.allowance-input').forEach(input => {
-      allowancesTotal += parseFloat(input.value) || 0;
-    });
+    document.querySelectorAll('.allowance-input').forEach(i => allowancesTotal += parseFloat(i.value) || 0);
+    
+    let otherDeductionsTotal = 0;
+    document.querySelectorAll('.deduction-input').forEach(i => otherDeductionsTotal += parseFloat(i.value) || 0);
 
-    // Calculate deductions total
-    let deductionsTotal = 0;
-    document.querySelectorAll('.deduction-input').forEach(input => {
-      deductionsTotal += parseFloat(input.value) || 0;
-    });
+    const grossIncomeMonthly = monthlySalary + bonus + allowancesTotal;
+    const grossIncomeAnnual = grossIncomeMonthly * 12;
 
-    // Calculate gross income for display (includes allowances)
-    const grossIncome = basicSalary + bonus + allowancesTotal;
-
-    // Calculate statutory deductions using salary setting data
-    let statutoryDeductions = 0;
-    if (salarySettingData && salarySettingData.statutory_deductions) {
-      salarySettingData.statutory_deductions.forEach(deduction => {
-        if (deduction.is_active !== false) {
-          const percentage = parseFloat(deduction.percentage) || 0;
-          const baseAmount = calculateAmountBasedOnComponents(deduction.based_on);
-          statutoryDeductions += (baseAmount * percentage / 100);
-        }
+    // Statutory
+    let statutoryTotal = 0;
+    if (salarySettingData.statutory_deductions) {
+      salarySettingData.statutory_deductions.forEach(s => {
+        if (s.is_active === false) return;
+        const base = calculateBaseAmount(s.based_on || 'B', s.based_on_type || 'component');
+        let amt = 0;
+        const type = s.calculation_type || 'percentage';
+        if (type === 'percentage') amt = (base * (s.percentage || 0) / 100);
+        else if (type === 'fixed') amt = parseFloat(s.fixed_amount) || 0;
+        else if (type === 'combined') amt = (base * (s.percentage || 0) / 100) + (parseFloat(s.fixed_amount) || 0);
+        statutoryTotal += amt;
       });
     }
 
-    // Calculate total reliefs
-    let totalReliefs = 0;
-    if (salarySettingData && salarySettingData.reliefs_exemptions) {
-      salarySettingData.reliefs_exemptions.forEach(relief => {
-        let amount = 0;
-
-        // First determine the base amount based on 'based_on' property
-        let baseAmount = 0;
-        if (relief.based_on) {
-          if (relief.based_on.toUpperCase() === 'GROSS_INCOME') {
-            baseAmount = (basicSalary + bonus) * 12; // ONLY BASIC + BONUS - NO ALLOWANCES
-          } else {
-            // Handle component codes
-            baseAmount = calculateAmountBasedOnComponents(relief.based_on) * 12;
-          }
-        } else {
-          // If no based_on specified, use basic salary + bonus
-          baseAmount = (basicSalary + bonus) * 12; // ONLY BASIC + BONUS - NO ALLOWANCES
-        }
-
-        // Now calculate the relief amount based on the base amount
-        if (relief.formula_type === 'percentage_plus_fixed') {
-          // Handle percentage + fixed amount
-          if (relief.percentage) {
-            amount += (baseAmount * parseFloat(relief.percentage) / 100);
-          }
-          if (relief.fixed_amount) {
-            amount += parseFloat(relief.fixed_amount) || 0;
-          }
-        } else {
-          // Handle standard percentage or fixed
-          if (relief.percentage) {
-            amount += (baseAmount * parseFloat(relief.percentage) / 100);
-          }
-          if (relief.fixed_amount) {
-            amount += parseFloat(relief.fixed_amount) || 0;
-          }
-        }
-
-        totalReliefs += amount;
+    // Reliefs
+    let totalReliefs = statutoryTotal * 12;
+    if (salarySettingData.reliefs_exemptions) {
+      salarySettingData.reliefs_exemptions.forEach(r => {
+        if (r.is_active === false) return;
+        let base = 0;
+        if (r.based_on === 'gross_income') base = grossIncomeAnnual;
+        else base = calculateBaseAmount(r.based_on, r.based_on_type || 'component') * 12;
+        
+        let amt = 0;
+        const type = r.calculation_type || (r.formula_type === 'percentage_plus_fixed' ? 'combined' : r.formula_type || 'fixed');
+        if (type === 'percentage') amt = (base * (r.percentage || 0) / 100);
+        else if (type === 'fixed') amt = parseFloat(r.fixed_amount) || 0;
+        else if (type === 'combined') amt = (base * (r.percentage || 0) / 100) + (parseFloat(r.fixed_amount) || 0);
+        totalReliefs += amt;
       });
     }
 
-    // Add statutory deductions to total reliefs
-    totalReliefs += statutoryDeductions * 12; // Convert to annual
-
-    // Calculate taxable income (annual) - ONLY BASIC + BONUS
-    const annualGrossIncome = (basicSalary + bonus) * 12; // NO ALLOWANCES
-    const taxableIncome = Math.max(0, annualGrossIncome - totalReliefs);
-
-    // Calculate PAYE tax using tax brackets from salary setting
+    // Tax
+    const taxableIncome = Math.max(0, grossIncomeAnnual - totalReliefs);
     let annualTax = 0;
-    if (salarySettingData && salarySettingData.tax_brackets) {
-      let remainingIncome = taxableIncome;
-
-      salarySettingData.tax_brackets.forEach(bracket => {
-        if (remainingIncome > 0) {
-          const bracketLimit = bracket.limit !== null && bracket.limit !== undefined
-            ? parseFloat(bracket.limit)
-            : remainingIncome; // null limit means "all remaining"
-
-          const taxableAmount = Math.min(remainingIncome, bracketLimit);
-          const taxRate = parseFloat(bracket.rate) || 0;
-          const taxAmount = taxableAmount * taxRate / 100;
-
-          annualTax += taxAmount;
-          remainingIncome -= taxableAmount;
-        }
+    if (salarySettingData.tax_brackets) {
+      let remaining = taxableIncome;
+      salarySettingData.tax_brackets.forEach(b => {
+        if (remaining <= 0) return;
+        const limit = (b.limit === null || b.limit === undefined) ? remaining : parseFloat(b.limit);
+        const taxableAmt = Math.min(remaining, limit);
+        annualTax += (taxableAmt * (parseFloat(b.rate) || 0) / 100);
+        remaining -= taxableAmt;
       });
     }
-
-    // Convert to monthly
     const monthlyTax = annualTax / 12;
 
-    // Calculate take home pay
-    const takeHomePay = grossIncome - statutoryDeductions - monthlyTax - deductionsTotal;
+    const netSalary = grossIncomeMonthly - statutoryTotal - monthlyTax - otherDeductionsTotal;
 
-    // Update display
+    // Update UI
     document.getElementById('bonusAmount').textContent = formatCurrency(bonus);
     document.getElementById('allowancesTotal').textContent = formatCurrency(allowancesTotal);
-    document.getElementById('grossIncome').textContent = formatCurrency(grossIncome);
-    document.getElementById('statutoryDeductions').textContent = formatCurrency(statutoryDeductions);
+    document.getElementById('grossIncome').textContent = formatCurrency(grossIncomeMonthly);
+    document.getElementById('statutoryDeductions').textContent = formatCurrency(statutoryTotal);
     document.getElementById('payeTax').textContent = formatCurrency(monthlyTax);
-    document.getElementById('otherDeductions').textContent = formatCurrency(deductionsTotal);
-    document.getElementById('takeHomePay').textContent = formatCurrency(takeHomePay);
+    document.getElementById('otherDeductions').textContent = formatCurrency(otherDeductionsTotal);
+    document.getElementById('takeHomePay').textContent = formatCurrency(netSalary);
   }
 
   function formatCurrency(amount) {
-    return '₦' + amount.toLocaleString('en-NG', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
+    return '₦' + amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  function checkEmptyTable(tableId, message) {
-    const table = document.getElementById(tableId);
-    const tbody = table.querySelector('tbody');
-
-    if (tbody.children.length === 0) {
-      const emptyMessage = document.createElement('p');
-      emptyMessage.className = 'text-muted text-center py-3';
-      emptyMessage.textContent = message;
-      table.parentElement.appendChild(emptyMessage);
-    }
-  }
+  // Initial
+  bonusInput.addEventListener('input', updateCalculations);
+  document.querySelectorAll('.allowance-input, .deduction-input').forEach(i => i.addEventListener('input', updateCalculations));
+  document.querySelectorAll('.remove-allowance, .remove-deduction').forEach(b => b.addEventListener('click', (e) => { e.target.closest('tr').remove(); updateCalculations(); }));
+  updateCalculations();
 });
 </script>
 {% endblock %}

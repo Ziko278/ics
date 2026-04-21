@@ -111,6 +111,25 @@
             </div>
             {% endif %}
 
+            <!-- Additional Info (Captured at profile) -->
+            {% if record.additional_field_values %}
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <h6 class="text-muted mb-2">Additional Profile Information</h6>
+                    <div class="row g-2">
+                        {% for field in structure.salary_setting.additional_fields %}
+                        {% with code=field.code %}
+                        <div class="col-md-4">
+                            <strong>{{ field.name }}:</strong> 
+                            <span>₦{{ record.additional_field_values|get_item:code|default:0|floatformat:2|intcomma }}</span>
+                        </div>
+                        {% endwith %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Basic Components Breakdown -->
             <div class="row mb-3">
                 <div class="col-12">

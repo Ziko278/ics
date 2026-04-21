@@ -6710,6 +6710,7 @@ def salary_structure_create_view(request):
             'reliefs_exemptions': setting.reliefs_exemptions,  # Add this
             'tax_brackets': setting.tax_brackets,  # Add this
             'statutory_deductions': setting.statutory_deductions,  # Add this
+            'additional_fields': setting.additional_fields,  # Add this
         }
 
     context = {
@@ -6752,15 +6753,17 @@ def salary_structure_update_view(request, pk):
             'reliefs_exemptions': setting.reliefs_exemptions,  # Add this
             'tax_brackets': setting.tax_brackets,  # Add this
             'statutory_deductions': setting.statutory_deductions,  # Add this
+            'additional_fields': setting.additional_fields,  # Add this
         }
-
     context = {
         'form': form,
         'structure': structure,
         'salary_settings_json': json.dumps(salary_settings_json),
+        'additional_field_values_json': json.dumps(structure.additional_field_values),  # ADD THIS
         'page_title': f'Edit Salary: {structure.staff}',
         'action': 'Update'
     }
+
     return render(request, 'finance/salary_structure/form.html', context)
 
 
@@ -6797,6 +6800,7 @@ def calculate_salary_breakdown(structure):
     monthly_salary = structure.monthly_salary
     annual_salary = monthly_salary * 12
     setting = structure.salary_setting
+    additional_field_values = structure.additional_field_values or {}
 
     # Round to 2 decimal places
     def round_decimal(value):
@@ -6826,17 +6830,21 @@ def calculate_salary_breakdown(structure):
     leave_allowance_monthly = round_decimal(leave_allowance_annual / 12)
 
     # Helper function to calculate amount based on component codes
-    def calculate_based_on_components(based_on):
+    def calculate_based_on_components(based_on, based_on_type='component'):
         if not based_on:
             return Decimal('0')
+
+        # Handle additional fields (monthly value stored → convert to annual)
+        if based_on_type == 'additional_field':
+            val = additional_field_values.get(based_on, 0) or 0
+            return Decimal(str(val)) * 12
 
         if based_on.upper() == 'TOTAL':
             return sum(comp['monthly'] for comp in basic_components.values()) * 12
 
         if based_on.upper() == 'GROSS_INCOME':
-            return Decimal('0')  # Will be handled separately
+            return Decimal('0')
 
-        # Handle component codes like "B+H+T"
         codes = [code.strip().upper() for code in based_on.split('+')]
         total = Decimal('0')
         for code in codes:
@@ -6898,17 +6906,22 @@ def calculate_salary_breakdown(structure):
     for deduction in setting.statutory_deductions:
         if deduction.get('is_active', True):
             percentage = Decimal(str(deduction.get('percentage', 0)))
-            base_amount = calculate_based_on_components(deduction.get('based_on', ''))
+            based_on = deduction.get('based_on', '')
+            based_on_type = deduction.get('based_on_type', 'component')  # ADD
+            base_amount = calculate_based_on_components(based_on, based_on_type)  # UPDATED
             amount = round_decimal((base_amount * percentage) / Decimal('100'))
 
             statutory_deductions.append({
                 'name': deduction['name'],
                 'percentage': percentage,
                 'monthly': amount,
-                'annual': round_decimal(amount * 12)
+                'annual': round_decimal(amount * 12),
+                'based_on': based_on,  # ADD
+                'based_on_type': based_on_type  # ADD
             })
             total_statutory_deductions += amount
             total_reliefs += amount
+
     # Calculate reliefs and exemptions
     reliefs = []
 
@@ -7009,8 +7022,10 @@ def calculate_salary_breakdown(structure):
         'statutory_deductions': [{
             'name': s['name'],
             'percentage': float(s['percentage']),
-            'monthly': float(s['monthly'])/12,
-            'annual': float(s['annual'])/12
+            'monthly': float(s['monthly']) / 12,
+            'annual': float(s['annual']) / 12,
+            'based_on': s['based_on'],
+            'based_on_type': s['based_on_type']
         } for s in statutory_deductions],
         'total_statutory_deductions': float(total_statutory_deductions),
         'reliefs': [{
@@ -7213,6 +7228,7 @@ def process_payroll_view(request, structure_id):
             record.notes = notes
             record.additional_income = convert_decimals(allowances)
             record.other_deductions = convert_decimals(deductions)
+            record.additional_field_values = structure.additional_field_values
         else:
             record = SalaryRecord(
                 staff=structure.staff,
@@ -7227,6 +7243,7 @@ def process_payroll_view(request, structure_id):
                 bonus=bonus,
                 additional_income=convert_decimals(allowances),
                 other_deductions=convert_decimals(deductions),
+                additional_field_values=structure.additional_field_values,
                 notes=notes,
                 created_by=request.user
             )
@@ -7265,7 +7282,8 @@ def process_payroll_view(request, structure_id):
         'salary_setting_data': json.dumps({
             'statutory_deductions': structure.salary_setting.statutory_deductions,
             'tax_brackets': structure.salary_setting.tax_brackets,
-            'reliefs_exemptions': structure.salary_setting.reliefs_exemptions
+            'reliefs_exemptions': structure.salary_setting.reliefs_exemptions,
+            'additional_values': structure.additional_field_values
         })
     }
     return render(request, 'finance/payroll/process.html', context)
@@ -7415,7 +7433,8 @@ def salary_record_detail_view(request, pk):
             'basic_components': structure.salary_setting.basic_components,
             'statutory_deductions': structure.salary_setting.statutory_deductions,
             'tax_brackets': structure.salary_setting.tax_brackets,
-            'reliefs_exemptions': structure.salary_setting.reliefs_exemptions
+            'reliefs_exemptions': structure.salary_setting.reliefs_exemptions,
+            'additional_values': record.additional_field_values or structure.additional_field_values
         })
     }
 
@@ -7603,6 +7622,23 @@ def download_payslip_pdf(request, pk):
                     f"  {name}",
                     'Additional',
                     f"{amount_val:,.2f}"
+                ])
+
+    # Additional Profile Fields (New)
+    add_field_values = record.additional_field_values or structure.additional_field_values
+    if add_field_values:
+        has_add_header = False
+        for field in structure.salary_setting.additional_fields:
+            code = field.get('code')
+            val = float(add_field_values.get(code, 0))
+            if val > 0:
+                if not has_add_header:
+                    table_data.append(['ADDITIONAL INFO', '', ''])
+                    has_add_header = True
+                table_data.append([
+                    f"  {field.get('name')}",
+                    '',
+                    f"{val:,.2f}"
                 ])
 
     # Total Income Row
@@ -9161,6 +9197,36 @@ def download_annual_payslip_pdf(request, structure_id):
         spaceBefore=10
     )
     elements.append(Paragraph("INCOME BREAKDOWN", income_title_style))
+
+    # Additional Profile Fields (New)
+    if structure.salary_setting.additional_fields and structure.additional_field_values:
+        add_fields_data = [['Field', 'Annual Total (N)']]
+        has_vals = False
+        for field in structure.salary_setting.additional_fields:
+            code = field.get('code')
+            # Annual value is monthly value * months covered
+            val = float(structure.additional_field_values.get(code, 0)) * annual_data['months_count']
+            if val > 0:
+                add_fields_data.append([field.get('name'), f"{val:,.2f}"])
+                has_vals = True
+        
+        if has_vals:
+            add_fields_table = Table(add_fields_data, colWidths=[4.5 * inch, 2.1 * inch])
+            add_fields_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3e5f5')), # Light purple
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#6a1b9a')),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(Paragraph("ADDITIONAL INFORMATION", income_title_style))
+            elements.append(add_fields_table)
+            elements.append(Spacer(1, 0.15 * inch))
 
     # Basic Salary Components
     if annual_data['basic_components_breakdown']:
