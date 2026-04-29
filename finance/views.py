@@ -2093,7 +2093,7 @@ class ExpenseUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormEr
 
 class ExpenseDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = ExpenseModel
-    permission_required = 'finance.view_expensemodel'
+    permission_required = 'finance.c'
     template_name = 'finance/expense/detail.html'
     context_object_name = "expense"
 
@@ -2119,6 +2119,16 @@ class ExpensePrintVoucherView(LoginRequiredMixin, PermissionRequiredMixin, Detai
 
         return context
 
+
+class ExpenseDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, DeleteView):
+    model = ExpenseModel
+    permission_required = "finance.add_expensemodel"
+    template_name = "finance/expense/delete.html"
+    context_object_name = "expense"
+    success_message = "Expense deleted successfully"
+
+    def get_success_url(self):
+        return reverse("expense_index")
 
 # -------------------------
 # Income Category Views
@@ -2427,6 +2437,17 @@ class IncomeDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     permission_required = 'finance.view_expensemodel'
     template_name = 'finance/income/detail.html'
     context_object_name = "income"
+
+
+class IncomeDeleteView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, DeleteView):
+    model = IncomeModel
+    permission_required = "finance.delete_incomemodel"
+    template_name = "finance/income/delete.html"
+    context_object_name = "income"
+    success_message = "Income deleted successfully"
+
+    def get_success_url(self):
+        return reverse("income_index")
 
 
 # ===================================================================

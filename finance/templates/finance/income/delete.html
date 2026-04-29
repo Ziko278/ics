@@ -1,0 +1,65 @@
+{% extends 'admin_site/layout.html' %}
+{% load humanize %}
+
+{% block 'main' %}
+<style>
+    .warning-box {
+        border-left: 5px solid #dc3545;
+        background: #fff5f5;
+        padding: 1.5rem;
+        border-radius: .5rem;
+    }
+    .danger-icon {
+        font-size: 3rem;
+        color: #dc3545;
+    }
+</style>
+
+<div class="col-lg-8 mx-auto">
+    <div class="card mt-4">
+        <div class="card-body text-center">
+
+            <div class="mb-3">
+                <i class="bi bi-exclamation-triangle-fill danger-icon"></i>
+            </div>
+
+            <h4 class="text-danger mb-3">Delete Income Record</h4>
+
+            <div class="warning-box text-start mb-4">
+                <p class="mb-2">
+                    You are about to delete this income:
+                </p>
+
+                <ul class="mb-3">
+                    <li><strong>Description:</strong> {{ income.description }}</li>
+                    <li><strong>Amount:</strong>
+                        {% if income.currency == 'dollar' %}${% else %}₦{% endif %}
+                        {{ income.amount|intcomma }}
+                    </li>
+                    <li><strong>Date:</strong> {{ income.income_date }}</li>
+                    <li><strong>Category:</strong> {{ income.category.name }}</li>
+                </ul>
+
+                <p class="text-danger mb-0">
+                    ⚠ This action is <strong>permanent</strong> and cannot be undone.
+                    This record will be completely removed from the system.
+                </p>
+            </div>
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="d-flex justify-content-center gap-3">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Yes, Delete Permanently
+                    </button>
+
+                    <a href="{% url 'income_detail' income.pk %}" class="btn btn-secondary">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

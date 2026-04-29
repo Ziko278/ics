@@ -32,3 +32,4 @@ urlpatterns = [
 
     path('change-password/', parent_change_password_view, name='parent_change_password'),
 ]
+

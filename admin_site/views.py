@@ -231,7 +231,7 @@ class SchoolSettingCreateView(LoginRequiredMixin, PermissionRequiredMixin, Succe
     success_message = 'Settings Created Successfully'
 
     def get_success_url(self):
-        return reverse('school_setting_detail', kwargs={'pk': self.object.pk})
+        return reverse('school_setting_detail')
 
     def dispatch(self, request, *args, **kwargs):
         if SchoolSettingModel.objects.exists():

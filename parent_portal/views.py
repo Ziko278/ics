@@ -210,9 +210,7 @@ class FeeInvoiceDetailView(ParentPortalMixin, DetailView):
     template_name = 'parent_portal/fee_invoice_detail.html' # New template needed
     context_object_name = 'invoice'
 
-    def get_queryset(self):
-        # Ensure parent can only see invoices for their selected ward
-        return InvoiceModel.objects.filter(student=self.selected_ward)
+
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

@@ -124,15 +124,18 @@
                 </div>
             </div>
 
-            {# PUT serialized JSON from view into <script type="application/json"> so JS can parse safely #}
-            <script id="basic_components" type="application/json">{{ basic_components_json|safe }}</script>
-            <script id="allowances" type="application/json">{{ allowances_json|safe }}</script>
-            <script id="reliefs_exemptions" type="application/json">{{ reliefs_json|safe }}</script>
-            <script id="tax_brackets" type="application/json">{{ tax_brackets_json|safe }}</script>
-            <script id="income_items" type="application/json">{{ income_items_json|safe }}</script>
-            <script id="statutory_deductions" type="application/json">{{ statutory_deductions_json|safe }}</script>
-            <script id="other_deductions_config" type="application/json">{{ other_deductions_json|safe }}</script>
-            <script id="additional_fields" type="application/json">{{ additional_fields_json|safe }}</script>
+            <script>
+            const SALARY_DATA = {
+                basic_components: {{ basic_components_json|safe }},
+                allowances: {{ allowances_json|safe }},
+                reliefs: {{ reliefs_json|safe }},
+                tax_brackets: {{ tax_brackets_json|safe }},
+                income_items: {{ income_items_json|safe }},
+                statutory_deductions: {{ statutory_deductions_json|safe }},
+                other_deductions: {{ other_deductions_json|safe }},
+                additional_fields: {{ additional_fields_json|safe }}
+            };
+        </script>
 
             <!-- Main JSON / sections -->
             <div class="accordion" id="salarySettingAccordion">
@@ -314,25 +317,21 @@
 <script>
 (function() {
 
-    function readJson(id) {
-        const el = document.getElementById(id);
-        if (!el) return null;
-        try {
-            return JSON.parse(el.textContent || 'null');
-        } catch (e) {
-            console.warn('Failed parsing JSON from', id, e);
-            return null;
-        }
-    }
+function fmtMoney(amount) {
+    return Number(amount || 0).toLocaleString('en-NG', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
 
-    const basic = readJson('basic_components') || {};
-    const allowances = readJson('allowances') || [];
-    const reliefs = readJson('reliefs_exemptions') || [];
-    const brackets = readJson('tax_brackets') || [];
-    const statutory = readJson('statutory_deductions') || [];
-    const otherDeductions = readJson('other_deductions_config') || [];
-    const incomeItems = readJson('income_items') || [];
-    const additionalFields = readJson('additional_fields') || [];
+   const basic = SALARY_DATA.basic_components || {};
+const allowances = SALARY_DATA.allowances || [];
+const reliefs = SALARY_DATA.reliefs || [];
+const brackets = SALARY_DATA.tax_brackets || [];
+const statutory = SALARY_DATA.statutory_deductions || [];
+const otherDeductions = SALARY_DATA.other_deductions || [];
+const incomeItems = SALARY_DATA.income_items || [];
+const additionalFields = SALARY_DATA.additional_fields || [];
 
     function getComponentName(code) {
         const components = Object.values(basic || {});

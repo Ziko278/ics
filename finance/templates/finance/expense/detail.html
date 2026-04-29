@@ -28,6 +28,9 @@
                 <a title="Edit Expense Record" href="{% url 'expense_update' expense.pk %}" class="btn btn-warning">
                     <i class="bi bi-pencil-square"></i> Edit
                 </a>
+                <a title="Delete Expense Record" href="{% url 'expense_delete' expense.pk %}" class="btn btn-danger">
+                    <i class="bi bi-trash"></i> Delete
+                </a>
                 <a href="{% url 'expense_index' %}" title="Go Back to List" class="btn btn-secondary">
                     <i class="bi bi-arrow-left"></i> Back to List
                 </a>
