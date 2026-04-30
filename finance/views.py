@@ -2067,7 +2067,6 @@ class ExpenseExportView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return response
 
 
-
 class ExpenseCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
     model = ExpenseModel
     permission_required = 'finance.add_expensemodel'
@@ -2093,7 +2092,7 @@ class ExpenseUpdateView(LoginRequiredMixin, PermissionRequiredMixin, FlashFormEr
 
 class ExpenseDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     model = ExpenseModel
-    permission_required = 'finance.c'
+    permission_required = 'finance.view_expensemodel'
     template_name = 'finance/expense/detail.html'
     context_object_name = "expense"
 
