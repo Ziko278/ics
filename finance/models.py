@@ -2,7 +2,8 @@ import calendar
 import logging
 import uuid
 from decimal import Decimal
-
+from cryptography.fernet import Fernet
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator, MinValueValidator, MaxValueValidator
@@ -114,6 +115,8 @@ class StudentFundingModel(models.Model):
         POS = 'pos', 'POS'
         BANK_TELLER = 'bank teller', 'Bank Teller'
         BANK_TRANSFER = 'bank transfer', 'Bank Transfer'
+        PAYSTACK = 'paystack', 'Paystack'  # ← new
+        FLUTTERWAVE = 'flutterwave', 'Flutterwave'  # ← new
 
     class PaymentMode(models.TextChoices):
         OFFLINE = 'offline', 'Offline'
@@ -196,6 +199,8 @@ class StaffFundingModel(models.Model):
         POS = 'pos', 'POS'
         BANK_TELLER = 'bank teller', 'Bank Teller'
         BANK_TRANSFER = 'bank transfer', 'Bank Transfer'
+        PAYSTACK = 'paystack', 'Paystack'  # ← new
+        FLUTTERWAVE = 'flutterwave', 'Flutterwave'  # ← new
 
     class PaymentMode(models.TextChoices):
         OFFLINE = 'offline', 'Offline'
@@ -502,6 +507,7 @@ class FeePaymentModel(models.Model):
         POS = 'pos', 'POS'
         WALLET = 'wallet', 'Fee Wallet'
         DOLLAR_PAY = 'dollar_pay', 'Dollar Pay'
+        ONLINE = 'online', 'Online Payment'
         OTHERS = 'others', 'OTHERS'
 
     class Currency(models.TextChoices):
@@ -2028,3 +2034,118 @@ class Bonus(models.Model):
 
         self.clean()
         super().save(*args, **kwargs)
+
+
+class PaymentGatewayModel(models.Model):
+
+    class Gateway(models.TextChoices):
+        PAYSTACK = 'paystack', 'Paystack'
+        FLUTTERWAVE = 'flutterwave', 'Flutterwave'
+
+    gateway = models.CharField(
+        max_length=20,
+        choices=Gateway.choices,
+        unique=True,  # one config per gateway type
+        help_text="Payment gateway provider."
+    )
+    display_name = models.CharField(
+        max_length=100,
+        help_text="Label shown to parents/staff on the payment page."
+    )
+    public_key = models.TextField(
+        help_text="Public/publishable key from the gateway dashboard."
+    )
+    _secret_key = models.TextField(
+        db_column='secret_key',
+        help_text="Secret key — stored encrypted."
+    )
+    _webhook_secret = models.TextField(
+        db_column='webhook_secret',
+        help_text="Webhook secret/hash — stored encrypted."
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Only active gateways appear on the payment page."
+    )
+    is_test_mode = models.BooleanField(
+        default=False,
+        help_text="When enabled, test keys are expected and payments are not real."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Payment Gateway"
+        verbose_name_plural = "Payment Gateways"
+        ordering = ['gateway']
+
+    def __str__(self):
+        mode = " (Test)" if self.is_test_mode else ""
+        return f"{self.display_name}{mode}"
+
+    # ------------------------------------------------------------------
+    # Encryption helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fernet():
+        key = settings.FIELD_ENCRYPTION_KEY
+        if not key:
+            raise ValueError("FIELD_ENCRYPTION_KEY is not set in settings.")
+        return Fernet(key.encode() if isinstance(key, str) else key)
+
+    @staticmethod
+    def _encrypt(value: str) -> str:
+        if not value:
+            return ''
+        return PaymentGatewayModel._fernet().encrypt(value.encode()).decode()
+
+    @staticmethod
+    def _decrypt(value: str) -> str:
+        if not value:
+            return ''
+        try:
+            return PaymentGatewayModel._fernet().decrypt(value.encode()).decode()
+        except Exception:
+            return ''
+
+    # ------------------------------------------------------------------
+    # Secret key property
+    # ------------------------------------------------------------------
+
+    @property
+    def secret_key(self) -> str:
+        return self._decrypt(self._secret_key)
+
+    @secret_key.setter
+    def secret_key(self, raw_value: str):
+        self._secret_key = self._encrypt(raw_value)
+
+    # ------------------------------------------------------------------
+    # Webhook secret property
+    # ------------------------------------------------------------------
+
+    @property
+    def webhook_secret(self) -> str:
+        return self._decrypt(self._webhook_secret)
+
+    @webhook_secret.setter
+    def webhook_secret(self, raw_value: str):
+        self._webhook_secret = self._encrypt(raw_value)
+
+    # ------------------------------------------------------------------
+    # Convenience
+    # ------------------------------------------------------------------
+
+    def masked_secret_key(self) -> str:
+        """Returns last 4 chars for display, e.g. ****xK9z"""
+        decrypted = self.secret_key
+        if len(decrypted) > 4:
+            return f"****{decrypted[-4:]}"
+        return "****"
+
+    def masked_webhook_secret(self) -> str:
+        decrypted = self.webhook_secret
+        if len(decrypted) > 4:
+            return f"****{decrypted[-4:]}"
+        return "****"

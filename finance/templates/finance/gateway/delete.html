@@ -1,0 +1,32 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+<div class="col-lg-5 col-md-8 mx-auto">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title text-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>Remove Payment Gateway
+            </h5>
+            <p>
+                Are you sure you want to remove the
+                <strong>{{ gateway.display_name }}</strong>
+                (<span class="text-muted">{{ gateway.get_gateway_display }}</span>)
+                gateway configuration?
+            </p>
+            <p class="text-muted small">
+                This will permanently delete the stored keys. Any pending online
+                payments initiated through this gateway should be resolved first.
+            </p>
+            <form method="POST">
+                {% csrf_token %}
+                <a href="{% url 'payment_gateway_list' %}" class="btn btn-secondary">
+                    <i class="bi bi-x-lg"></i> Cancel
+                </a>
+                <button type="submit" class="btn btn-danger ms-2">
+                    <i class="bi bi-trash"></i> Yes, Remove
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

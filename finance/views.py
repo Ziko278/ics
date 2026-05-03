@@ -1,10 +1,13 @@
 import calendar
 import json
 import io
+import requests as http_requests
+from django.views.decorators.csrf import csrf_exempt
 import traceback
 from datetime import date, datetime, timedelta
 from calendar import monthrange
 from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from reportlab.lib.pagesizes import landscape, A4
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
@@ -52,18 +55,26 @@ from .models import FinanceSettingModel, SupplierPaymentModel, PurchaseAdvancePa
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryRecord, SalaryAdvance, \
     SalaryStructure, StudentFundingModel, InvoiceItemModel, AdvanceSettlementModel, \
     SchoolBankDetail, StaffLoan, StaffLoanRepayment, StaffFundingModel, DiscountModel, DiscountApplicationModel, \
-    StudentDiscountModel, OtherPaymentClearanceModel, OtherPaymentModel, SalarySetting, Bonus
+    StudentDiscountModel, OtherPaymentClearanceModel, OtherPaymentModel, SalarySetting, Bonus, PaymentGatewayModel
 from .forms import FinanceSettingForm, SupplierPaymentForm, PurchaseAdvancePaymentForm, FeeForm, FeeGroupForm, \
     InvoiceGenerationForm, FeePaymentForm, ExpenseCategoryForm, ExpenseForm, IncomeCategoryForm, \
     IncomeForm, TermlyFeeAmountFormSet, FeeMasterCreateForm, BulkPaymentForm, StaffBankDetailForm, PaysheetRowForm, \
     SalaryAdvanceForm, SalaryStructureForm, StudentFundingForm, SchoolBankDetailForm, \
     StaffLoanForm, StaffLoanRepaymentForm, StaffFundingForm, DiscountForm, DiscountApplicationForm, \
     StudentDiscountAssignForm, OtherPaymentClearanceForm, OtherPaymentCreateForm, SalarySettingForm, BonusForm, \
-    BonusFilterForm
+    BonusFilterForm, PaymentGatewayForm
 from finance.tasks import generate_invoices_task
 from pytz import timezone as pytz_timezone
 
 from .utility import *
+from .payment_helpers import (
+    do_confirm_fee_payment,
+    do_confirm_student_funding,
+    do_confirm_staff_funding, generate_payment_reference,
+)
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _currency_symbol(currency_value):
@@ -1487,118 +1498,25 @@ def confirm_fee_payment_view(request, payment_id):
 
     override_allocation = request.POST.get('override_allocation') == 'true'
 
-    with transaction.atomic():
-        item_breakdown = {}
+    # Set confirmed_by before calling helper so it's saved correctly
+    payment.confirmed_by = request.user
 
-        payment.status = FeePaymentModel.PaymentStatus.CONFIRMED
-        payment.confirmed_by = request.user
-        payment.save(update_fields=['status', 'confirmed_by'])
+    try:
+        do_confirm_fee_payment(payment, override_allocation=override_allocation, request=request)
+        allocation_method = (
+            "auto-distributed" if override_allocation
+            else "parent's specified items"
+        )
+        messages.success(
+            request,
+            f"Payment of ₦{payment.amount:,.2f} confirmed successfully ({allocation_method})."
+        )
+    except ValueError as e:
+        messages.error(request, str(e))
+    except Exception as e:
+        logger.exception(f"Unexpected error confirming fee payment {payment_id}")
+        messages.error(request, f"An unexpected error occurred: {e}")
 
-        invoice = payment.invoice
-        amount_to_allocate = payment.amount
-
-        import json
-        import re
-        parent_allocations = {}
-
-        if payment.notes:
-            match = re.search(r'Item Allocations:\s*(\{[^}]+\}|\[[^\]]+\])', payment.notes, re.DOTALL)
-            if match:
-                try:
-                    allocations_str = match.group(1)
-                    full_json_match = re.search(r'Item Allocations:\s*(\{.*?\n.*?\})', payment.notes, re.DOTALL)
-                    if full_json_match:
-                        allocations_str = full_json_match.group(1)
-                    parent_allocations = json.loads(allocations_str)
-                except json.JSONDecodeError:
-                    pass
-
-        def get_unpaid_items(invoice):
-            """
-            Fetch items where amount_paid < amount (DB pre-filter),
-            then filter in Python using the property which accounts for discounts.
-            """
-            candidates = invoice.items.select_related(
-                'fee_master__fee', 'paid_by_sibling'
-            ).prefetch_related('discounts_applied').filter(
-                amount_paid__lt=F('amount')  # DB pre-screen only
-            ).order_by('id')
-            # Exact filter using the property (accounts for discounts & sibling payments)
-            return [item for item in candidates if item.balance > Decimal('0.01')]
-
-        def apply_sibling_logic(item, invoice):
-            """Handle parent-bound fee propagation to siblings."""
-            if item.fee_master.fee.parent_bound and item.amount_paid >= item.amount_after_discount:
-                student = invoice.student
-                if student.parent:
-                    for sibling in student.parent.wards.exclude(pk=student.pk):
-                        try:
-                            sibling_invoice = InvoiceModel.objects.get(
-                                student=sibling,
-                                session=invoice.session,
-                                term=invoice.term
-                            )
-                            sibling_item = InvoiceItemModel.objects.get(
-                                invoice=sibling_invoice,
-                                fee_master=item.fee_master
-                            )
-                            sibling_item.paid_by_sibling = student
-                            sibling_item.amount_paid = sibling_item.amount_after_discount
-                            sibling_item.save(update_fields=['paid_by_sibling', 'amount_paid'])
-                        except (InvoiceModel.DoesNotExist, InvoiceItemModel.DoesNotExist):
-                            continue
-
-        if parent_allocations and not override_allocation:
-            for item_id_str, allocation_data in parent_allocations.items():
-                try:
-                    item_id = int(item_id_str)
-                    allocated_amount = Decimal(str(allocation_data['amount']))
-                    item = InvoiceItemModel.objects.prefetch_related('discounts_applied').get(
-                        pk=item_id, invoice=invoice
-                    )
-                    payable = min(item.balance, allocated_amount)
-                    item.amount_paid += payable
-                    item.save(update_fields=['amount_paid'])
-                    amount_to_allocate -= payable
-                    item_breakdown[str(item.pk)] = str(payable)
-                    apply_sibling_logic(item, invoice)
-                except (ValueError, InvoiceItemModel.DoesNotExist):
-                    continue
-
-            # Distribute any leftover amount
-            if amount_to_allocate > Decimal('0.01'):
-                for item in get_unpaid_items(invoice):
-                    if amount_to_allocate <= Decimal('0'):
-                        break
-                    payable = min(item.balance, amount_to_allocate)
-                    item.amount_paid += payable
-                    item.save(update_fields=['amount_paid'])
-                    amount_to_allocate -= payable
-                    current = Decimal(item_breakdown.get(str(item.pk), '0'))
-                    item_breakdown[str(item.pk)] = str(current + payable)
-        else:
-            for item in get_unpaid_items(invoice):
-                if amount_to_allocate <= Decimal('0'):
-                    break
-                payable = min(item.balance, amount_to_allocate)
-                item.amount_paid += payable
-                item.save(update_fields=['amount_paid'])
-                amount_to_allocate -= payable
-                item_breakdown[str(item.pk)] = str(payable)
-                apply_sibling_logic(item, invoice)
-
-        payment.item_breakdown = item_breakdown
-        payment.save(update_fields=['item_breakdown'])
-
-        invoice.refresh_from_db()
-        if invoice.balance <= Decimal('0.01'):
-            invoice.status = InvoiceModel.Status.PAID
-        else:
-            invoice.status = InvoiceModel.Status.PARTIALLY_PAID
-        invoice.save(update_fields=['status'])
-
-    allocation_method = "auto-distributed" if (not parent_allocations or override_allocation) else "parent's specified items"
-    messages.success(request, f"Payment of ₦{payment.amount:,.2f} confirmed successfully ({allocation_method}).")
     return redirect('finance_pending_payment_index')
 
 
@@ -3990,72 +3908,37 @@ def staff_pending_deposit_payment_list_view(request):
     return render(request, 'finance/funding/staff_pending.html', context)
 
 
+
 @login_required
 @permission_required("finance.change_studentfundingmodel", raise_exception=True)
-@transaction.atomic
 def staff_confirm_payment_view(request, payment_id):
     payment = get_object_or_404(StaffFundingModel, pk=payment_id)
-    staff = payment.staff # Get the staff associated with this payment
 
-    if request.method == 'POST':
-        # Check if the payment is already confirmed or declined
-        if payment.status != 'pending':
-            messages.warning(request, f"Payment is already {payment.status.capitalize()}. Cannot confirm.")
-            # Redirect to a list of payments or the payment detail page
-            return redirect(reverse('pending_deposit_index')) # Replace with your actual URL name
-
-        # Get or create staff wallet
-        staff_wallet, created = StaffWalletModel.objects.get_or_create(staff=staff)
-
-        # Apply the payment amount to the wallet balance
-        # Keeping calculations as float as per original deposit_create_view
-        staff_wallet.balance += payment.amount
-
-        staff_wallet.save() # Save the updated wallet
-
-        # Update the payment status and its internal balance field
-        payment.status = 'confirmed'
-        # Replicate the balance update from the original view
-        payment.save() # Save the updated payment record
-
-        # Log wallet confirmation
-        from pytz import timezone as pytz_timezone
-        localized_created_at = timezone.localtime(now(), timezone=pytz_timezone('Africa/Lagos'))
-        formatted_time = localized_created_at.strftime(
-            f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
-        )
-
-        payment_url = reverse('staff_deposit_detail', kwargs={'pk': payment.pk})
-        staff = StaffProfileModel.objects.get(user=request.user).staff
-        staff_url = reverse('staff_detail', kwargs={'pk': staff.pk}) if staff else '#'
-
-        log = f"""
-        <div class='text-white bg-success p-2' style='border-radius:5px;'>
-          <p>
-            Payment of <a href="{payment_url}"><b>₦{payment.amount:.2f}</b></a> for
-            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a> was
-            <b>confirmed</b> by
-            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a>.
-            <br>
-            <b>Status:</b> Confirmed &nbsp; | &nbsp;
-            <b>Wallet Balance:</b> ₦{staff_wallet.balance:.2f}
-            <span class='float-end'>{now().strftime('%Y-%m-%d %H:%M:%S')}</span>
-          </p>
-        </div>
-        """
-
-        ActivityLogModel.objects.create(
-            log=log,
-        )
-
-        messages.success(request, f"Payment of ₦{payment.amount} for {staff.first_name} {staff.last_name} confirmed successfully.")
-        return redirect(reverse('staff_deposit_index')) # Replace with your actual URL name
-
-    else:
-        # For GET requests to this URL, you might want to display a confirmation prompt
-        # or just redirect with a message. Assuming redirect for simplicity.
+    if request.method != 'POST':
         messages.info(request, "Please use a POST request to confirm this payment.")
-        return redirect(reverse('staff_pending_deposit_index'))  # Replace with your actual URL name
+        return redirect('staff_pending_deposit_index')
+
+    if payment.status != StaffFundingModel.PaymentStatus.PENDING:
+        messages.warning(
+            request,
+            f"Payment is already {payment.get_status_display()}. Cannot confirm."
+        )
+        return redirect('staff_pending_deposit_index')
+
+    try:
+        do_confirm_staff_funding(payment, request=request)
+        messages.success(
+            request,
+            f"Payment of ₦{payment.amount:,.2f} for "
+            f"{payment.staff.first_name} {payment.staff.last_name} confirmed successfully."
+        )
+    except ValueError as e:
+        messages.error(request, str(e))
+    except Exception as e:
+        logger.exception(f"Unexpected error confirming staff funding {payment_id}")
+        messages.error(request, f"An unexpected error occurred: {e}")
+
+    return redirect('staff_deposit_index')
 
 
 # --- Decline Payment View ---
@@ -4180,6 +4063,16 @@ class StaffUploadDepositView(LoginRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context['title'] = "Upload Deposit Teller"
         context['bank_detail'] = SchoolSettingModel.objects.first()
+
+        # Online payment additions
+        setting = SchoolSettingModel.objects.first()
+        context['online_payment_enabled'] = (
+            setting.online_payment_enabled if setting else False
+        )
+        context['active_gateways'] = PaymentGatewayModel.objects.filter(
+            is_active=True
+        ).values('gateway', 'display_name', 'public_key')
+
         return context
 
     def form_valid(self, form):
@@ -4276,82 +4169,35 @@ def pending_deposit_payment_list_view(request):
 
 @login_required
 @permission_required("finance.change_studentfundingmodel", raise_exception=True)
-@transaction.atomic
 def confirm_payment_view(request, payment_id):
     payment = get_object_or_404(StudentFundingModel, pk=payment_id)
-    student = payment.student # Get the student associated with this payment
 
-    if request.method == 'POST':
-        # Check if the payment is already confirmed or declined
-        if payment.status != 'pending':
-            messages.warning(request, f"Payment is already {payment.status.capitalize()}. Cannot confirm.")
-            # Redirect to a list of payments or the payment detail page
-            return redirect(reverse('pending_deposit_index')) # Replace with your actual URL name
-
-        # Get or create student wallet
-        student_wallet, created = StudentWalletModel.objects.get_or_create(student=student)
-        wallet_type = payment.wallet_type
-
-        if wallet_type == StudentFundingModel.WalletType.CANTEEN:
-            student_wallet.balance += payment.amount
-
-            if student_wallet.debt > 0:
-                if student_wallet.balance > student_wallet.debt:
-                    student_wallet.balance -= student_wallet.debt
-                    student_wallet.debt = 0.0
-                else:
-                    student_wallet.debt -= student_wallet.balance
-                    student_wallet.balance = 0.0
-        else:  # FEE wallet
-            student_wallet.fee_balance += payment.amount
-
-        student_wallet.save()
-
-        # Update the payment status and its internal balance field
-        payment.status = 'confirmed'
-        # Replicate the balance update from the original view
-        payment.balance = student_wallet.balance - student_wallet.debt
-        payment.save() # Save the updated payment record
-
-        # Log wallet confirmation
-        from pytz import timezone as pytz_timezone
-        localized_created_at = timezone.localtime(now(), timezone=pytz_timezone('Africa/Lagos'))
-        formatted_time = localized_created_at.strftime(
-            f"%B {localized_created_at.day}{get_day_ordinal_suffix(localized_created_at.day)} %Y %I:%M%p"
-        )
-
-        student_url = reverse('student_detail', kwargs={'pk': student.pk})
-        payment_url = reverse('deposit_detail', kwargs={'pk': payment.pk})
-        staff = StaffProfileModel.objects.get(user=request.user).staff
-        staff_url = reverse('staff_detail', kwargs={'pk': staff.pk}) if staff else '#'
-
-        log = f"""
-        <div class='text-white bg-success p-2' style='border-radius:5px;'>
-          <p>
-            Payment of <a href="{payment_url}"><b>₦{payment.amount:.2f}</b></a> for
-            <a href="{student_url}"><b>{student.__str__().title()}</b></a> was
-            <b>confirmed</b> by
-            <a href="{staff_url}"><b>{staff.__str__().title()}</b></a>.
-            <br>
-            <b>Status:</b> Confirmed &nbsp; | &nbsp;
-            <b>Wallet Balance:</b> ₦{student_wallet.balance:.2f}
-            <span class='float-end'>{now().strftime('%Y-%m-%d %H:%M:%S')}</span>
-          </p>
-        </div>
-        """
-
-        ActivityLogModel.objects.create(
-            log=log,
-        )
-
-        messages.success(request, f"Payment of ₦{payment.amount} for {student.first_name} {student.last_name} confirmed successfully.")
-        return redirect(reverse('deposit_index')) # Replace with your actual URL name
-
-    else:
-        # For GET requests to this URL, you might want to display a confirmation prompt
-        # or just redirect with a message. Assuming redirect for simplicity.
+    if request.method != 'POST':
         messages.info(request, "Please use a POST request to confirm this payment.")
-        return redirect(reverse('pending_deposit_index'))  # Replace with your actual URL name
+        return redirect('pending_deposit_index')
+
+    if payment.status != StudentFundingModel.PaymentStatus.PENDING:
+        messages.warning(
+            request,
+            f"Payment is already {payment.get_status_display()}. Cannot confirm."
+        )
+        return redirect('pending_deposit_index')
+
+    try:
+        do_confirm_student_funding(payment, request=request)
+        student = payment.student
+        messages.success(
+            request,
+            f"Payment of ₦{payment.amount:,.2f} for "
+            f"{student.first_name} {student.last_name} confirmed successfully."
+        )
+    except ValueError as e:
+        messages.error(request, str(e))
+    except Exception as e:
+        logger.exception(f"Unexpected error confirming student funding {payment_id}")
+        messages.error(request, f"An unexpected error occurred: {e}")
+
+    return redirect('deposit_index')
 
 
 # --- Decline Payment View ---
@@ -10621,3 +10467,924 @@ def staff_bonus_detail_view(request, pk):
     }
 
     return render(request, 'finance/bonus/staff_bonus_detail.html', context)
+
+
+# finance/views.py
+
+class PaymentGatewayListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = PaymentGatewayModel
+    permission_required = 'finance.add_paymentgatewaymodel'
+    template_name = 'finance/gateway/index.html'
+    context_object_name = 'gateway_list'
+
+    def get_queryset(self):
+        return PaymentGatewayModel.objects.all().order_by('gateway')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form'] = PaymentGatewayForm()
+        return context
+
+
+class PaymentGatewayCreateView(
+    LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, CreateView
+):
+    model = PaymentGatewayModel
+    permission_required = 'finance.add_paymentgatewaymodel'
+    form_class = PaymentGatewayForm
+    template_name = 'finance/gateway/index.html'
+    success_message = 'Payment Gateway configured successfully.'
+
+    def get_success_url(self):
+        return reverse('payment_gateway_list')
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == 'GET':
+            return redirect(reverse('payment_gateway_list'))
+        return super().dispatch(request, *args, **kwargs)
+
+
+class PaymentGatewayUpdateView(
+    LoginRequiredMixin, PermissionRequiredMixin, FlashFormErrorsMixin, UpdateView
+):
+    model = PaymentGatewayModel
+    permission_required = 'finance.add_paymentgatewaymodel'
+    form_class = PaymentGatewayForm
+    template_name = 'finance/gateway/index.html'
+    success_message = 'Payment Gateway updated successfully.'
+
+    def get_success_url(self):
+        return reverse('payment_gateway_list')
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == 'GET':
+            return redirect(reverse('payment_gateway_list'))
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        # Gateway provider cannot be changed after creation
+        form.fields.pop('gateway', None)
+        return form
+
+
+class PaymentGatewayDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = PaymentGatewayModel
+    permission_required = 'finance.add_paymentgatewaymodel'
+    template_name = 'finance/gateway/delete.html'
+    context_object_name = 'gateway'
+    success_message = 'Payment Gateway removed successfully.'
+
+    def get_success_url(self):
+        return reverse('payment_gateway_list')
+
+
+
+@login_required
+@require_POST
+def initialize_online_payment_view(request):
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {'status': 'error', 'message': 'Invalid request body.'},
+            status=400
+        )
+
+    # --- Validate gateway ---
+    gateway_name = body.get('gateway', '').strip()
+    try:
+        gateway = PaymentGatewayModel.objects.get(
+            gateway=gateway_name,
+            is_active=True,
+        )
+    except PaymentGatewayModel.DoesNotExist:
+        return JsonResponse(
+            {'status': 'error', 'message': 'Selected payment gateway is not available.'},
+            status=400
+        )
+
+    # --- Validate amount ---
+    try:
+        amount = Decimal(str(body.get('amount', '0')))
+        if amount <= Decimal('0'):
+            raise ValueError
+    except (InvalidOperation, ValueError):
+        return JsonResponse(
+            {'status': 'error', 'message': 'Invalid payment amount.'},
+            status=400
+        )
+
+    payment_target = body.get('payment_target', '').strip()
+    payment_type = body.get('payment_type', 'quick').strip()
+    item_allocations = body.get('item_allocations', {})
+    reference = generate_payment_reference()
+    # Replace the email resolution in initialize_online_payment_view
+
+    # --- Get user email ---
+    # Priority: user.email → staff profile email → body (collected from frontend)
+    email = (
+            request.user.email
+            or getattr(getattr(request.user, 'staff_profile', None), 'staff', None) and
+            getattr(request.user.staff_profile.staff, 'email', None)
+            or body.get('email', '').strip()
+    )
+
+    if not email:
+        return JsonResponse(
+            {'status': 'error', 'message': 'email_required'},
+            status=400
+        )
+
+    # --- Save email to user account if it was missing ---
+    # So we don't ask again next time
+    if not request.user.email and email:
+        try:
+            request.user.email = email
+            request.user.save(update_fields=['email'])
+        except Exception as e:
+            logger.warning(f"Could not save collected email to user account: {e}")
+
+    def build_notes(extra_parts: list = None) -> str:
+        parts = [
+            f"Online Payment via {gateway.get_gateway_display()}.",
+            f"User: {request.user.username}.",
+            f"Payment Type: {payment_type.title()}.",
+            f"Reference: {reference}.",
+        ]
+        if extra_parts:
+            parts.extend(extra_parts)
+        if payment_type == 'itemized' and item_allocations:
+            parts.append(
+                f"Item Allocations: {json.dumps(item_allocations, indent=2)}"
+            )
+        return "\n".join(parts)
+
+    record_id = None
+    record_type = None
+
+    # ==========================================================================
+    # FEE PAYMENT
+    # ==========================================================================
+    if payment_target == 'invoice':
+        invoice_id = body.get('invoice_id')
+        if not invoice_id:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Invoice ID is required.'},
+                status=400
+            )
+
+        try:
+            invoice = InvoiceModel.objects.get(pk=invoice_id)
+        except InvoiceModel.DoesNotExist:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Invoice not found.'},
+                status=404
+            )
+
+        # Security: verify invoice belongs to the selected ward
+        student_id = request.session.get('selected_ward_id')
+        if student_id:
+            if invoice.student.pk != int(student_id):
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Invoice does not belong to the selected student.'},
+                    status=403
+                )
+        elif not request.user.has_perm('finance.add_feepaymentmodel'):
+            return JsonResponse(
+                {'status': 'error', 'message': 'Permission denied.'},
+                status=403
+            )
+
+        # Validate itemized allocations match amount
+        if payment_type == 'itemized':
+            if not item_allocations:
+                return JsonResponse(
+                    {'status': 'error', 'message': 'No fee items selected for itemized payment.'},
+                    status=400
+                )
+            try:
+                total_allocated = sum(
+                    Decimal(str(v['amount'])) for v in item_allocations.values()
+                )
+            except (KeyError, InvalidOperation):
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Invalid item allocation data.'},
+                    status=400
+                )
+            if abs(total_allocated - amount) > Decimal('0.01'):
+                return JsonResponse(
+                    {
+                        'status': 'error',
+                        'message': (
+                            f"Item allocations (₦{total_allocated:,.2f}) must equal "
+                            f"the total amount (₦{amount:,.2f})."
+                        )
+                    },
+                    status=400
+                )
+
+        bank_account = SchoolBankDetail.objects.first()
+
+        extra = [f"Invoice: {invoice.invoice_number}."]
+        if hasattr(invoice, 'student'):
+            extra.append(f"Student: {invoice.student}.")
+
+        payment = FeePaymentModel.objects.create(
+            invoice=invoice,
+            amount=amount,
+            payment_mode=FeePaymentModel.PaymentMode.ONLINE,
+            bank_account=bank_account,
+            date=timezone.now().date(),
+            reference=reference,
+            status=FeePaymentModel.PaymentStatus.PENDING,
+            notes=build_notes(extra),
+        )
+        record_id = payment.pk
+        record_type = 'fee_payment'
+
+    # ==========================================================================
+    # STUDENT WALLET FUNDING
+    # ==========================================================================
+    elif payment_target == 'student_wallet':
+        wallet_type = body.get('wallet_type', '').strip()
+        if wallet_type not in [
+            StudentFundingModel.WalletType.CANTEEN,
+            StudentFundingModel.WalletType.FEE,
+        ]:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Invalid wallet type.'},
+                status=400
+            )
+
+        student_id = request.session.get('selected_ward_id')
+        if not student_id:
+            return JsonResponse(
+                {'status': 'error', 'message': 'No student selected. Please select a ward first.'},
+                status=400
+            )
+
+        from .models import StudentModel
+        try:
+            student = StudentModel.objects.get(pk=student_id)
+        except StudentModel.DoesNotExist:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Student not found.'},
+                status=404
+            )
+
+        setting = SchoolSettingModel.objects.first()
+
+        funding = StudentFundingModel(
+            student=student,
+            wallet_type=wallet_type,
+            amount=amount,
+            method=gateway_name,
+            mode=StudentFundingModel.PaymentMode.ONLINE,
+            reference=reference,
+            status=StudentFundingModel.PaymentStatus.PENDING,
+        )
+        if setting:
+            funding.session = setting.session
+            funding.term = setting.term
+        funding.save()
+
+        record_id = funding.pk
+        record_type = 'student_funding'
+
+    # ==========================================================================
+    # STAFF WALLET FUNDING
+    # ==========================================================================
+    elif payment_target == 'staff_wallet':
+        try:
+            staff = request.user.staff_profile.staff
+        except Exception:
+            return JsonResponse(
+                {'status': 'error', 'message': 'No staff profile linked to your account.'},
+                status=400
+            )
+
+        setting = SchoolSettingModel.objects.first()
+
+        funding = StaffFundingModel(
+            staff=staff,
+            amount=amount,
+            method=gateway_name,
+            mode=StaffFundingModel.PaymentMode.ONLINE,
+            reference=reference,
+            status=StaffFundingModel.PaymentStatus.PENDING,
+        )
+        if setting:
+            funding.session = setting.session
+            funding.term = setting.term
+        funding.save()
+
+        record_id = funding.pk
+        record_type = 'staff_funding'
+
+    else:
+        return JsonResponse(
+            {'status': 'error', 'message': 'Invalid payment target.'},
+            status=400
+        )
+
+    return JsonResponse({
+        'status': 'ok',
+        'gateway': gateway_name,
+        'public_key': gateway.public_key,
+        'amount_kobo': int(amount * 100),
+        'amount_naira': float(amount),
+        'reference': reference,
+        'email': email,
+        'record_id': record_id,
+        'record_type': record_type,
+    })
+
+
+@csrf_exempt
+@require_POST
+def paystack_webhook_view(request):
+    """
+    Receives and processes Paystack webhook events.
+
+    Security:
+    - Verifies HMAC-SHA512 signature using stored webhook secret.
+    - Always returns HTTP 200 to prevent Paystack retries on logic errors.
+    - Idempotent: skips already-confirmed payments silently.
+
+    Handles:
+    - charge.success → confirms FeePaymentModel, StudentFundingModel,
+                        or StaffFundingModel based on reference lookup.
+    """
+
+    # --- 1. Verify signature ---
+    try:
+        gateway = PaymentGatewayModel.objects.get(
+            gateway=PaymentGatewayModel.Gateway.PAYSTACK,
+            is_active=True,
+        )
+    except PaymentGatewayModel.DoesNotExist:
+        # No active Paystack gateway — return 200 silently
+        logger.warning("Paystack webhook received but no active Paystack gateway configured.")
+        return HttpResponse(status=200)
+
+    paystack_signature = request.headers.get('X-Paystack-Signature', '')
+    computed = hmac.new(
+        gateway.webhook_secret.encode('utf-8'),
+        msg=request.body,
+        digestmod=hashlib.sha512,
+    ).hexdigest()
+
+    if not hmac.compare_digest(computed, paystack_signature):
+        logger.warning("Paystack webhook signature verification failed.")
+        # Return 200 anyway — returning 4xx causes Paystack to retry
+        # which would just keep failing. Log and discard.
+        return HttpResponse(status=200)
+
+    # --- 2. Parse payload ---
+    try:
+        payload = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        logger.error("Paystack webhook received invalid JSON.")
+        return HttpResponse(status=200)
+
+    event = payload.get('event', '')
+    data = payload.get('data', {})
+
+    logger.info(f"Paystack webhook received: event={event}")
+
+    # --- 3. Only handle successful charges ---
+    if event != 'charge.success':
+        return HttpResponse(status=200)
+
+    reference = data.get('reference', '').strip()
+    if not reference:
+        logger.warning("Paystack charge.success received with no reference.")
+        return HttpResponse(status=200)
+
+    # --- 4. Verify amount matches our record ---
+    # Paystack sends amount in kobo
+    gateway_amount_kobo = data.get('amount', 0)
+    gateway_amount = Decimal(str(gateway_amount_kobo)) / 100
+
+    # --- 5. Look up the payment record by reference ---
+    setting = SchoolSettingModel.objects.first()
+    auto_confirm = setting.auto_confirm_online_payment if setting else True
+
+    # Try FeePaymentModel first
+    payment = None
+    record_type = None
+
+    try:
+        payment = FeePaymentModel.objects.get(reference=reference)
+        record_type = 'fee_payment'
+    except FeePaymentModel.DoesNotExist:
+        pass
+
+    if payment is None:
+        try:
+            payment = StudentFundingModel.objects.get(reference=reference)
+            record_type = 'student_funding'
+        except StudentFundingModel.DoesNotExist:
+            pass
+
+    if payment is None:
+        try:
+            payment = StaffFundingModel.objects.get(reference=reference)
+            record_type = 'staff_funding'
+        except StaffFundingModel.DoesNotExist:
+            pass
+
+    if payment is None:
+        logger.warning(
+            f"Paystack webhook: no payment record found for reference={reference}."
+        )
+        return HttpResponse(status=200)
+
+    # --- 6. Idempotency check ---
+    if payment.status != 'pending':
+        logger.info(
+            f"Paystack webhook: payment {payment.pk} ({record_type}) "
+            f"already processed (status={payment.status}). Skipping."
+        )
+        return HttpResponse(status=200)
+
+    # --- 7. Amount sanity check ---
+    if abs(gateway_amount - payment.amount) > Decimal('0.01'):
+        logger.error(
+            f"Paystack webhook: amount mismatch for reference={reference}. "
+            f"Gateway sent ₦{gateway_amount}, record has ₦{payment.amount}. "
+            f"Marking as failed."
+        )
+        payment.status = 'failed'
+        payment.save(update_fields=['status'])
+        return HttpResponse(status=200)
+
+    # --- 8. Confirm or leave pending ---
+    if auto_confirm:
+        try:
+            if record_type == 'fee_payment':
+                do_confirm_fee_payment(payment)
+            elif record_type == 'student_funding':
+                do_confirm_student_funding(payment)
+            elif record_type == 'staff_funding':
+                do_confirm_staff_funding(payment)
+
+            logger.info(
+                f"Paystack webhook: auto-confirmed {record_type} "
+                f"pk={payment.pk} reference={reference}."
+            )
+        except ValueError as e:
+            logger.error(f"Paystack webhook: confirmation error — {e}")
+        except Exception as e:
+            logger.exception(
+                f"Paystack webhook: unexpected error confirming "
+                f"{record_type} pk={payment.pk} — {e}"
+            )
+    else:
+        logger.info(
+            f"Paystack webhook: auto_confirm disabled. "
+            f"{record_type} pk={payment.pk} left as pending."
+        )
+
+    return HttpResponse(status=200)
+
+
+
+@csrf_exempt
+@require_POST
+def flutterwave_webhook_view(request):
+    """
+    Receives and processes Flutterwave webhook events.
+
+    Security:
+    - Verifies the verif-hash header against stored webhook secret.
+    - Always returns HTTP 200 to prevent Flutterwave retries on logic errors.
+    - Idempotent: skips already-confirmed payments silently.
+
+    Handles:
+    - charge.completed with status=successful → confirms FeePaymentModel,
+      StudentFundingModel, or StaffFundingModel based on reference lookup.
+    """
+
+    # --- 1. Verify signature ---
+    try:
+        gateway = PaymentGatewayModel.objects.get(
+            gateway=PaymentGatewayModel.Gateway.FLUTTERWAVE,
+            is_active=True,
+        )
+    except PaymentGatewayModel.DoesNotExist:
+        logger.warning("Flutterwave webhook received but no active Flutterwave gateway configured.")
+        return HttpResponse(status=200)
+
+    verif_hash = request.headers.get('verif-hash', '')
+    if not hmac.compare_digest(verif_hash, gateway.webhook_secret):
+        logger.warning("Flutterwave webhook signature verification failed.")
+        return HttpResponse(status=200)
+
+    # --- 2. Parse payload ---
+    try:
+        payload = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        logger.error("Flutterwave webhook received invalid JSON.")
+        return HttpResponse(status=200)
+
+    event = payload.get('event', '')
+    data = payload.get('data', {})
+
+    logger.info(f"Flutterwave webhook received: event={event}")
+
+    # --- 3. Only handle successful charges ---
+    if event != 'charge.completed':
+        return HttpResponse(status=200)
+
+    charge_status = data.get('status', '').lower()
+    if charge_status != 'successful':
+        logger.info(
+            f"Flutterwave charge.completed with non-successful status={charge_status}. Skipping."
+        )
+        return HttpResponse(status=200)
+
+    # --- 4. Extract reference ---
+    # Flutterwave sends our reference in tx_ref
+    reference = data.get('tx_ref', '').strip()
+    if not reference:
+        logger.warning("Flutterwave charge.completed received with no tx_ref.")
+        return HttpResponse(status=200)
+
+    # --- 5. Verify amount ---
+    # Flutterwave sends amount in naira (full unit, not kobo)
+    try:
+        gateway_amount = Decimal(str(data.get('amount', '0')))
+    except InvalidOperation:
+        logger.error(
+            f"Flutterwave webhook: invalid amount in payload for reference={reference}."
+        )
+        return HttpResponse(status=200)
+
+    # --- 6. Look up the payment record by reference ---
+    setting = SchoolSettingModel.objects.first()
+    auto_confirm = setting.auto_confirm_online_payment if setting else True
+
+    payment = None
+    record_type = None
+
+    try:
+        payment = FeePaymentModel.objects.get(reference=reference)
+        record_type = 'fee_payment'
+    except FeePaymentModel.DoesNotExist:
+        pass
+
+    if payment is None:
+        try:
+            payment = StudentFundingModel.objects.get(reference=reference)
+            record_type = 'student_funding'
+        except StudentFundingModel.DoesNotExist:
+            pass
+
+    if payment is None:
+        try:
+            payment = StaffFundingModel.objects.get(reference=reference)
+            record_type = 'staff_funding'
+        except StaffFundingModel.DoesNotExist:
+            pass
+
+    if payment is None:
+        logger.warning(
+            f"Flutterwave webhook: no payment record found for reference={reference}."
+        )
+        return HttpResponse(status=200)
+
+    # --- 7. Idempotency check ---
+    if payment.status != 'pending':
+        logger.info(
+            f"Flutterwave webhook: payment {payment.pk} ({record_type}) "
+            f"already processed (status={payment.status}). Skipping."
+        )
+        return HttpResponse(status=200)
+
+    # --- 8. Amount sanity check ---
+    if abs(gateway_amount - payment.amount) > Decimal('0.01'):
+        logger.error(
+            f"Flutterwave webhook: amount mismatch for reference={reference}. "
+            f"Gateway sent ₦{gateway_amount}, record has ₦{payment.amount}. "
+            f"Marking as failed."
+        )
+        payment.status = 'failed'
+        payment.save(update_fields=['status'])
+        return HttpResponse(status=200)
+
+    # --- 9. Confirm or leave pending ---
+    if auto_confirm:
+        try:
+            if record_type == 'fee_payment':
+                do_confirm_fee_payment(payment)
+            elif record_type == 'student_funding':
+                do_confirm_student_funding(payment)
+            elif record_type == 'staff_funding':
+                do_confirm_staff_funding(payment)
+
+            logger.info(
+                f"Flutterwave webhook: auto-confirmed {record_type} "
+                f"pk={payment.pk} reference={reference}."
+            )
+        except ValueError as e:
+            logger.error(f"Flutterwave webhook: confirmation error — {e}")
+        except Exception as e:
+            logger.exception(
+                f"Flutterwave webhook: unexpected error confirming "
+                f"{record_type} pk={payment.pk} — {e}"
+            )
+    else:
+        logger.info(
+            f"Flutterwave webhook: auto_confirm disabled. "
+            f"{record_type} pk={payment.pk} left as pending."
+        )
+
+    return HttpResponse(status=200)
+
+
+@login_required
+def check_payment_status_view(request, reference):
+    """
+    Lightweight AJAX endpoint polled by the frontend after online payment.
+    Returns the current status of a payment record by reference.
+    Only returns data if the record belongs to the requesting user.
+    """
+
+    # Try each model in order
+    # Security: verify ownership before returning status
+
+    # FeePaymentModel — check via invoice student's parent
+    try:
+        payment = FeePaymentModel.objects.get(reference=reference)
+        # Allow if parent portal user owns this student
+        student_id = request.session.get('selected_ward_id')
+        if student_id and payment.invoice.student.pk == int(student_id):
+            return JsonResponse({'status': payment.status})
+        # Allow if staff with permission
+        if request.user.has_perm('finance.view_feepaymentmodel'):
+            return JsonResponse({'status': payment.status})
+        return JsonResponse({'status': 'error', 'message': 'Permission denied.'}, status=403)
+    except FeePaymentModel.DoesNotExist:
+        pass
+
+    # StudentFundingModel — check via session ward
+    try:
+        funding = StudentFundingModel.objects.get(reference=reference)
+        student_id = request.session.get('selected_ward_id')
+        if student_id and funding.student.pk == int(student_id):
+            return JsonResponse({'status': funding.status})
+        if request.user.has_perm('finance.view_studentfundingmodel'):
+            return JsonResponse({'status': funding.status})
+        return JsonResponse({'status': 'error', 'message': 'Permission denied.'}, status=403)
+    except StudentFundingModel.DoesNotExist:
+        pass
+
+    # StaffFundingModel — check via staff profile
+    try:
+        funding = StaffFundingModel.objects.get(reference=reference)
+        try:
+            staff = request.user.staff_profile.staff
+            if funding.staff.pk == staff.pk:
+                return JsonResponse({'status': funding.status})
+        except Exception:
+            pass
+        if request.user.has_perm('finance.view_stafffundingmodel'):
+            return JsonResponse({'status': funding.status})
+        return JsonResponse({'status': 'error', 'message': 'Permission denied.'}, status=403)
+    except StaffFundingModel.DoesNotExist:
+        pass
+
+    return JsonResponse(
+        {'status': 'error', 'message': 'Payment record not found.'},
+        status=404
+    )
+
+
+@login_required
+@require_POST
+def verify_online_payment_view(request):
+    """
+    Called by the frontend immediately after the gateway popup reports success.
+    Verifies the payment with the gateway API, then confirms the record.
+
+    POST body (JSON):
+    {
+        "reference": "PAY-3F6A1B2C4D5E6F7A",
+        "gateway":   "paystack" | "flutterwave"
+    }
+    """
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {'status': 'error', 'message': 'Invalid request body.'},
+            status=400
+        )
+
+    reference    = body.get('reference', '').strip()
+    gateway_name = body.get('gateway', '').strip()
+
+    if not reference or not gateway_name:
+        return JsonResponse(
+            {'status': 'error', 'message': 'Reference and gateway are required.'},
+            status=400
+        )
+
+    # --- Get gateway config ---
+    try:
+        gateway = PaymentGatewayModel.objects.get(
+            gateway=gateway_name,
+            is_active=True,
+        )
+    except PaymentGatewayModel.DoesNotExist:
+        return JsonResponse(
+            {'status': 'error', 'message': 'Gateway not available.'},
+            status=400
+        )
+
+    # --- Find payment record ---
+    payment      = None
+    record_type  = None
+
+    try:
+        payment     = FeePaymentModel.objects.get(reference=reference)
+        record_type = 'fee_payment'
+    except FeePaymentModel.DoesNotExist:
+        pass
+
+    if payment is None:
+        try:
+            payment     = StudentFundingModel.objects.get(reference=reference)
+            record_type = 'student_funding'
+        except StudentFundingModel.DoesNotExist:
+            pass
+
+    if payment is None:
+        try:
+            payment     = StaffFundingModel.objects.get(reference=reference)
+            record_type = 'staff_funding'
+        except StaffFundingModel.DoesNotExist:
+            pass
+
+    if payment is None:
+        return JsonResponse(
+            {'status': 'error', 'message': 'Payment record not found.'},
+            status=404
+        )
+
+    # --- Idempotency — already confirmed (e.g. webhook got there first) ---
+    if payment.status == 'confirmed':
+        return JsonResponse({
+            'status':      'confirmed',
+            'record_type': record_type,
+            'record_id':   payment.pk,
+        })
+
+    if payment.status in ('failed', 'rejected'):
+        return JsonResponse({
+            'status':  payment.status,
+            'message': 'This payment was marked as failed. Please try again.',
+        })
+
+    # --- Verify with gateway API ---
+    verified        = False
+    gateway_amount  = None
+
+    if gateway_name == 'paystack':
+        verified, gateway_amount = _verify_with_paystack(reference, gateway)
+    elif gateway_name == 'flutterwave':
+        verified, gateway_amount = _verify_with_flutterwave(reference, gateway)
+
+    if not verified:
+        return JsonResponse({
+            'status':  'error',
+            'message': (
+                'We could not verify your payment with the gateway. '
+                'If you were charged, it will be confirmed automatically. '
+                'Please check your payment history in a few minutes.'
+            ),
+        })
+
+    # --- Amount sanity check ---
+    if gateway_amount is not None:
+        if abs(gateway_amount - payment.amount) > Decimal('0.01'):
+            logger.error(
+                f"Verify: amount mismatch for reference={reference}. "
+                f"Gateway: ₦{gateway_amount}, Record: ₦{payment.amount}."
+            )
+            payment.status = 'failed'
+            payment.save(update_fields=['status'])
+            return JsonResponse({
+                'status':  'error',
+                'message': 'Payment amount mismatch. Please contact administration.',
+            })
+
+    # --- Confirm the payment ---
+    try:
+        if record_type == 'fee_payment':
+            do_confirm_fee_payment(payment)
+        elif record_type == 'student_funding':
+            do_confirm_student_funding(payment)
+        elif record_type == 'staff_funding':
+            do_confirm_staff_funding(payment)
+
+        logger.info(
+            f"Verify: confirmed {record_type} pk={payment.pk} "
+            f"reference={reference} via {gateway_name} API."
+        )
+
+        return JsonResponse({
+            'status':      'confirmed',
+            'record_type': record_type,
+            'record_id':   payment.pk,
+        })
+
+    except ValueError as e:
+        logger.error(f"Verify: confirmation error — {e}")
+        return JsonResponse(
+            {'status': 'error', 'message': str(e)},
+            status=400
+        )
+    except Exception as e:
+        logger.exception(f"Verify: unexpected error for {record_type} pk={payment.pk}")
+        return JsonResponse(
+            {'status': 'error', 'message': 'An unexpected error occurred. Please contact administration.'},
+            status=500
+        )
+
+
+# =============================================================================
+# GATEWAY VERIFICATION HELPERS
+# =============================================================================
+
+def _verify_with_paystack(reference: str, gateway: PaymentGatewayModel):
+    """
+    Calls Paystack verify API.
+    Returns (verified: bool, amount: Decimal | None)
+    """
+    try:
+        response = http_requests.get(
+            f'https://api.paystack.co/transaction/verify/{reference}',
+            headers={
+                'Authorization': f'Bearer {gateway.secret_key}',
+            },
+            timeout=15,
+        )
+        data = response.json()
+
+        if (
+            data.get('status') is True
+            and data.get('data', {}).get('status') == 'success'
+        ):
+            # Paystack returns amount in kobo
+            amount_kobo = data['data'].get('amount', 0)
+            amount      = Decimal(str(amount_kobo)) / 100
+            return True, amount
+
+        logger.warning(
+            f"Paystack verification failed for reference={reference}: "
+            f"{data.get('message', 'No message')}"
+        )
+        return False, None
+
+    except Exception as e:
+        logger.exception(f"Paystack verification request error for reference={reference}: {e}")
+        return False, None
+
+
+def _verify_with_flutterwave(reference: str, gateway: PaymentGatewayModel):
+    """
+    Calls Flutterwave verify API by tx_ref.
+    Returns (verified: bool, amount: Decimal | None)
+    """
+    try:
+        response = http_requests.get(
+            'https://api.flutterwave.com/v3/transactions/verify_by_reference',
+            params={'tx_ref': reference},
+            headers={
+                'Authorization': f'Bearer {gateway.secret_key}',
+            },
+            timeout=15,
+        )
+        data = response.json()
+
+        if (
+            data.get('status') == 'success'
+            and data.get('data', {}).get('status') == 'successful'
+        ):
+            # Flutterwave returns amount in naira
+            amount = Decimal(str(data['data'].get('amount', 0)))
+            return True, amount
+
+        logger.warning(
+            f"Flutterwave verification failed for reference={reference}: "
+            f"{data.get('message', 'No message')}"
+        )
+        return False, None
+
+    except Exception as e:
+        logger.exception(f"Flutterwave verification request error for reference={reference}: {e}")
+        return False, None
+

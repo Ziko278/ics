@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wallet Funded</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f0f4f8;
+    color: #1a202c;
+    padding: 32px 16px;
+  }
+  .wrapper {
+    max-width: 600px;
+    margin: 0 auto;
+    background: #ffffff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+  .header {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    padding: 36px 40px;
+    text-align: center;
+  }
+  .header img {
+    height: 56px;
+    width: auto;
+    margin-bottom: 16px;
+    border-radius: 8px;
+  }
+  .header .school-name {
+    color: rgba(255,255,255,0.85);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .header .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #ffffff;
+    padding: 8px 20px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .header .badge .dot {
+    width: 8px;
+    height: 8px;
+    background: #c4b5fd;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .amount-hero {
+    background: #faf5ff;
+    border-bottom: 1px solid #e9d8fd;
+    padding: 32px 40px;
+    text-align: center;
+  }
+  .amount-hero .label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #718096;
+    margin-bottom: 8px;
+  }
+  .amount-hero .amount {
+    font-size: 42px;
+    font-weight: 800;
+    color: #7c3aed;
+    letter-spacing: -1px;
+  }
+  .amount-hero .staff {
+    margin-top: 8px;
+    font-size: 15px;
+    color: #4a5568;
+  }
+  .body { padding: 32px 40px; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #a0aec0;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #edf2f7;
+  }
+  .detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 28px;
+  }
+  .detail-table tr td {
+    padding: 10px 0;
+    border-bottom: 1px solid #f7fafc;
+    font-size: 14px;
+    vertical-align: top;
+  }
+  .detail-table tr:last-child td { border-bottom: none; }
+  .detail-table td:first-child {
+    color: #718096;
+    width: 45%;
+    font-weight: 500;
+  }
+  .detail-table td:last-child {
+    color: #1a202c;
+    font-weight: 600;
+    text-align: right;
+  }
+  .balance-box {
+    background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
+    border: 1px solid #ddd6fe;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .balance-box .bl-label {
+    font-size: 13px;
+    color: #4a5568;
+    font-weight: 500;
+  }
+  .balance-box .bl-amount {
+    font-size: 24px;
+    font-weight: 800;
+    color: #7c3aed;
+  }
+  .footer {
+    background: #f7fafc;
+    border-top: 1px solid #edf2f7;
+    padding: 24px 40px;
+    text-align: center;
+  }
+  .footer p { font-size: 12px; color: #a0aec0; line-height: 1.6; }
+  .footer .school-contact { font-size: 12px; color: #718096; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="header">
+    {% if logo_url %}
+    <img src="{{ logo_url }}" alt="{{ school.name }}">
+    {% endif %}
+    {% if school %}
+    <div class="school-name">{{ school.name }}</div>
+    {% endif %}
+    <div class="badge">
+      <span class="dot"></span>
+      Staff Wallet Funded
+    </div>
+  </div>
+
+  <div class="amount-hero">
+    <div class="label">Amount Credited</div>
+    <div class="amount">₦{{ amount|floatformat:2 }}</div>
+    <div class="staff">
+      Dear <strong>{{ staff_name }}</strong>, your wallet has been credited.
+    </div>
+  </div>
+
+  <div class="body">
+
+    <div class="section-title">Transaction Details</div>
+    <table class="detail-table">
+      <tr>
+        <td>Payment Method</td>
+        <td>{{ method }}</td>
+      </tr>
+      <tr>
+        <td>Reference</td>
+        <td>{{ reference }}</td>
+      </tr>
+      <tr>
+        <td>Session</td>
+        <td>{{ session }}</td>
+      </tr>
+      <tr>
+        <td>Term / Quarter</td>
+        <td>{{ term }}</td>
+      </tr>
+      <tr>
+        <td>Date</td>
+        <td>{{ funding_date|date:"d M, Y — H:i" }}</td>
+      </tr>
+    </table>
+
+    {% if wallet_balance is not None %}
+    <div class="section-title">Current Wallet Balance</div>
+    <div class="balance-box">
+      <div class="bl-label">💼 Staff Wallet</div>
+      <div class="bl-amount">₦{{ wallet_balance|floatformat:2 }}</div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <div class="footer">
+    {% if school %}
+    <p class="school-contact">
+      {% if school.address %}{{ school.address }}<br>{% endif %}
+      {% if school.mobile %}📞 {{ school.mobile }}{% endif %}
+      {% if school.email %} &nbsp;|&nbsp; ✉ {{ school.email }}{% endif %}
+    </p>
+    {% endif %}
+    <p style="margin-top:12px;">
+      This is an automated confirmation. Please keep it for your records.<br>
+      If you have questions, contact the school administration.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>

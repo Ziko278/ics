@@ -1,0 +1,283 @@
+{% extends "parent_portal/layout.html" %}
+{% load humanize %}
+
+{% block title %}Wallet Funding Detail — {{ funding.get_wallet_type_display }}{% endblock %}
+
+{% block content %}
+<div class="pagetitle">
+    <h1>Wallet Funding Detail</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{% url 'parent_dashboard' %}">Dashboard</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{% url 'parent_fee_history' %}">Upload History</a>
+            </li>
+            <li class="breadcrumb-item active">Funding Detail</li>
+        </ol>
+    </nav>
+</div>
+
+<section class="section">
+    <div class="row">
+
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Funding Summary</h5>
+
+                    {# --- Status banners --- #}
+                    {% if funding.status == 'confirmed' %}
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill me-1"></i>
+                        <strong>Payment Confirmed.</strong>
+                        Your ward's {{ funding.get_wallet_type_display }} has been credited.
+                    </div>
+                    {% elif funding.status == 'pending' %}
+                    <div class="alert alert-warning" id="pendingAlert">
+                        <i class="bi bi-hourglass-split me-1"></i>
+                        <strong>Awaiting Confirmation.</strong>
+                        {% if funding.mode == 'online' %}
+                            Your online payment is being verified. This usually resolves in seconds.
+                        {% else %}
+                            Your payment proof has been submitted and is pending review by the school.
+                        {% endif %}
+                    </div>
+                    {% elif funding.status == 'failed' %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle-fill me-1"></i>
+                        <strong>Payment Failed.</strong>
+                        This payment could not be verified. Please try again or contact administration.
+                    </div>
+                    {% elif funding.status == 'reverted' %}
+                    <div class="alert alert-secondary">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>
+                        <strong>Payment Reverted.</strong>
+                        {% if funding.refund_reason %}
+                            Reason: {{ funding.refund_reason }}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <table class="table table-borderless">
+                        <tr>
+                            <th style="width:40%">Student</th>
+                            <td>
+                                {{ funding.student.first_name }}
+                                {{ funding.student.last_name }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Wallet</th>
+                            <td>{{ funding.get_wallet_type_display }}</td>
+                        </tr>
+                        <tr>
+                            <th>Amount</th>
+                            <td class="fw-bold text-success">
+                                ₦{{ funding.amount|floatformat:2|intcomma }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Payment Method</th>
+                            <td>{{ funding.get_method_display }}</td>
+                        </tr>
+                        <tr>
+                            <th>Payment Mode</th>
+                            <td>
+                                {% if funding.mode == 'online' %}
+                                    <span class="badge bg-primary">Online</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Offline</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if funding.teller_number %}
+                        <tr>
+                            <th>Teller / Reference</th>
+                            <td>{{ funding.teller_number }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if funding.reference %}
+                        <tr>
+                            <th>Transaction Reference</th>
+                            <td>
+                                <span class="font-monospace small">
+                                    {{ funding.reference }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <th>Session</th>
+                            <td>{{ funding.session|default:"—" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Term</th>
+                            <td>{{ funding.term|default:"—" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Date Submitted</th>
+                            <td>{{ funding.created_at|date:"d M, Y H:i" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status</th>
+                            <td>
+                                <span class="badge
+                                    {% if funding.status == 'confirmed' %}bg-success
+                                    {% elif funding.status == 'pending' %}bg-warning text-dark
+                                    {% elif funding.status == 'failed' %}bg-danger
+                                    {% else %}bg-secondary{% endif %}"
+                                    id="statusBadge">
+                                    {{ funding.get_status_display }}
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+
+            {# Proof of payment — only for offline/teller uploads #}
+            {% if funding.proof_of_payment %}
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Proof of Payment</h5>
+                    <div class="text-center">
+                        <a href="{{ funding.proof_of_payment.url }}" target="_blank">
+                            <img src="{{ funding.proof_of_payment.url }}"
+                                 class="img-fluid rounded" alt="Proof"
+                                 onerror="this.style.display='none';
+                                          document.getElementById('proofLink').style.display='block'">
+                        </a>
+                        <a id="proofLink" href="{{ funding.proof_of_payment.url }}"
+                           target="_blank" class="btn btn-outline-primary mt-2"
+                           style="display:none">
+                            <i class="bi bi-file-earmark-arrow-down"></i> Open File
+                        </a>
+                        <p class="small text-muted mt-2">Click to open full size</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {# Online payment notice — no proof needed #}
+            {% if funding.mode == 'online' and not funding.proof_of_payment %}
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Payment Method</h5>
+                    <div class="text-center py-2">
+                        <i class="bi bi-shield-check text-success" style="font-size:2.5rem;"></i>
+                        <p class="mt-2 mb-0 text-muted small">
+                            Paid securely via
+                            <strong>{{ funding.get_method_display }}</strong>.
+                            No physical proof required.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card">
+                <div class="card-body">
+                    <a href="{% url 'parent_fee_history' %}"
+                       class="btn btn-secondary w-100">
+                        <i class="bi bi-arrow-left me-1"></i> Back to History
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+{# ================================================================== #}
+{# ONLINE PAYMENT POLLER                                               #}
+{# Only active when redirected here after an online payment attempt    #}
+{# Handles the edge case where verify succeeded but webhook is slow,   #}
+{# or where verify failed and webhook is the fallback                  #}
+{# ================================================================== #}
+{% if funding.mode == 'online' and funding.status == 'pending' %}
+<script>
+(function () {
+    const STATUS_URL  = '{% url "check_payment_status" funding.reference %}';
+    const MAX_POLLS   = 10;
+    const INTERVAL_MS = 4000;
+    let   attempts    = 0;
+
+    // Only start polling if user arrived here from the payment flow
+    const urlParams = new URLSearchParams(window.location.search);
+    if (!urlParams.has('online')) return;
+
+    const pendingAlert = document.getElementById('pendingAlert');
+    const statusBadge  = document.getElementById('statusBadge');
+
+    // Update the pending alert to show polling activity
+    if (pendingAlert) {
+        pendingAlert.innerHTML = `
+            <div class="d-flex align-items-center gap-2">
+                <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                <div>
+                    <strong>Confirming your payment...</strong>
+                    <br>
+                    <span class="small">
+                        This usually takes a few seconds. Please do not close this page.
+                    </span>
+                </div>
+            </div>`;
+    }
+
+    function poll() {
+        attempts++;
+
+        fetch(STATUS_URL, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.status === 'confirmed') {
+                // Payment confirmed — reload page to show confirmed state
+                window.location.reload();
+                return;
+            }
+
+            if (data.status === 'failed' || data.status === 'rejected') {
+                // Something went wrong — reload to show failed state
+                window.location.reload();
+                return;
+            }
+
+            // Still pending — keep polling if attempts remain
+            if (attempts < MAX_POLLS) {
+                setTimeout(poll, INTERVAL_MS);
+            } else {
+                // Max attempts reached — show friendly timeout message
+                if (pendingAlert) {
+                    pendingAlert.className = 'alert alert-info';
+                    pendingAlert.innerHTML = `
+                        <i class="bi bi-info-circle-fill me-1"></i>
+                        <strong>Still processing.</strong>
+                        Your payment has been received and is being confirmed.
+                        This page will reflect the update shortly —
+                        please refresh in a minute or check your payment history.`;
+                }
+            }
+        })
+        .catch(function (err) {
+            console.error('Status poll error:', err);
+            // On network error, keep trying until max attempts
+            if (attempts < MAX_POLLS) {
+                setTimeout(poll, INTERVAL_MS);
+            }
+        });
+    }
+
+    // Start first poll after a short delay to give the webhook time
+    setTimeout(poll, 3000);
+})();
+</script>
+{% endif %}
+
+{% endblock %}

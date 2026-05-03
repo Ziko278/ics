@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Confirmed</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f0f4f8;
+    color: #1a202c;
+    padding: 32px 16px;
+  }
+  .wrapper {
+    max-width: 600px;
+    margin: 0 auto;
+    background: #ffffff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #1a56db 0%, #0e3fa6 100%);
+    padding: 36px 40px;
+    text-align: center;
+  }
+  .header img {
+    height: 56px;
+    width: auto;
+    margin-bottom: 16px;
+    border-radius: 8px;
+  }
+  .header .school-name {
+    color: rgba(255,255,255,0.85);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .header .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #ffffff;
+    padding: 8px 20px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .header .badge .dot {
+    width: 8px;
+    height: 8px;
+    background: #48bb78;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  /* Amount hero */
+  .amount-hero {
+    background: #f7faff;
+    border-bottom: 1px solid #e8f0fe;
+    padding: 32px 40px;
+    text-align: center;
+  }
+  .amount-hero .label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #718096;
+    margin-bottom: 8px;
+  }
+  .amount-hero .amount {
+    font-size: 42px;
+    font-weight: 800;
+    color: #1a56db;
+    letter-spacing: -1px;
+  }
+  .amount-hero .student {
+    margin-top: 8px;
+    font-size: 15px;
+    color: #4a5568;
+  }
+  .amount-hero .student strong {
+    color: #1a202c;
+  }
+  /* Body */
+  .body {
+    padding: 32px 40px;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #a0aec0;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #edf2f7;
+  }
+  /* Detail rows */
+  .detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 28px;
+  }
+  .detail-table tr td {
+    padding: 10px 0;
+    border-bottom: 1px solid #f7fafc;
+    font-size: 14px;
+    vertical-align: top;
+  }
+  .detail-table tr:last-child td {
+    border-bottom: none;
+  }
+  .detail-table td:first-child {
+    color: #718096;
+    width: 45%;
+    font-weight: 500;
+  }
+  .detail-table td:last-child {
+    color: #1a202c;
+    font-weight: 600;
+    text-align: right;
+  }
+  /* Status badge */
+  .status-paid {
+    display: inline-block;
+    background: #c6f6d5;
+    color: #22543d;
+    padding: 3px 10px;
+    border-radius: 50px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .status-partial {
+    display: inline-block;
+    background: #fefcbf;
+    color: #744210;
+    padding: 3px 10px;
+    border-radius: 50px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  /* Breakdown table */
+  .breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 28px;
+    font-size: 13px;
+  }
+  .breakdown-table thead tr {
+    background: #edf2f7;
+  }
+  .breakdown-table thead th {
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #718096;
+  }
+  .breakdown-table thead th:last-child {
+    text-align: right;
+  }
+  .breakdown-table tbody tr {
+    border-bottom: 1px solid #f7fafc;
+  }
+  .breakdown-table tbody tr:last-child {
+    border-bottom: none;
+  }
+  .breakdown-table tbody td {
+    padding: 10px 12px;
+    color: #2d3748;
+  }
+  .breakdown-table tbody td:last-child {
+    text-align: right;
+    font-weight: 600;
+    color: #1a56db;
+  }
+  /* Balance box */
+  .balance-box {
+    background: linear-gradient(135deg, #ebf4ff 0%, #e8f0fe 100%);
+    border: 1px solid #bee3f8;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .balance-box .bl-label {
+    font-size: 13px;
+    color: #4a5568;
+    font-weight: 500;
+  }
+  .balance-box .bl-amount {
+    font-size: 20px;
+    font-weight: 800;
+    color: #1a56db;
+  }
+  .balance-box.cleared .bl-amount {
+    color: #38a169;
+  }
+  /* Footer */
+  .footer {
+    background: #f7fafc;
+    border-top: 1px solid #edf2f7;
+    padding: 24px 40px;
+    text-align: center;
+  }
+  .footer p {
+    font-size: 12px;
+    color: #a0aec0;
+    line-height: 1.6;
+  }
+  .footer .school-contact {
+    font-size: 12px;
+    color: #718096;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  {# ---- Header ---- #}
+  <div class="header">
+    {% if logo_url %}
+    <img src="{{ logo_url }}" alt="{{ school.name }}">
+    {% endif %}
+    {% if school %}
+    <div class="school-name">{{ school.name }}</div>
+    {% endif %}
+    <div class="badge">
+      <span class="dot"></span>
+      Payment Confirmed
+    </div>
+  </div>
+
+  {# ---- Amount Hero ---- #}
+  <div class="amount-hero">
+    <div class="label">Amount Paid</div>
+    <div class="amount">₦{{ amount|floatformat:2 }}</div>
+    <div class="student">
+      For <strong>{{ student_name }}</strong>
+    </div>
+  </div>
+
+  {# ---- Body ---- #}
+  <div class="body">
+
+    <div class="section-title">Payment Details</div>
+    <table class="detail-table">
+      <tr>
+        <td>Invoice Number</td>
+        <td>{{ invoice_number }}</td>
+      </tr>
+      <tr>
+        <td>Academic Session</td>
+        <td>{{ session }}</td>
+      </tr>
+      <tr>
+        <td>Term / Quarter</td>
+        <td>{{ term }}</td>
+      </tr>
+      <tr>
+        <td>Payment Method</td>
+        <td>{{ payment_mode }}</td>
+      </tr>
+      <tr>
+        <td>Reference</td>
+        <td>{{ reference }}</td>
+      </tr>
+      <tr>
+        <td>Date</td>
+        <td>{{ payment_date|date:"d M, Y — H:i" }}</td>
+      </tr>
+      <tr>
+        <td>Invoice Status</td>
+        <td>
+          {% if invoice_status == 'Paid' %}
+            <span class="status-paid">{{ invoice_status }}</span>
+          {% else %}
+            <span class="status-partial">{{ invoice_status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+
+    {# ---- Item Breakdown ---- #}
+    {% if item_breakdown %}
+    <div class="section-title">Fee Breakdown</div>
+    <table class="breakdown-table">
+      <thead>
+        <tr>
+          <th>Fee Item</th>
+          <th>Amount Paid</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in item_breakdown %}
+        <tr>
+          <td>{{ item.description|title }}</td>
+          <td>₦{{ item.amount_paid|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {# ---- Remaining Balance ---- #}
+    <div class="balance-box {% if invoice_balance <= 0 %}cleared{% endif %}">
+      <div>
+        <div class="bl-label">Remaining Invoice Balance</div>
+        {% if invoice_balance <= 0 %}
+        <div style="font-size:12px;color:#38a169;margin-top:2px;">
+          ✓ Invoice fully cleared
+        </div>
+        {% endif %}
+      </div>
+      <div class="bl-amount">
+        ₦{{ invoice_balance|floatformat:2 }}
+      </div>
+    </div>
+
+  </div>
+
+  {# ---- Footer ---- #}
+  <div class="footer">
+    {% if school %}
+    <p class="school-contact">
+      {% if school.address %}{{ school.address }}<br>{% endif %}
+      {% if school.mobile %}📞 {{ school.mobile }}{% endif %}
+      {% if school.email %} &nbsp;|&nbsp; ✉ {{ school.email }}{% endif %}
+    </p>
+    {% endif %}
+    <p style="margin-top:12px;">
+      This is an automated confirmation. Please keep it for your records.<br>
+      If you have questions, contact the school administration.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>

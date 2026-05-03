@@ -8,72 +8,718 @@
     <nav>
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}">Home</a></li>
-            <li class="breadcrumb-item"><a href="{% url 'staff_deposit_history' %}">My Deposit History</a></li>
+            <li class="breadcrumb-item">
+                <a href="{% url 'staff_deposit_history' %}">My Deposit History</a>
+            </li>
             <li class="breadcrumb-item active">Upload Deposit</li>
         </ol>
     </nav>
 </div>
 
 <div class="row">
-    <div class="col-lg-8">
+    <div class="col-lg-7">
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title">Upload Deposit Teller</h5>
-                <p>Submit your deposit details here. Your wallet will be credited once the payment is confirmed by an accountant.</p>
-                {% if bank_detail %}
-                <div class="card">
-                    <div class="card-body">
-                        <h3 class="card-title">Account Details</h3>
-                        <h5 class="text-dark">Bank: {% if bank_detail.bank %} {{ bank_detail.bank|upper }} {% else %} ----------- {% endif %}</h5>
-                        <h5 class="">Account Number: {% if bank_detail.account_number %} {{ bank_detail.account_number }} {% else %} ----------- {% endif %}</h5>
-                        <h5 class="">Account Name: {% if bank_detail.account_name %} {{ bank_detail.account_name|title }} {% else %} ----------- {% endif %}</h5>
+                <h5 class="card-title">Fund My Wallet</h5>
+                <p class="text-muted small">
+                    Submit your deposit details below. Your wallet will be credited
+                    once the payment is confirmed by an accountant.
+                </p>
+
+                {# --- Payment Mode Toggle --- #}
+                {% if online_payment_enabled and active_gateways %}
+                <div class="mb-4">
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="paymentModeToggle"
+                               id="modeTeller" autocomplete="off" checked>
+                        <label class="btn btn-outline-secondary" for="modeTeller">
+                            <i class="bi bi-receipt me-1"></i> Upload Teller / Transfer Proof
+                        </label>
+                        <input type="radio" class="btn-check" name="paymentModeToggle"
+                               id="modeOnline" autocomplete="off">
+                        <label class="btn btn-outline-primary" for="modeOnline">
+                            <i class="bi bi-credit-card me-1"></i> Pay Online Now
+                        </label>
                     </div>
                 </div>
                 {% endif %}
-                <form method="post" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    
-                    <div class="row g-3">
-                        <div class="col-md-12">
-                            <label class="form-label">Amount</label>
-                            {{ form.amount }}
-                            {% if form.amount.errors %}<div class="text-danger small">{{ form.amount.errors }}</div>{% endif %}
-                        </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label">Payment Method</label>
-                            {{ form.method }}
-                            {% if form.method.errors %}<div class="text-danger small">{{ form.method.errors }}</div>{% endif %}
-                        </div>
-                        
-                        <div class="col-md-6">
-                            <label class="form-label">Payment Mode</label>
-                            {{ form.mode }}
-                            {% if form.mode.errors %}<div class="text-danger small">{{ form.mode.errors }}</div>{% endif %}
-                        </div>
+                {# --- Online Notice --- #}
+                {% if online_payment_enabled and active_gateways %}
+                <div id="onlinePaymentNotice" style="display:none;" class="mb-3">
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-shield-check me-1"></i>
+                        Your wallet will be credited automatically after successful payment.
+                        No proof upload is needed.
+                    </div>
+                </div>
+                {% endif %}
 
-                        <div class="col-md-12">
-                            <label class="form-label">Teller / Reference No.</label>
-                            {{ form.teller_number }}
-                            {% if form.teller_number.errors %}<div class="text-danger small">{{ form.teller_number.errors }}</div>{% endif %}
-                        </div>
-                        
-                        <div class="col-md-12">
-                            <label class="form-label">Proof of Payment (Image/PDF)</label>
-                            {{ form.proof_of_payment }}
-                            {% if form.proof_of_payment.errors %}<div class="text-danger small">{{ form.proof_of_payment.errors }}</div>{% endif %}
-                        </div>
-                        
-                        <div class="col-12 text-center">
-                            <button type="submit" class="btn btn-primary px-5">Submit for Review</button>
+                {# --- Messages --- #}
+                {% if messages %}
+                    {% for message in messages %}
+                    <div class="alert
+                        {% if message.tags == 'error' %}alert-danger
+                        {% elif message.tags == 'success' %}alert-success
+                        {% elif message.tags == 'warning' %}alert-warning
+                        {% else %}alert-info{% endif %}
+                        alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+
+                {# --- Bank Details --- #}
+                {% if bank_detail %}
+                <div id="bankDetailSection" class="card bg-light border mb-3">
+                    <div class="card-body py-3">
+                        <h6 class="card-title mb-2">
+                            <i class="bi bi-bank me-1"></i> Payment Account Details
+                        </h6>
+                        <div class="row">
+                            <div class="col-sm-4 fw-bold">Bank</div>
+                            <div class="col-sm-8">
+                                {{ bank_detail.bank|upper|default:"---" }}
+                            </div>
+                            <div class="col-sm-4 fw-bold mt-1">Account Number</div>
+                            <div class="col-sm-8 mt-1">
+                                {{ bank_detail.account_number|default:"---" }}
+                                {% if bank_detail.account_number %}
+                                <button type="button"
+                                        class="btn btn-outline-secondary btn-sm py-0 px-2 ms-1"
+                                        onclick="copyToClipboard('{{ bank_detail.account_number }}', this)">
+                                    <i class="bi bi-clipboard"></i>
+                                    <span class="copy-text">Copy</span>
+                                </button>
+                                {% endif %}
+                            </div>
+                            <div class="col-sm-4 fw-bold mt-1">Account Name</div>
+                            <div class="col-sm-8 mt-1">
+                                {{ bank_detail.account_name|title|default:"---" }}
+                            </div>
                         </div>
                     </div>
-                </form>
+                </div>
+                {% endif %}
 
+                {# --- Teller Form --- #}
+                <form method="post" enctype="multipart/form-data"
+                      id="depositForm" class="row g-3" novalidate>
+                    {% csrf_token %}
+
+                    <div class="col-12">
+                        <label class="form-label">
+                            Amount (₦) <span class="text-danger">*</span>
+                        </label>
+                        {{ form.amount }}
+                        {% if form.amount.errors %}
+                            <div class="text-danger small">{{ form.amount.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-6" id="methodFieldWrapper">
+                        <label class="form-label">
+                            Payment Method <span class="text-danger">*</span>
+                        </label>
+                        {{ form.method }}
+                        {% if form.method.errors %}
+                            <div class="text-danger small">{{ form.method.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-6" id="tellerFieldWrapper">
+                        <label class="form-label">Teller / Reference No.</label>
+                        {{ form.teller_number }}
+                        {% if form.teller_number.errors %}
+                            <div class="text-danger small">{{ form.teller_number.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-12" id="proofFieldWrapper">
+                        <label class="form-label">
+                            Proof of Payment (Image/PDF)
+                            <span class="text-danger" id="proofRequiredStar">*</span>
+                        </label>
+                        {{ form.proof_of_payment }}
+                        {% if form.proof_of_payment.errors %}
+                            <div class="text-danger small">{{ form.proof_of_payment.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    {# --- Submit / Online Buttons --- #}
+                    <div class="col-12 mt-2">
+
+                        <div id="tellerSubmitSection" class="text-center">
+                            <button type="submit" class="btn btn-primary px-5">
+                                <i class="bi bi-check-lg me-1"></i> Submit for Review
+                            </button>
+                            <a href="{% url 'staff_deposit_history' %}"
+                               class="btn btn-secondary ms-2">
+                                <i class="bi bi-x-lg me-1"></i> Cancel
+                            </a>
+                        </div>
+
+                        {% if online_payment_enabled and active_gateways %}
+                        <div id="onlineSubmitSection" style="display:none;">
+                            <p class="text-center text-muted small mb-3">
+                                Select your preferred payment provider:
+                            </p>
+                            <div class="d-flex gap-2 justify-content-center flex-wrap">
+                                {% for gw in active_gateways %}
+                                <button type="button"
+                                        class="btn btn-success btn-lg gateway-pay-btn"
+                                        data-gateway="{{ gw.gateway }}"
+                                        data-display="{{ gw.display_name }}">
+                                    <i class="bi bi-shield-check me-1"></i>
+                                    Pay with {{ gw.display_name }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                            <div class="text-center mt-3">
+                                <a href="{% url 'staff_deposit_history' %}"
+                                   class="btn btn-secondary">
+                                    <i class="bi bi-x-lg me-1"></i> Cancel
+                                </a>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 </div>
 
-{% endblock %}
+{# ========================================================================== #}
+{# EMAIL COLLECTION MODAL                                                       #}
+{# ========================================================================== #}
+<div class="modal fade" id="emailRequiredModal" tabindex="-1"
+     data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-envelope me-2 text-primary"></i>Email Address Required
+                </h5>
+            </div>
+            <div class="modal-body">
+                <p>
+                    An email address is required to process your online payment.
+                    A payment confirmation will be sent to this address.
+                </p>
+                <div class="mb-1">
+                    <label for="staffEmailInput" class="form-label">
+                        Your Email Address <span class="text-danger">*</span>
+                    </label>
+                    <input type="email" id="staffEmailInput"
+                           class="form-control"
+                           placeholder="yourname@example.com"
+                           autocomplete="email">
+                    <div id="staffEmailError" class="text-danger small mt-1"
+                         style="display:none;">
+                        Please enter a valid email address to continue.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary"
+                        id="cancelEmailBtn">
+                    <i class="bi bi-x-lg me-1"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-primary"
+                        id="confirmEmailBtn">
+                    <i class="bi bi-arrow-right me-1"></i> Continue to Payment
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
+{# Payment verification preloader #}
+<div id="paymentVerifyOverlay" style="
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:9999;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:16px;">
+    <div class="spinner-border text-light"
+         style="width:3.5rem;height:3.5rem;" role="status"></div>
+    <p class="text-white fw-semibold fs-5 mb-0">Verifying your payment...</p>
+    <p class="text-white-50 small mb-0">
+        Please do not close or refresh this page.
+    </p>
+</div>
+
+<textarea id="clipboard-helper"
+          style="position:absolute;left:-9999px;" aria-hidden="true"></textarea>
+
+{# Gateway SDK scripts #}
+{% if online_payment_enabled and active_gateways %}
+    {% for gw in active_gateways %}
+        {% if gw.gateway == 'paystack' %}
+        <script src="https://js.paystack.co/v1/inline.js"></script>
+        {% endif %}
+        {% if gw.gateway == 'flutterwave' %}
+        <script src="https://checkout.flutterwave.com/v3.js"></script>
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+<script>
+'use strict';
+
+// =============================================================================
+// STATE
+// =============================================================================
+const INITIALIZE_URL  = '{% url "initialize_online_payment" %}';
+const VERIFY_URL      = '{% url "verify_online_payment" %}';
+const HISTORY_URL     = '{% url "staff_deposit_history" %}';
+
+// Email resolution — user.email first, then staff profile email, then empty
+let collectedEmail = (
+    '{{ request.user.email|default:"" }}'
+    || '{% if request.user.staff_profile.staff.email %}{{ request.user.staff_profile.staff.email }}{% endif %}'
+).trim();
+
+let pendingGateway      = null;
+let pendingGatewayLabel = null;
+
+// =============================================================================
+// DOM READY
+// =============================================================================
+document.addEventListener('DOMContentLoaded', function () {
+    initPaymentModeToggle();
+    initGatewayButtons();
+    initEmailModal();
+});
+
+// =============================================================================
+// PAYMENT MODE TOGGLE
+// =============================================================================
+function initPaymentModeToggle() {
+    const tellerRadio   = document.getElementById('modeTeller');
+    const onlineRadio   = document.getElementById('modeOnline');
+    if (!tellerRadio || !onlineRadio) return;
+
+    tellerRadio.addEventListener('change', function () {
+        if (this.checked) applyMode('teller');
+    });
+    onlineRadio.addEventListener('change', function () {
+        if (this.checked) applyMode('online');
+    });
+}
+
+function applyMode(mode) {
+    const tellerSubmit   = document.getElementById('tellerSubmitSection');
+    const onlineSubmit   = document.getElementById('onlineSubmitSection');
+    const onlineNotice   = document.getElementById('onlinePaymentNotice');
+    const proofWrapper   = document.getElementById('proofFieldWrapper');
+    const methodWrapper  = document.getElementById('methodFieldWrapper');
+    const tellerWrapper  = document.getElementById('tellerFieldWrapper');
+    const bankSection    = document.getElementById('bankDetailSection');
+    const proofInput     = document.querySelector('input[name="proof_of_payment"]');
+    const proofStar      = document.getElementById('proofRequiredStar');
+
+    if (mode === 'online') {
+        show(onlineSubmit);
+        show(onlineNotice);
+        hide(tellerSubmit);
+        hide(proofWrapper);
+        hide(methodWrapper);
+        hide(tellerWrapper);
+        hide(bankSection);
+        if (proofInput) proofInput.required = false;
+        if (proofStar)  proofStar.style.display = 'none';
+    } else {
+        show(tellerSubmit);
+        show(proofWrapper);
+        show(methodWrapper);
+        show(tellerWrapper);
+        show(bankSection);
+        hide(onlineSubmit);
+        hide(onlineNotice);
+        if (proofInput) proofInput.required = true;
+        if (proofStar)  proofStar.style.display = 'inline';
+    }
+}
+
+// =============================================================================
+// GATEWAY BUTTONS
+// =============================================================================
+function initGatewayButtons() {
+    document.querySelectorAll('.gateway-pay-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            pendingGateway      = this.dataset.gateway;
+            pendingGatewayLabel = this.dataset.display;
+            handleGatewayClick();
+        });
+    });
+}
+
+function handleGatewayClick() {
+    const payload = buildPayload(pendingGateway);
+    if (!payload) return;
+
+    if (!collectedEmail) {
+        openEmailModal();
+        return;
+    }
+    initiateOnlinePayment();
+}
+
+// =============================================================================
+// BUILD PAYLOAD
+// =============================================================================
+function buildPayload(gateway) {
+    const amountInput = document.querySelector('input[name="amount"]');
+    const amount      = amountInput ? parseFloat(amountInput.value) || 0 : 0;
+
+    if (amount <= 0) {
+        showError('Please enter a valid amount before paying online.');
+        return null;
+    }
+
+    return {
+        gateway:        gateway,
+        payment_target: 'staff_wallet',
+        amount:         amount,
+        payment_type:   'quick',
+        email:          collectedEmail,
+    };
+}
+
+// =============================================================================
+// INITIATE ONLINE PAYMENT
+// =============================================================================
+function initiateOnlinePayment() {
+    const payload = buildPayload(pendingGateway);
+    if (!payload) return;
+
+    payload.email = collectedEmail;
+
+    setGatewayButtonsLoading(true);
+
+    fetch(INITIALIZE_URL, {
+        method:  'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken':  getCsrfToken(),
+        },
+        body: JSON.stringify(payload),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        setGatewayButtonsLoading(false);
+
+        if (data.status !== 'ok') {
+            if (data.message === 'email_required') {
+                openEmailModal();
+                return;
+            }
+            showError(data.message || 'Could not initialize payment. Please try again.');
+            return;
+        }
+
+        if (data.gateway === 'paystack') {
+            openPaystackPopup(data);
+        } else if (data.gateway === 'flutterwave') {
+            openFlutterwavePopup(data);
+        }
+    })
+    .catch(function (err) {
+        setGatewayButtonsLoading(false);
+        showError('A network error occurred. Please check your connection and try again.');
+        console.error('Initialize error:', err);
+    });
+}
+
+// =============================================================================
+// PAYSTACK POPUP
+// =============================================================================
+function openPaystackPopup(data) {
+    const handler = PaystackPop.setup({
+        key:      data.public_key,
+        email:    data.email,
+        amount:   data.amount_kobo,
+        ref:      data.reference,
+        currency: 'NGN',
+        callback: function (response) {
+            onPaymentSuccess(data);
+        },
+        onClose: function () {
+            showInfo(
+                'Payment window closed without completing. ' +
+                'You can try again or upload a teller instead.'
+            );
+        },
+    });
+    handler.openIframe();
+}
+
+// =============================================================================
+// FLUTTERWAVE POPUP
+// =============================================================================
+function openFlutterwavePopup(data) {
+    FlutterwaveCheckout({
+        public_key:      data.public_key,
+        tx_ref:          data.reference,
+        amount:          data.amount_naira,
+        currency:        'NGN',
+        payment_options: 'card, banktransfer, ussd',
+        customer: {
+            email: data.email,
+        },
+        customizations: {
+            title:       'Staff Wallet Funding',
+            description: 'Wallet funding via staff portal',
+        },
+        callback: function (response) {
+            if (response.status === 'successful') {
+                onPaymentSuccess(data);
+            } else {
+                showError('Payment was not successful. Please try again.');
+            }
+        },
+        onclose: function () {
+            showInfo(
+                'Payment window closed without completing. ' +
+                'You can try again or upload a teller instead.'
+            );
+        },
+    });
+}
+
+// =============================================================================
+// ON PAYMENT SUCCESS — verify then redirect to history
+// =============================================================================
+function onPaymentSuccess(data) {
+    showVerifyOverlay();
+
+    fetch(VERIFY_URL, {
+        method:  'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken':  getCsrfToken(),
+        },
+        body: JSON.stringify({
+            reference: data.reference,
+            gateway:   data.gateway,
+        }),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (result) {
+        hideVerifyOverlay();
+
+        if (result.status === 'confirmed') {
+            // No detail page for staff — go straight to history
+            showSuccessAndRedirect(
+                'Payment confirmed! Your wallet has been credited. Redirecting...'
+            );
+        } else {
+            showInfo(
+                'Payment received! Confirmation is in progress. ' +
+                'Your wallet will be credited automatically. ' +
+                'Redirecting to your history...'
+            );
+            setTimeout(function () {
+                window.location.href = HISTORY_URL;
+            }, 4000);
+        }
+    })
+    .catch(function (err) {
+        hideVerifyOverlay();
+        console.error('Verify error:', err);
+        showInfo(
+            'Payment received! We are confirming it in the background. ' +
+            'Please check your deposit history shortly.'
+        );
+        setTimeout(function () {
+            window.location.href = HISTORY_URL;
+        }, 4000);
+    });
+}
+
+function showSuccessAndRedirect(msg) {
+    showSuccess(msg);
+    setTimeout(function () {
+        window.location.href = HISTORY_URL;
+    }, 2500);
+}
+
+// =============================================================================
+// EMAIL MODAL
+// =============================================================================
+function initEmailModal() {
+    const confirmBtn = document.getElementById('confirmEmailBtn');
+    const cancelBtn  = document.getElementById('cancelEmailBtn');
+    const emailInput = document.getElementById('staffEmailInput');
+    const emailError = document.getElementById('staffEmailError');
+
+    if (!confirmBtn) return;
+
+    confirmBtn.addEventListener('click', function () {
+        const email = emailInput.value.trim();
+        if (!email || !isValidEmail(email)) {
+            emailError.style.display = 'block';
+            emailInput.focus();
+            return;
+        }
+        emailError.style.display = 'none';
+        collectedEmail = email;
+        closeEmailModal();
+
+        setTimeout(function () {
+            initiateOnlinePayment();
+        }, 350);
+    });
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            closeEmailModal();
+            pendingGateway      = null;
+            pendingGatewayLabel = null;
+        });
+    }
+
+    if (emailInput) {
+        emailInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') confirmBtn.click();
+        });
+    }
+}
+
+function openEmailModal() {
+    const emailInput = document.getElementById('staffEmailInput');
+    const emailError = document.getElementById('staffEmailError');
+    if (emailInput) emailInput.value = '';
+    if (emailError) emailError.style.display = 'none';
+
+    const modal = new bootstrap.Modal(
+        document.getElementById('emailRequiredModal')
+    );
+    modal.show();
+
+    document.getElementById('emailRequiredModal').addEventListener(
+        'shown.bs.modal',
+        function () { if (emailInput) emailInput.focus(); },
+        { once: true }
+    );
+}
+
+function closeEmailModal() {
+    const modalEl = document.getElementById('emailRequiredModal');
+    const modal   = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+}
+
+// =============================================================================
+// PRELOADER
+// =============================================================================
+function showVerifyOverlay() {
+    const el = document.getElementById('paymentVerifyOverlay');
+    if (el) el.style.display = 'flex';
+}
+
+function hideVerifyOverlay() {
+    const el = document.getElementById('paymentVerifyOverlay');
+    if (el) el.style.display = 'none';
+}
+
+// =============================================================================
+// GATEWAY BUTTON STATE
+// =============================================================================
+function setGatewayButtonsLoading(loading) {
+    document.querySelectorAll('.gateway-pay-btn').forEach(function (btn) {
+        if (loading) {
+            btn.disabled     = true;
+            btn.dataset.orig = btn.innerHTML;
+            btn.innerHTML    =
+                '<span class="spinner-border spinner-border-sm me-1"></span> Processing...';
+        } else {
+            btn.disabled  = false;
+            btn.innerHTML = btn.dataset.orig ||
+                '<i class="bi bi-shield-check me-1"></i> Pay with ' + btn.dataset.display;
+        }
+    });
+}
+
+// =============================================================================
+// ALERT HELPERS
+// =============================================================================
+function showError(msg)   { showAlert(msg, 'danger',  'bi-exclamation-octagon'); }
+function showSuccess(msg) { showAlert(msg, 'success', 'bi-check-circle'); }
+function showInfo(msg)    { showAlert(msg, 'info',    'bi-info-circle'); }
+
+function showAlert(msg, type, icon) {
+    document.querySelectorAll('.dynamic-alert').forEach(function (el) {
+        el.remove();
+    });
+    const div = document.createElement('div');
+    div.className =
+        `alert alert-${type} alert-dismissible fade show dynamic-alert`;
+    div.innerHTML = `<i class="bi ${icon} me-1"></i>${msg}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+
+    const cardBody = document.querySelector('.card-body');
+    if (cardBody) {
+        cardBody.insertBefore(div, cardBody.firstChild);
+        div.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+// =============================================================================
+// CLIPBOARD
+// =============================================================================
+function copyToClipboard(text, btn) {
+    const ta = document.getElementById('clipboard-helper');
+    if (!ta) return;
+    ta.value = text;
+    ta.select();
+    ta.setSelectionRange(0, 99999);
+    try {
+        document.execCommand('copy');
+        if (btn) {
+            const span = btn.querySelector('.copy-text');
+            const icon = btn.querySelector('i');
+            if (span) span.textContent = 'Copied!';
+            if (icon) icon.className   = 'bi bi-check-lg';
+            btn.classList.add('btn-success');
+            btn.classList.remove('btn-outline-secondary');
+            setTimeout(function () {
+                if (span) span.textContent = 'Copy';
+                if (icon) icon.className   = 'bi bi-clipboard';
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-secondary');
+            }, 2000);
+        }
+    } catch (e) {
+        console.error('Copy failed:', e);
+    }
+}
+
+// =============================================================================
+// UTILITIES
+// =============================================================================
+function getCsrfToken() {
+    const match = document.cookie
+        .split(';')
+        .map(function (c) { return c.trim(); })
+        .find(function (c) { return c.startsWith('csrftoken='); });
+    return match ? match.split('=')[1] : '';
+}
+
+function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function show(el) { if (el) el.style.display = 'block'; }
+function hide(el) { if (el) el.style.display = 'none'; }
+</script>
+
+{% endblock %}

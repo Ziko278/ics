@@ -19,6 +19,7 @@ urlpatterns = [
     path('fees/history/', views.FeeUploadHistoryView.as_view(), name='parent_fee_history'),
     path('other-payments/', ParentOtherPaymentListView.as_view(), name='parent_other_payment_list'),
     path('fees/payment/<int:pk>/', views.FeePaymentUploadDetailView.as_view(), name='parent_fee_payment_detail'),
+    path('wallet/funding/<int:pk>/', views.StudentFundingDetailView.as_view(), name='parent_funding_detail'),
 
     # --- Shop ---
     path('shop/', views.ShopHistoryView.as_view(), name='parent_shop_history'),

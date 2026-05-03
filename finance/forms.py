@@ -17,7 +17,7 @@ from finance.models import FinanceSettingModel, SupplierPaymentModel, PurchaseAd
     IncomeCategoryModel, IncomeModel, TermlyFeeAmountModel, StaffBankDetail, SalaryStructure, SalaryAdvance, \
     SalaryRecord, StudentFundingModel, SchoolBankDetail, StaffLoanRepayment, StaffLoan, StaffFundingModel, \
     DiscountModel, DiscountApplicationModel, StudentDiscountModel, InvoiceModel, OtherPaymentClearanceModel, \
-    OtherPaymentModel, SalarySetting, Bonus
+    OtherPaymentModel, SalarySetting, Bonus, PaymentGatewayModel
 from human_resource.models import StaffModel
 from inventory.models import PurchaseOrderModel
 from student.models import StudentModel
@@ -1808,3 +1808,54 @@ class BonusFilterForm(forms.Form):
         choices=[('', 'All Statuses')] + Bonus.Status.choices,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
+
+
+class PaymentGatewayForm(forms.ModelForm):
+    secret_key = forms.CharField(
+        label="Secret Key",
+        required=False,
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Leave blank to keep existing'}),
+        help_text="Leave blank to keep the existing secret key."
+    )
+    webhook_secret = forms.CharField(
+        label="Webhook Secret",
+        required=False,
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Leave blank to keep existing'}),
+        help_text="Leave blank to keep the existing webhook secret."
+    )
+
+    class Meta:
+        model = PaymentGatewayModel
+        fields = ['gateway', 'display_name', 'public_key', 'is_active', 'is_test_mode']
+        widgets = {
+            'gateway': forms.Select(attrs={'class': 'form-select'}),
+            'display_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'public_key': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_test_mode': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # On create, secret fields are required
+        # On edit, they are optional (blank = keep existing)
+        if not self.instance.pk:
+            self.fields['secret_key'].required = True
+            self.fields['secret_key'].help_text = "Required."
+            self.fields['webhook_secret'].required = True
+            self.fields['webhook_secret'].help_text = "Required."
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        secret_key = self.cleaned_data.get('secret_key')
+        webhook_secret = self.cleaned_data.get('webhook_secret')
+
+        # Only encrypt and update if a new value was provided
+        if secret_key:
+            instance.secret_key = secret_key
+        if webhook_secret:
+            instance.webhook_secret = webhook_secret
+
+        if commit:
+            instance.save()
+        return instance

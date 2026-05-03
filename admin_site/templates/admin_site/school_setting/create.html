@@ -45,6 +45,35 @@
                             <label class="form-check-label" for="id_auto_low_balance_notification">Send Low Balance Notifications</label>
                         </div>
                     </div>
+
+                    {# Inside the Financial Settings border div, after the existing switches #}
+
+<div class="col-md-6 mt-4">
+    <div class="form-check form-switch">
+        {{ form.online_payment_enabled }}
+        <label class="form-check-label" for="id_online_payment_enabled">
+            Enable Online Payments
+        </label>
+        <div class="form-text">
+            Master switch — turns off the online payment option on all
+            pages without removing gateway configuration.
+        </div>
+    </div>
+</div>
+
+<div class="col-md-6 mt-4">
+    <div class="form-check form-switch">
+        {{ form.auto_confirm_online_payment }}
+        <label class="form-check-label" for="id_auto_confirm_online_payment">
+            Auto-Confirm Online Payments
+        </label>
+        <div class="form-text">
+            When enabled, successful online payments are confirmed and
+            credited immediately via webhook. When disabled, they go to
+            pending for manual review like teller uploads.
+        </div>
+    </div>
+</div>
                 </div>
 
                 <!-- Academic Settings Section -->

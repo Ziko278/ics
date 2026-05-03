@@ -1,0 +1,233 @@
+{% extends 'admin_site/layout.html' %}
+{% block 'main' %}
+{% load humanize %}
+
+<div class="col-12">
+    <div class="card overflow-auto">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title">Payment Gateways</h5>
+                <button type="button" class="btn btn-sm btn-primary"
+                        data-bs-toggle="modal" data-bs-target="#addGatewayModal">
+                    <i class="bi bi-plus-circle"></i> Add Gateway
+                </button>
+            </div>
+            <p class="card-description">
+                Configure online payment gateways (Paystack, Flutterwave).
+                Secret keys are encrypted at rest.
+            </p>
+
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Gateway</th>
+                        <th>Display Name</th>
+                        <th>Public Key</th>
+                        <th>Secret Key</th>
+                        <th>Webhook Secret</th>
+                        <th class="text-center">Test Mode</th>
+                        <th class="text-center">Active</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for gw in gateway_list %}
+                <tr>
+                    <th scope="row">{{ forloop.counter }}</th>
+                    <td>{{ gw.get_gateway_display }}</td>
+                    <td>{{ gw.display_name }}</td>
+                    <td>
+                        <span class="font-monospace small text-muted">
+                            ****{{ gw.public_key|slice:"-4:" }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-monospace small text-muted">
+                            {{ gw.masked_secret_key }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-monospace small text-muted">
+                            {{ gw.masked_webhook_secret }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        {% if gw.is_test_mode %}
+                            <span class="badge bg-warning text-dark">Test</span>
+                        {% else %}
+                            <span class="badge bg-success">Live</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if gw.is_active %}
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                        {% else %}
+                            <i class="bi bi-x-circle-fill text-danger"></i>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-warning"
+                                data-bs-toggle="modal"
+                                data-bs-target="#editGatewayModal{{ gw.pk }}">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                        <a href="{% url 'payment_gateway_delete' gw.pk %}"
+                           class="btn btn-sm btn-danger">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="alert alert-secondary text-center mb-0">
+                            No payment gateways configured yet.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# --- Add Modal --- #}
+<form method="POST" action="{% url 'payment_gateway_create' %}">
+    {% csrf_token %}
+    <div class="modal fade" id="addGatewayModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Add Payment Gateway</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Gateway Provider <span class="text-danger">*</span></label>
+                            {{ form.gateway }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Display Name <span class="text-danger">*</span></label>
+                            {{ form.display_name }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Public Key <span class="text-danger">*</span></label>
+                            {{ form.public_key }}
+                            <div class="form-text">The publishable/public key from your gateway dashboard.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Secret Key <span class="text-danger">*</span></label>
+                            {{ form.secret_key }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Webhook Secret <span class="text-danger">*</span></label>
+                            {{ form.webhook_secret }}
+                            <div class="form-text">Found in your gateway dashboard under Webhooks.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-2">
+                                {{ form.is_active }}
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-2">
+                                {{ form.is_test_mode }}
+                                <label class="form-check-label">Test Mode</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Gateway</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+{# --- Edit Modals --- #}
+{% for gw in gateway_list %}
+<form method="POST" action="{% url 'payment_gateway_update' gw.pk %}">
+    {% csrf_token %}
+    <div class="modal fade" id="editGatewayModal{{ gw.pk }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><b>Edit — {{ gw.get_gateway_display }}</b></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Display Name <span class="text-danger">*</span></label>
+                            <input type="text" name="display_name"
+                                   value="{{ gw.display_name }}"
+                                   class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Public Key <span class="text-danger">*</span></label>
+                            <input type="text" name="public_key"
+                                   value="{{ gw.public_key }}"
+                                   class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Secret Key</label>
+                            <input type="password" name="secret_key"
+                                   class="form-control"
+                                   placeholder="Leave blank to keep existing">
+                            <div class="form-text">
+                                Current: <span class="font-monospace">{{ gw.masked_secret_key }}</span>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Webhook Secret</label>
+                            <input type="password" name="webhook_secret"
+                                   class="form-control"
+                                   placeholder="Leave blank to keep existing">
+                            <div class="form-text">
+                                Current: <span class="font-monospace">{{ gw.masked_webhook_secret }}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-2">
+                                <input type="checkbox" name="is_active"
+                                       class="form-check-input"
+                                       {% if gw.is_active %}checked{% endif %}>
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-2">
+                                <input type="checkbox" name="is_test_mode"
+                                       class="form-check-input"
+                                       {% if gw.is_test_mode %}checked{% endif %}>
+                                <label class="form-check-label">Test Mode</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endfor %}
+
+{% endblock %}

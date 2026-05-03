@@ -8,9 +8,6 @@ class ParentLoginForm(forms.Form):
     username = forms.CharField(max_length=150, required=True, widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Username'}))
     password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'}), required=True)
 
-
-# parent_portal/forms.py
-# (Keep necessary imports: forms, InvoiceModel, StudentFundingModel, StudentModel, Decimal)
 class FeeUploadForm(forms.ModelForm):
     target_invoice = forms.ModelChoiceField(
         queryset=InvoiceModel.objects.none(),

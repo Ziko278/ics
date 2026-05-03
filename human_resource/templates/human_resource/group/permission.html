@@ -230,6 +230,13 @@
                                                             {% if "view_expensemodel" in permission_codenames %} checked {% endif %}>
                                                         </span>
                                                     </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        Can Manage Payment Gateways
+                                                        <span class="badge">
+                                                            <input type="checkbox" name="permissions[]" value="add_paymentgatewaymodel"
+                                                            {% if "add_paymentgatewaymodel" in permission_codenames %} checked {% endif %}>
+                                                        </span>
+                                                    </li>
 
                                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                                         Can View Finance Setting

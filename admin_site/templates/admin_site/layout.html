@@ -631,6 +631,13 @@
                     </li>
                     {% endif %}
 
+                    {% if 'finance.add_paymentgatewaymodel' in perms %}
+                    <li>
+                        <a href="{% url 'payment_gateway_list' %}">
+                            <i class="bi bi-circle"></i><span>Payment Gateways</span>
+                        </a>
+                    </li>
+                    {% endif %}
                     {% if 'finance.change_financesettingmodel' in perms %}
                     <li>
                         <a href="{% url 'finance_setting_detail' %}">

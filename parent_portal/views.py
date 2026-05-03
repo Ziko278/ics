@@ -18,7 +18,7 @@ from admin_site.models import SchoolSettingModel
 # Import models from other apps (adjust paths as needed)
 from student.models import StudentModel, ParentProfileModel
 from finance.models import InvoiceModel, InvoiceItemModel, StudentFundingModel, SchoolBankDetail, FeePaymentModel, \
-    StudentDiscountModel, OtherPaymentModel
+    StudentDiscountModel, OtherPaymentModel, PaymentGatewayModel
 from inventory.models import InventoryAssignmentModel, InventoryCollectionModel, SaleModel, SaleItemModel
 from cafeteria.models import MealCollectionModel
 
@@ -247,6 +247,15 @@ class FeeUploadView(ParentPortalMixin, FormView):
             context['bank_details'] = SchoolBankDetail.objects.all()
             context['funding_account'] = None
 
+        # --- Online payment additions ---
+        setting = SchoolSettingModel.objects.first()
+        context['online_payment_enabled'] = (
+            setting.online_payment_enabled if setting else False
+        )
+        context['active_gateways'] = PaymentGatewayModel.objects.filter(
+            is_active=True
+        ).values('gateway', 'display_name', 'public_key')
+
         return context
 
     def form_valid(self, form):
@@ -436,6 +445,18 @@ class FeePaymentUploadDetailView(ParentPortalMixin, DetailView):
         return FeePaymentModel.objects.filter(
             invoice__student=self.selected_ward
         ).select_related('invoice', 'invoice__student', 'invoice__session', 'invoice__term')
+
+
+class StudentFundingDetailView(ParentPortalMixin, DetailView):
+    model = StudentFundingModel
+    template_name = 'parent_portal/funding_detail.html'
+    context_object_name = 'funding'
+
+    def get_queryset(self):
+        # Ensure parent can only see funding records for their own ward
+        return StudentFundingModel.objects.filter(
+            student=self.selected_ward
+        ).select_related('student', 'session', 'term')
 
 
 # --- Shop ---

@@ -25,6 +25,29 @@
 
             <!-- Financial Settings Section -->
             <h6 class="card-subtitle mt-4 mb-2 text-muted">Financial Settings</h6>
+            {# After the existing Low Balance Threshold row #}
+
+            <div class="row mt-2">
+                <div class="col-lg-3 col-md-4 label fw-bold">Online Payments</div>
+                <div class="col-lg-9 col-md-8">
+                    {% if school_setting.online_payment_enabled %}
+                        <span class="badge bg-success">Enabled</span>
+                    {% else %}
+                        <span class="badge bg-danger">Disabled</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="row mt-2">
+                <div class="col-lg-3 col-md-4 label fw-bold">Auto-Confirm Online Payments</div>
+                <div class="col-lg-9 col-md-8">
+                    {% if school_setting.auto_confirm_online_payment %}
+                        <span class="badge bg-success">Yes — credit on webhook</span>
+                    {% else %}
+                        <span class="badge bg-warning text-dark">No — goes to pending</span>
+                    {% endif %}
+                </div>
+            </div>
             <div class="row border-top pt-3">
                 <div class="col-lg-3 col-md-4 label fw-bold">Allow Student Debt</div>
                 <div class="col-lg-9 col-md-8">
@@ -68,6 +91,29 @@
             <div class="row mt-2">
                 <div class="col-lg-3 col-md-4 label fw-bold">Account Number</div>
                 <div class="col-lg-9 col-md-8">{{ school_setting.account_number|default:"Not Set" }}</div>
+            </div>
+
+
+            <h6 class="card-subtitle mt-4 mb-2 text-muted">Online Payment Gateways</h6>
+            <div class="row border-top pt-3">
+                {# Replace the {% with %} block with: #}
+
+                <div class="col-lg-3 col-md-4 label fw-bold">Configured Gateways</div>
+                <div class="col-lg-9 col-md-8">
+                    {% if active_gateways %}
+                        {% for gw in active_gateways %}
+                            <span class="badge bg-primary me-1">{{ gw.display_name }}</span>
+                            {% if gw.is_test_mode %}
+                                <span class="badge bg-warning text-dark me-2">Test</span>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">None configured</span>
+                    {% endif %}
+                    <a href="{% url 'payment_gateway_list' %}" class="btn btn-sm btn-outline-primary ms-3">
+                        <i class="bi bi-gear"></i> Manage Gateways
+                    </a>
+                </div>
             </div>
 
         </div>

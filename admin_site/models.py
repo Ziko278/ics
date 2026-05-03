@@ -46,6 +46,16 @@ class SchoolInfoModel(models.Model):
 class SchoolSettingModel(models.Model):
     allow_student_debt = models.BooleanField(default=True)
     auto_low_balance_notification = models.BooleanField(default=True)
+    auto_confirm_online_payment = models.BooleanField(
+        default=True,
+        help_text="Automatically confirm and credit online payments on webhook receipt. "
+                  "If disabled, online payments go to pending for manual review."
+    )
+    online_payment_enabled = models.BooleanField(
+        default=True,
+        help_text="Master switch — disables the online payment option on all pages without "
+                  "touching gateway configuration."
+    )
     # ✔️ BUG PREVENTION: Using DecimalField for all financial values.
     max_student_debt = models.DecimalField(max_digits=10, decimal_places=2)
     low_balance = models.DecimalField(max_digits=10, decimal_places=2)

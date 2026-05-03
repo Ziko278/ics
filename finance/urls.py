@@ -259,4 +259,16 @@ urlpatterns = [
     # Staff Bonus URLs
     path('staff/my-bonuses/', staff_bonus_list_view, name='staff_bonus_list'),
     path('staff/my-bonuses/<int:pk>/', staff_bonus_detail_view, name='staff_bonus_detail'),
+
+    path('settings/gateways/', PaymentGatewayListView.as_view(), name='payment_gateway_list'),
+    path('settings/gateways/add/', PaymentGatewayCreateView.as_view(), name='payment_gateway_create'),
+    path('settings/gateways/<int:pk>/edit/', PaymentGatewayUpdateView.as_view(), name='payment_gateway_update'),
+    path('settings/gateways/<int:pk>/delete/', PaymentGatewayDeleteView.as_view(), name='payment_gateway_delete'),
+
+    path('online/initialize/', initialize_online_payment_view, name='initialize_online_payment'),
+    path('webhook/paystack/', paystack_webhook_view, name='paystack_webhook'),
+    path('webhook/flutterwave/', flutterwave_webhook_view, name='flutterwave_webhook'),
+
+    path('online/status/<str:reference>/', check_payment_status_view, name='check_payment_status'),
+    path('online/verify/', verify_online_payment_view, name='verify_online_payment'),
 ]

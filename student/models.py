@@ -1,5 +1,7 @@
 import logging
 import uuid
+from decimal import Decimal
+
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from admin_site.models import ClassesModel, ClassSectionModel
@@ -243,9 +245,9 @@ class ImportBatchModel(models.Model):
 class StudentWalletModel(models.Model):
     student = models.OneToOneField(StudentModel, on_delete=models.CASCADE, related_name='student_wallet')
     # Use DecimalField for financial accuracy
-    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    debt = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    fee_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    balance = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    debt = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    fee_balance = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
 
     def __str__(self):
         return f"{self.student}'s Wallet"

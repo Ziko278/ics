@@ -34,7 +34,7 @@ class SchoolSettingForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         for field in self.fields:
-            if field not in ['auto_low_balance_notification', 'allow_student_debt']:
+            if field not in ['auto_low_balance_notification', 'allow_student_debt', 'online_payment_enabled', 'auto_confirm_online_payment']:
                 self.fields[field].widget.attrs.update({
                     'class': 'form-control',
                     'autocomplete': 'off'

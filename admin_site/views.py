@@ -17,7 +17,7 @@ from django.db.models import Sum, F, Count, DecimalField, Q
 from django.db import OperationalError
 from django.utils.timezone import now
 
-from finance.models import SalaryRecord, StaffLoan, SalaryAdvance
+from finance.models import SalaryRecord, StaffLoan, SalaryAdvance, PaymentGatewayModel
 from inventory.models import ItemModel, SaleItemModel, SaleModel, SupplierModel
 from .models import (
     ActivityLogModel, SchoolInfoModel, SchoolSettingModel, ClassSectionModel,
@@ -221,6 +221,13 @@ class SchoolSettingDetailView(LoginRequiredMixin, PermissionRequiredMixin, Detai
 
     def get_object(self, queryset=None):
         return SchoolSettingModel.objects.first()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['active_gateways'] = PaymentGatewayModel.objects.filter(is_active=True)
+        return context
+
+
 
 
 class SchoolSettingCreateView(LoginRequiredMixin, PermissionRequiredMixin, SuccessMessageMixin, CreateView):
