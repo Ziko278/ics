@@ -109,6 +109,9 @@ def send_fee_payment_confirmation_email(payment, request=None):
             'finance/email/fee_payment_confirmation.html',
             context
         )
+        recipients = [recipient]
+        if school and school.email and school.email != recipient:
+            recipients.append(school.email)
 
         send_mail(
             subject=f"Fee Payment Confirmed — {invoice.invoice_number}",
@@ -121,7 +124,7 @@ def send_fee_payment_confirmation_email(payment, request=None):
                 f"Thank you."
             ),
             from_email=_get_from_email(school),
-            recipient_list=[recipient],
+            recipient_list=recipients,
             fail_silently=False,
             html_message=html_content,
         )
@@ -197,6 +200,10 @@ def send_student_funding_confirmation_email(funding, request=None):
             context
         )
 
+        recipients = [recipient]
+        if school and school.email and school.email != recipient:
+            recipients.append(school.email)
+
         send_mail(
             subject=f"Wallet Funding Confirmed — {student.first_name} {student.last_name}",
             message=(
@@ -208,7 +215,7 @@ def send_student_funding_confirmation_email(funding, request=None):
                 f"Thank you."
             ),
             from_email=_get_from_email(school),
-            recipient_list=[recipient],
+            recipient_list=recipients,
             fail_silently=False,
             html_message=html_content,
         )
@@ -278,7 +285,9 @@ def send_staff_funding_confirmation_email(funding, request=None):
             'finance/email/staff_funding_confirmation.html',
             context
         )
-
+        recipients = [recipient]
+        if school and school.email and school.email != recipient:
+            recipients.append(school.email)
         send_mail(
             subject="Wallet Funding Confirmed",
             message=(
@@ -288,7 +297,7 @@ def send_staff_funding_confirmation_email(funding, request=None):
                 f"Thank you."
             ),
             from_email=_get_from_email(school),
-            recipient_list=[recipient],
+            recipient_list=recipients,
             fail_silently=False,
             html_message=html_content,
         )
