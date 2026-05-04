@@ -183,7 +183,7 @@ def do_confirm_fee_payment(payment: FeePaymentModel, override_allocation: bool =
 
 
 @transaction.atomic
-def do_confirm_student_funding(payment: StudentFundingModel) -> None:
+def do_confirm_student_funding(payment: StudentFundingModel, request=None) -> None:
     """
     Confirm a pending StudentFundingModel and credit the appropriate wallet.
     Replicates the full logic of confirm_payment_view.
@@ -218,7 +218,7 @@ def do_confirm_student_funding(payment: StudentFundingModel) -> None:
     payment.status = StudentFundingModel.PaymentStatus.CONFIRMED
     payment.save(update_fields=['status'])
 
-    send_student_funding_confirmation_email(payment)
+    send_student_funding_confirmation_email(payment, request=request)
 
     logger.info(
         f"StudentFunding {payment.pk} confirmed for student {student}. "
@@ -227,7 +227,7 @@ def do_confirm_student_funding(payment: StudentFundingModel) -> None:
 
 
 @transaction.atomic
-def do_confirm_staff_funding(payment: StaffFundingModel) -> None:
+def do_confirm_staff_funding(payment: StaffFundingModel, request=None) -> None:
     """
     Confirm a pending StaffFundingModel and credit the staff wallet.
     Replicates the full logic of staff_confirm_payment_view.
@@ -247,7 +247,7 @@ def do_confirm_staff_funding(payment: StaffFundingModel) -> None:
     payment.status = StaffFundingModel.PaymentStatus.CONFIRMED
     payment.save(update_fields=['status'])
 
-    send_staff_funding_confirmation_email(payment)
+    send_staff_funding_confirmation_email(payment, request=request)
 
     logger.info(
         f"StaffFunding {payment.pk} confirmed for staff {staff}."
