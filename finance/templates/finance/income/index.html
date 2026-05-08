@@ -165,10 +165,10 @@
                 <ul class="pagination justify-content-center">
                     {% if page_obj.has_previous %}
                         <li class="page-item">
-                            <a class="page-link" href="?page=1&{{ request.GET.urlencode }}" aria-label="First">&laquo; First</a>
+                            <a class="page-link" href="?page=1&search={{ request.GET.search }}&category={{ request.GET.category }}&currency={{ request.GET.currency }}&date_from={{ request.GET.date_from }}&date_to={{ request.GET.date_to }}" aria-label="First">&laquo; First</a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}">Previous</a>
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&search={{ request.GET.search }}&category={{ request.GET.category }}&currency={{ request.GET.currency }}&date_from={{ request.GET.date_from }}&date_to={{ request.GET.date_to }}">Previous</a>
                         </li>
                     {% endif %}
 
@@ -178,10 +178,10 @@
 
                     {% if page_obj.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}">Next</a>
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&search={{ request.GET.search }}&category={{ request.GET.category }}&currency={{ request.GET.currency }}&date_from={{ request.GET.date_from }}&date_to={{ request.GET.date_to }}">Next</a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ request.GET.urlencode }}" aria-label="Last">Last &raquo;</a>
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&search={{ request.GET.search }}&category={{ request.GET.category }}&currency={{ request.GET.currency }}&date_from={{ request.GET.date_from }}&date_to={{ request.GET.date_to }}" aria-label="Last">Last &raquo;</a>
                         </li>
                     {% endif %}
                 </ul>
