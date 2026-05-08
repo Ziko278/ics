@@ -3891,22 +3891,36 @@ def staff_deposit_detail_view(request, pk):
 @login_required
 @permission_required("finance.view_studentfundingmodel", raise_exception=True)
 def staff_pending_deposit_payment_list_view(request):
+    school_setting = SchoolSettingModel.objects.first()
+
     session_id = request.GET.get('session', None)
-    session = SessionModel.objects.get(id=session_id)
+    if not session_id:
+        session = school_setting.session
+    else:
+        session = SessionModel.objects.get(id=session_id)
+
     term_id = request.GET.get('term', None)
-    term = TermModel.objects.get(id=term_id)
+    if not term_id:
+        term = school_setting.term
+    else:
+        term = TermModel.objects.get(id=term_id)
+
     session_list = SessionModel.objects.all()
     term_list = TermModel.objects.all().order_by('order')
-    fee_payment_list = StaffFundingModel.objects.filter(session=session, term=term, status='pending').order_by('-id')
+    fee_payment_list = StaffFundingModel.objects.filter(
+        session=session, term=term, status='pending'
+    ).order_by('-id')
+
     context = {
         'fee_payment_list': fee_payment_list,
-        'session': session,
-        'term': term,
+        'current_session': session,
+        'current_term': term,
+        'selected_session': session,
+        'selected_term': term,
         'session_list': session_list,
         'term_list': term_list,
     }
     return render(request, 'finance/funding/staff_pending.html', context)
-
 
 
 @login_required
@@ -4144,27 +4158,37 @@ class StaffDepositHistoryView(LoginRequiredMixin, ListView):
 @login_required
 @permission_required("finance.view_studentfundingmodel", raise_exception=True)
 def pending_deposit_payment_list_view(request):
-    session_id = request.GET.get('session', None)
     school_setting = SchoolSettingModel.objects.first()
+
+    session_id = request.GET.get('session', None)
     if not session_id:
         session = school_setting.session
     else:
         session = SessionModel.objects.get(id=session_id)
-    term = request.GET.get('term', None)
-    if not term:
+
+    term_id = request.GET.get('term', None)
+    if not term_id:
         term = school_setting.term
+    else:
+        term = TermModel.objects.get(id=term_id)
 
     session_list = SessionModel.objects.all()
     term_list = TermModel.objects.all().order_by('order')
-    fee_payment_list = StudentFundingModel.objects.filter(session=session, term=term, status='pending').order_by('-id')
+    fee_payment_list = StudentFundingModel.objects.filter(
+        session=session, term=term, status='pending'
+    ).order_by('-id')
+
     context = {
         'fee_payment_list': fee_payment_list,
-        'session': session,
-        'term': term,
+        'current_session': session,
+        'current_term': term,
+        'selected_session': session,
+        'selected_term': term,
         'session_list': session_list,
         'term_list': term_list,
     }
     return render(request, 'finance/funding/pending.html', context)
+
 
 
 @login_required
