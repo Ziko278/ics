@@ -97,7 +97,7 @@ def _parse_parent_allocations(notes: str) -> dict:
 # ==============================================================================
 
 @transaction.atomic
-def do_confirm_fee_payment(payment: FeePaymentModel, override_allocation: bool = False) -> None:
+def do_confirm_fee_payment(payment: FeePaymentModel, override_allocation: bool = False, request=None) -> None:
     """
     Confirm a pending FeePaymentModel and allocate the amount across
     invoice items. Replicates the full logic of confirm_fee_payment_view.
@@ -174,7 +174,7 @@ def do_confirm_fee_payment(payment: FeePaymentModel, override_allocation: bool =
         invoice.status = InvoiceModel.Status.PARTIALLY_PAID
     invoice.save(update_fields=['status'])
 
-    send_fee_payment_confirmation_email(payment)
+    send_fee_payment_confirmation_email(payment, request=request)
 
     logger.info(
         f"FeePayment {payment.pk} confirmed. "
