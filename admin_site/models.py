@@ -83,6 +83,7 @@ class ClassSectionModel(models.Model):
 class ClassesModel(models.Model):
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=10, default='', blank=True)
+    order = models.PositiveIntegerField(default=0)
     section = models.ManyToManyField(ClassSectionModel, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True, null=True)
