@@ -1496,33 +1496,26 @@ class SalarySettingForm(forms.ModelForm):
 
 
 class SalaryStructureForm(forms.ModelForm):
-    """Form for creating/editing salary structures"""
-
-    # Hidden field to store additional values as JSON
     additional_values_json = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
         model = SalaryStructure
         fields = [
             'staff', 'salary_setting', 'monthly_salary',
-            'bank_name', 'bank_code', 'account_number', 'account_name',  # <- Add bank_code here
-            'beneficiary_code', 'branch_sort_code',  # <- Add these 2 new fields
+            'bank_name', 'bank_code', 'account_number', 'account_name',
+            'beneficiary_code', 'branch_sort_code',
             'effective_from', 'effective_to', 'is_active'
         ]
         widgets = {
             'staff': forms.Select(attrs={'class': 'form-select'}),
             'salary_setting': forms.Select(attrs={'class': 'form-select'}),
-            'monthly_salary': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'step': '0.01',
-                'min': '0'
-            }),
-            'bank_name': forms.Select(attrs={'class': 'form-select', 'id': 'bankSelect'}),  # <- Change to Select
-            'bank_code': forms.HiddenInput(attrs={'id': 'bankCode'}),  # <- Add hidden field for code
+            'monthly_salary': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'bank_name': forms.Select(attrs={'class': 'form-select', 'id': 'bankSelect'}),
+            'bank_code': forms.HiddenInput(attrs={'id': 'bankCode'}),
             'account_number': forms.TextInput(attrs={'class': 'form-control'}),
             'account_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'beneficiary_code': forms.TextInput(attrs={'class': 'form-control'}),  # <- Add
-            'branch_sort_code': forms.TextInput(attrs={'class': 'form-control'}),  # <- Add
+            'beneficiary_code': forms.TextInput(attrs={'class': 'form-control'}),
+            'branch_sort_code': forms.TextInput(attrs={'class': 'form-control'}),
             'effective_from': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'effective_to': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -1531,30 +1524,41 @@ class SalaryStructureForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Filter to only active salary settings
         self.fields['salary_setting'].queryset = SalarySetting.objects.filter(is_active=True)
-
-        # Set help texts
         self.fields['monthly_salary'].help_text = 'Enter total monthly salary. Components will be calculated automatically.'
         self.fields['bank_name'].required = False
-        self.fields['bank_code'].required = False  # <- Add
+        self.fields['bank_code'].required = False
         self.fields['account_number'].required = False
         self.fields['account_name'].required = False
-        self.fields['beneficiary_code'].required = False  # <- Add
-        self.fields['branch_sort_code'].required = False  # <- Add
+        self.fields['beneficiary_code'].required = False
+        self.fields['branch_sort_code'].required = False
 
-        # Add dynamic fields for additional field values if a salary setting is active
-        # This is tricky because the salary_setting can change in the UI
-        # For existing instances, we can load them
+        # Resolve the salary setting — from POST data or existing instance
+        salary_setting = None
         if self.instance and self.instance.pk and self.instance.salary_setting:
-            for field_config in self.instance.salary_setting.additional_fields:
+            salary_setting = self.instance.salary_setting
+
+        # On POST, get the submitted salary_setting id and load it
+        if self.data.get('salary_setting'):
+            try:
+                salary_setting = SalarySetting.objects.get(pk=self.data['salary_setting'])
+            except SalarySetting.DoesNotExist:
+                pass
+
+        if salary_setting:
+            existing_additional = self.instance.additional_field_values if self.instance and self.instance.pk else {}
+            overrides = (self.instance.component_overrides or {}) if self.instance and self.instance.pk else {}
+            allowance_overrides = overrides.get('allowances', {})
+            relief_overrides = overrides.get('reliefs', {})
+
+            # Additional fields
+            for field_config in salary_setting.additional_fields:
                 code = field_config.get('code')
                 name = field_config.get('name')
                 if code:
-                    field_name = f"add_field_{code}"
-                    self.fields[field_name] = forms.DecimalField(
+                    self.fields[f"add_field_{code}"] = forms.DecimalField(
                         required=False,
-                        initial=self.instance.additional_field_values.get(code, 0),
+                        initial=existing_additional.get(code, 0),
                         widget=forms.NumberInput(attrs={
                             'class': 'form-control additional-field-input',
                             'step': '0.01',
@@ -1563,18 +1567,64 @@ class SalaryStructureForm(forms.ModelForm):
                         label=name
                     )
 
+            # Allowance overrides
+            for allowance in salary_setting.allowances:
+                if not allowance.get('is_active', False):
+                    continue
+                name = allowance.get('name')
+                if name:
+                    self.fields[f"override_allowance_{name}"] = forms.DecimalField(
+                        required=False,
+                        initial=allowance_overrides.get(name, None),
+                        widget=forms.NumberInput(attrs={
+                            'class': 'form-control override-allowance-input',
+                            'step': '0.01',
+                            'data-name': name,
+                            'placeholder': 'Leave blank to use calculated value'
+                        }),
+                        label=f"{name} (override)"
+                    )
+
+            # Relief overrides
+            for relief in salary_setting.reliefs_exemptions:
+                name = relief.get('name')
+                if name:
+                    self.fields[f"override_relief_{name}"] = forms.DecimalField(
+                        required=False,
+                        initial=relief_overrides.get(name, None),
+                        widget=forms.NumberInput(attrs={
+                            'class': 'form-control override-relief-input',
+                            'step': '0.01',
+                            'data-name': name,
+                            'placeholder': 'Leave blank to use calculated value'
+                        }),
+                        label=f"{name} (override)"
+                    )
+
     def save(self, commit=True):
         instance = super().save(commit=False)
-        
-        # Save additional field values
+
         additional_values = {}
+        allowance_overrides = {}
+        relief_overrides = {}
+
         for field_name, value in self.cleaned_data.items():
-            if field_name.startswith('add_field_'):
-                code = field_name.replace('add_field_', '')
-                additional_values[code] = float(value or 0)
-        
+            if field_name.startswith('add_field_') and value is not None:
+                code = field_name[len('add_field_'):]
+                additional_values[code] = float(value)
+            elif field_name.startswith('override_allowance_') and value is not None:
+                name = field_name[len('override_allowance_'):]
+                allowance_overrides[name] = float(value)
+            elif field_name.startswith('override_relief_') and value is not None:
+                name = field_name[len('override_relief_'):]
+                relief_overrides[name] = float(value)
+
         instance.additional_field_values = additional_values
-        
+        instance.component_overrides = {
+            'allowances': allowance_overrides,
+            'reliefs': relief_overrides,
+        }
+
         if commit:
             instance.save()
         return instance

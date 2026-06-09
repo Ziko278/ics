@@ -29,26 +29,22 @@
                 {{ form.staff }}
                 {% for err in form.staff.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-
               <div class="col-md-6">
                 <label class="form-label">Salary Setting <span class="text-danger">*</span></label>
                 {{ form.salary_setting }}
                 <small class="form-text text-muted">Only active salary settings are listed.</small>
                 {% for err in form.salary_setting.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-
               <div class="col-md-4">
                 <label class="form-label">Effective From <span class="text-danger">*</span></label>
                 {{ form.effective_from }}
                 {% for err in form.effective_from.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-
               <div class="col-md-4">
                 <label class="form-label">Effective To</label>
                 {{ form.effective_to }}
                 {% for err in form.effective_to.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-
               <div class="col-md-4">
                 <div class="form-check mt-4">
                   {{ form.is_active }}
@@ -78,25 +74,21 @@
                 <small class="form-text text-muted" id="bankLoading" style="display:none;">Loading banks...</small>
                 {% for err in form.bank_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-
               <div class="col-md-4">
                 <label class="form-label">Account Number</label>
                 {{ form.account_number }}
                 {% for err in form.account_number.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-
               <div class="col-md-4">
                 <label class="form-label">Account Name</label>
                 {{ form.account_name }}
                 {% for err in form.account_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-
               <div class="col-md-4">
                 <label class="form-label">Beneficiary Code</label>
                 {{ form.beneficiary_code }}
                 {% for err in form.beneficiary_code.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-
               <div class="col-md-4">
                 <label class="form-label">Branch Sort Code</label>
                 {{ form.branch_sort_code }}
@@ -130,12 +122,20 @@
                 {{ form.monthly_salary }}
                 {% for err in form.monthly_salary.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
               </div>
-              <div class="col-md-8">
+              <div class="col-md-{% if action == 'Update' %}5{% else %}8{% endif %}">
                 <div class="alert alert-info mb-0">
                   <i class="bi bi-info-circle"></i> Enter monthly salary to see complete salary calculation breakdown below.
                   All components will be calculated automatically based on selected salary setting.
                 </div>
               </div>
+              {% if action == 'Update' %}
+              <div class="col-md-3 text-end">
+                <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#overridesModal">
+                  <i class="bi bi-pencil-square"></i> Manual Overrides
+                  <span id="overrideBadge" class="badge bg-danger ms-1" style="display:none;">Active</span>
+                </button>
+              </div>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -286,10 +286,66 @@
   </div>
 </div>
 
+<!-- ===== OVERRIDES MODAL (Update only) ===== -->
+{% if action == 'Update' %}
+<div class="modal fade" id="overridesModal" tabindex="-1" aria-labelledby="overridesModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header text-white" style="background-color: #dc3545;">
+        <h5 class="modal-title" id="overridesModalLabel">
+          <i class="bi bi-pencil-square"></i> Manual Overrides
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning mb-4">
+          <i class="bi bi-exclamation-triangle"></i>
+          Overriding a value means the <strong>label description may not match the amount</strong>
+          (e.g. "10% of T" may show a different figure). <strong>Leave blank to use the calculated value.</strong>
+        </div>
+
+        <!-- Allowance Overrides -->
+        <h6 class="fw-bold text-muted mb-2 border-bottom pb-1">Allowances</h6>
+        <div class="row g-3 mb-4">
+          {% for field in form %}
+            {% if 'override_allowance_' in field.html_name %}
+            <div class="col-md-6">
+              <label class="form-label">{{ field.label }}</label>
+              {{ field }}
+              {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        <!-- Relief Overrides -->
+        <h6 class="fw-bold text-muted mb-2 border-bottom pb-1">Reliefs &amp; Exemptions</h6>
+        <div class="row g-3">
+          {% for field in form %}
+            {% if 'override_relief_' in field.html_name %}
+            <div class="col-md-6">
+              <label class="form-label">{{ field.label }}</label>
+              {{ field }}
+              {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-danger" id="applyOverridesBtn" data-bs-dismiss="modal">
+          <i class="bi bi-check-lg"></i> Apply &amp; Recalculate
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Salary Settings Data -->
 <script id="salary_settings_data" type="application/json">{{ salary_settings_json|safe }}</script>
-
-<!-- Additional Field Values (populated on edit, empty on create) -->
+<!-- Additional Field Values -->
 <script id="additional_field_values_data" type="application/json">{{ additional_field_values_json|default:"{}"|safe }}</script>
 
 <script>
@@ -300,158 +356,121 @@ document.addEventListener('DOMContentLoaded', function () {
   const previewContent = document.getElementById('previewContent');
   const calculationStatus = document.getElementById('calculationStatus');
 
-  // Parse salary settings data
   let salarySettingsData = null;
   try {
     const el = document.getElementById('salary_settings_data');
-    if (el && el.textContent) {
-      salarySettingsData = JSON.parse(el.textContent);
-    }
-  } catch (e) {
-    console.error('Failed to parse salary settings data:', e);
-  }
+    if (el && el.textContent) salarySettingsData = JSON.parse(el.textContent);
+  } catch (e) { console.error('Failed to parse salary settings data:', e); }
 
-  // Parse initial additional field values from DB (used to pre-fill on edit)
   let initialAdditionalFieldValues = {};
   try {
     const el = document.getElementById('additional_field_values_data');
-    if (el && el.textContent.trim()) {
-      initialAdditionalFieldValues = JSON.parse(el.textContent);
-    }
-  } catch (e) {
-    console.error('Failed to parse additional field values:', e);
-  }
+    if (el && el.textContent.trim()) initialAdditionalFieldValues = JSON.parse(el.textContent);
+  } catch (e) { console.error('Failed to parse additional field values:', e); }
 
-  // Get current additional field values from dynamic inputs (typed by user)
   function getAdditionalFieldValues() {
     const values = {};
     document.querySelectorAll('.additional-field-input').forEach(input => {
       const code = input.dataset.code;
-      if (code) {
-        values[code] = parseFloat(input.value) || 0;
-      }
+      if (code) values[code] = parseFloat(input.value) || 0;
     });
     return values;
   }
 
-  // Format currency with proper rounding
-  function formatCurrency(amount) {
-    const roundedAmount = Math.round(amount * 100) / 100;
-    return new Intl.NumberFormat('en-NG', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(roundedAmount);
+  // Read override values from modal inputs
+  function getOverrideValues() {
+    const allowanceOverrides = {};
+    const reliefOverrides = {};
+    document.querySelectorAll('.override-allowance-input').forEach(input => {
+      const name = input.dataset.name;
+      if (name && input.value.trim() !== '') allowanceOverrides[name] = parseFloat(input.value) || 0;
+    });
+    document.querySelectorAll('.override-relief-input').forEach(input => {
+      const name = input.dataset.name;
+      if (name && input.value.trim() !== '') reliefOverrides[name] = parseFloat(input.value) || 0;
+    });
+    return { allowanceOverrides, reliefOverrides };
   }
 
-  // Helper function to calculate amount based on components or additional fields
+  function formatCurrency(amount) {
+    return new Intl.NumberFormat('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.round(amount * 100) / 100);
+  }
+
   function calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary) {
     if (!basedOn) return 0;
-
-    if (basedOnType === 'additional_field') {
-      return additionalValues[basedOn] || 0;
-    }
-
-    if (basedOn.toUpperCase() === 'TOTAL') {
-      return monthlySalary;
-    }
-
-    if (basedOn.toUpperCase() === 'GROSS_INCOME') {
-      return 0; // Handled separately in calculation flow
-    }
-
-    const codes = basedOn.split('+').map(code => code.trim().toUpperCase());
-    let totalAmount = 0;
-    codes.forEach(code => {
-      if (basicComponents[code]) {
-        totalAmount += basicComponents[code].monthly;
-      }
-    });
-    return totalAmount;
+    if (basedOnType === 'additional_field') return additionalValues[basedOn] || 0;
+    if (basedOn.toUpperCase() === 'TOTAL') return monthlySalary;
+    if (basedOn.toUpperCase() === 'GROSS_INCOME') return 0;
+    const codes = basedOn.split('+').map(c => c.trim().toUpperCase());
+    let total = 0;
+    codes.forEach(code => { if (basicComponents[code]) total += basicComponents[code].monthly; });
+    return total;
   }
 
-  // Calculate complete salary
   function calculateSalary(monthlySalary, setting) {
     monthlySalary = Math.round(monthlySalary * 100) / 100;
-    const annualSalary = Math.round((monthlySalary * 12) * 100) / 100;
+    const annualSalary = Math.round(monthlySalary * 12 * 100) / 100;
     const additionalValues = getAdditionalFieldValues();
+    const { allowanceOverrides, reliefOverrides } = getOverrideValues();
 
-    // Calculate basic components
+    // Basic components
     const basicComponents = {};
-    let totalBasicPercentage = 0;
-
     if (setting.basic_components) {
       Object.values(setting.basic_components).forEach(component => {
         const percentage = parseFloat(component.percentage) || 0;
-        const monthlyAmount = Math.round((monthlySalary * percentage / 100) * 100) / 100;
-        const annualAmount = Math.round((monthlyAmount * 12) * 100) / 100;
-
+        const monthlyAmount = Math.round(monthlySalary * percentage / 100 * 100) / 100;
         basicComponents[component.code] = {
           name: component.name,
-          percentage: percentage,
+          percentage,
           monthly: monthlyAmount,
-          annual: annualAmount
+          annual: Math.round(monthlyAmount * 12 * 100) / 100
         };
-        totalBasicPercentage += percentage;
       });
     }
 
-    // Calculate leave allowance
-    let leaveAllowanceMonthly = 0;
-    let leaveAllowanceAnnual = 0;
-    let leaveAllowancePercentage = 0;
-
+    // Leave allowance
+    let leaveAllowanceMonthly = 0, leaveAllowanceAnnual = 0, leaveAllowancePercentage = 0;
     if (setting.leave_allowance_percentage !== undefined) {
       leaveAllowancePercentage = parseFloat(setting.leave_allowance_percentage) || 0;
-      const annualBasicSalary = Object.values(basicComponents).reduce((sum, comp) => sum + comp.annual, 0);
-      leaveAllowanceAnnual = Math.round((annualBasicSalary * leaveAllowancePercentage / 100) * 100) / 100;
-      leaveAllowanceMonthly = Math.round((leaveAllowanceAnnual / 12) * 100) / 100;
+      const annualBasic = Object.values(basicComponents).reduce((s, c) => s + c.annual, 0);
+      leaveAllowanceAnnual = Math.round(annualBasic * leaveAllowancePercentage / 100 * 100) / 100;
+      leaveAllowanceMonthly = Math.round(leaveAllowanceAnnual / 12 * 100) / 100;
     }
 
-    // Calculate other allowances
+    // Allowances — use override if set
     const allowances = [];
-    let totalOtherAllowancesMonthly = 0;
-    let totalOtherAllowancesAnnual = 0;
-
+    let totalOtherAllowancesMonthly = 0, totalOtherAllowancesAnnual = 0;
     if (setting.allowances) {
       setting.allowances.forEach(allowance => {
-        if (allowance.is_active) {
-          let monthlyAmount = 0;
+        if (!allowance.is_active) return;
+        const name = allowance.name;
+        let monthlyAmount = 0;
+        let isOverridden = false;
+
+        if (allowanceOverrides[name] !== undefined) {
+          monthlyAmount = allowanceOverrides[name];
+          isOverridden = true;
+        } else {
           const calcType = allowance.calculation_type || 'percentage';
           const basedOn = allowance.based_on || 'TOTAL';
           const basedOnType = allowance.based_on_type || 'component';
-
           const baseAmount = calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary);
 
-          if (calcType === 'fixed') {
-            monthlyAmount = parseFloat(allowance.fixed_amount) || 0;
-          } else if (calcType === 'percentage') {
-            const percentage = parseFloat(allowance.percentage) || 0;
-            monthlyAmount = (baseAmount * percentage / 100);
-          } else if (calcType === 'combined') {
-            const percentage = parseFloat(allowance.percentage) || 0;
-            const fixed = parseFloat(allowance.fixed_amount) || 0;
-            monthlyAmount = (baseAmount * percentage / 100) + fixed;
-          }
-
-          monthlyAmount = Math.round(monthlyAmount * 100) / 100;
-          const annualAmount = Math.round((monthlyAmount * 12) * 100) / 100;
-
-          allowances.push({
-            name: allowance.name,
-            monthly: monthlyAmount,
-            annual: annualAmount
-          });
-
-          totalOtherAllowancesMonthly += monthlyAmount;
-          totalOtherAllowancesAnnual += annualAmount;
+          if (calcType === 'fixed') monthlyAmount = parseFloat(allowance.fixed_amount) || 0;
+          else if (calcType === 'percentage') monthlyAmount = baseAmount * (parseFloat(allowance.percentage) || 0) / 100;
+          else if (calcType === 'combined') monthlyAmount = baseAmount * (parseFloat(allowance.percentage) || 0) / 100 + (parseFloat(allowance.fixed_amount) || 0);
         }
+
+        monthlyAmount = Math.round(monthlyAmount * 100) / 100;
+        const annualAmount = Math.round(monthlyAmount * 12 * 100) / 100;
+        allowances.push({ name, monthly: monthlyAmount, annual: annualAmount, isOverridden });
+        totalOtherAllowancesMonthly += monthlyAmount;
+        totalOtherAllowancesAnnual += annualAmount;
       });
     }
 
-    // Gross income calculation
-    let grossIncomeMonthly;
-    let grossIncomeAnnual;
-
+    // Gross income
+    let grossIncomeMonthly, grossIncomeAnnual;
     if (setting.include_leave_in_gross) {
       grossIncomeMonthly = Math.round((monthlySalary + totalOtherAllowancesMonthly + leaveAllowanceMonthly) * 100) / 100;
       grossIncomeAnnual = Math.round((annualSalary + totalOtherAllowancesAnnual + leaveAllowanceAnnual) * 100) / 100;
@@ -462,149 +481,95 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Statutory deductions
     const statutoryDeductions = [];
-    let totalStatutoryDeductions = 0;
-    let totalReliefs = 0;
-
+    let totalStatutoryDeductions = 0, totalReliefs = 0;
     if (setting.statutory_deductions) {
       setting.statutory_deductions.forEach(deduction => {
-        if (deduction.is_active !== false) {
-          const calcType = deduction.calculation_type || 'percentage';
-          const basedOn = deduction.based_on || 'B';
-          const basedOnType = deduction.based_on_type || 'component';
-
-          const baseAmount = calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary);
-          let amount = 0;
-
-          if (calcType === 'percentage') {
-            const percentage = parseFloat(deduction.percentage) || 0;
-            amount = (baseAmount * percentage / 100);
-          } else if (calcType === 'fixed') {
-            amount = parseFloat(deduction.fixed_amount) || 0;
-          } else if (calcType === 'combined') {
-            const percentage = parseFloat(deduction.percentage) || 0;
-            const fixed = parseFloat(deduction.fixed_amount) || 0;
-            amount = (baseAmount * percentage / 100) + fixed;
-          }
-
-          amount = Math.round(amount * 100) / 100;
-          statutoryDeductions.push({
-            name: deduction.name,
-            monthly: amount,
-            annual: Math.round((amount * 12) * 100) / 100,
-            percentage: parseFloat(deduction.percentage) || null,
-            basedOn: basedOn,
-            basedOnType: basedOnType,
-            calcType: calcType
-          });
-          totalStatutoryDeductions += amount;
-          totalReliefs += (amount * 12);
-        }
+        if (deduction.is_active === false) return;
+        const calcType = deduction.calculation_type || 'percentage';
+        const basedOn = deduction.based_on || 'B';
+        const basedOnType = deduction.based_on_type || 'component';
+        const baseAmount = calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary);
+        let amount = 0;
+        if (calcType === 'percentage') amount = baseAmount * (parseFloat(deduction.percentage) || 0) / 100;
+        else if (calcType === 'fixed') amount = parseFloat(deduction.fixed_amount) || 0;
+        else if (calcType === 'combined') amount = baseAmount * (parseFloat(deduction.percentage) || 0) / 100 + (parseFloat(deduction.fixed_amount) || 0);
+        amount = Math.round(amount * 100) / 100;
+        statutoryDeductions.push({
+          name: deduction.name,
+          monthly: amount,
+          annual: Math.round(amount * 12 * 100) / 100,
+          percentage: parseFloat(deduction.percentage) || null,
+          basedOn, basedOnType, calcType
+        });
+        totalStatutoryDeductions += amount;
+        totalReliefs += amount * 12;
       });
     }
 
-    // Reliefs and exemptions
+    // Reliefs — use override if set
     const reliefs = [];
     if (setting.reliefs_exemptions) {
       setting.reliefs_exemptions.forEach(relief => {
-        if (relief.is_active !== false) {
+        if (relief.is_active === false) return;
+        const name = relief.name;
+        let amount = 0;
+        let isOverridden = false;
+
+        if (reliefOverrides[name] !== undefined) {
+          amount = reliefOverrides[name];
+          isOverridden = true;
+        } else {
           const calcType = relief.calculation_type || (relief.formula_type === 'percentage_plus_fixed' ? 'combined' : relief.formula_type || 'fixed');
           const basedOn = relief.based_on || 'gross_income';
           const basedOnType = relief.based_on_type || 'component';
-
-          let baseAmount = 0;
-          if (basedOn === 'gross_income') {
-            baseAmount = grossIncomeAnnual;
-          } else {
-            baseAmount = calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary) * 12;
-          }
-
-          let amount = 0;
-          if (calcType === 'percentage') {
-            const percentage = parseFloat(relief.percentage) || 0;
-            amount = (baseAmount * percentage / 100);
-          } else if (calcType === 'fixed') {
-            amount = parseFloat(relief.fixed_amount) || 0;
-          } else if (calcType === 'combined') {
-            const percentage = parseFloat(relief.percentage) || 0;
-            const fixed = parseFloat(relief.fixed_amount) || 0;
-            amount = (baseAmount * percentage / 100) + fixed;
-          }
-
-          amount = Math.round(amount * 100) / 100;
-          reliefs.push({ name: relief.name, amount: amount });
-          totalReliefs += amount;
+          let baseAmount = basedOn === 'gross_income' ? grossIncomeAnnual : calculateBaseAmount(basicComponents, additionalValues, basedOn, basedOnType, monthlySalary) * 12;
+          if (calcType === 'percentage') amount = baseAmount * (parseFloat(relief.percentage) || 0) / 100;
+          else if (calcType === 'fixed') amount = parseFloat(relief.fixed_amount) || 0;
+          else if (calcType === 'combined') amount = baseAmount * (parseFloat(relief.percentage) || 0) / 100 + (parseFloat(relief.fixed_amount) || 0);
         }
+
+        amount = Math.round(amount * 100) / 100;
+        reliefs.push({ name, amount, isOverridden });
+        totalReliefs += amount;
       });
     }
 
-    // Calculate taxable income
-    const taxableIncome = Math.round((grossIncomeAnnual - totalReliefs) * 100) / 100;
-
-    // Calculate PAYE tax using brackets
+    const taxableIncome = Math.max(Math.round((grossIncomeAnnual - totalReliefs) * 100) / 100, 0);
     let annualTax = 0;
     const taxBreakdown = [];
-
     if (setting.tax_brackets && setting.tax_brackets.length > 0) {
-      let remainingIncome = taxableIncome;
-
+      let remaining = taxableIncome;
       setting.tax_brackets.forEach((bracket, index) => {
-        if (remainingIncome > 0) {
-          const bracketSize = bracket.limit !== null && bracket.limit !== undefined
-            ? parseFloat(bracket.limit)
-            : remainingIncome;
-
-          const taxableAmount = Math.min(remainingIncome, bracketSize);
-          const taxRate = parseFloat(bracket.rate) || 0;
-          const taxAmount = Math.round((taxableAmount * taxRate / 100) * 100) / 100;
-
-          if (taxableAmount > 0) {
-            let description;
-            if (index === 0) {
-              description = `First ${formatCurrency(bracketSize)} @ ${taxRate}%`;
-            } else if (bracket.limit === null || bracket.limit === undefined) {
-              description = `Remaining ${formatCurrency(taxableAmount)} @ ${taxRate}%`;
-            } else {
-              description = `Next ${formatCurrency(bracketSize)} @ ${taxRate}%`;
-            }
-
-            taxBreakdown.push({ description: description, rate: taxRate, amount: taxAmount });
-            annualTax += taxAmount;
-            remainingIncome -= taxableAmount;
-          }
+        if (remaining <= 0) return;
+        const bracketSize = bracket.limit !== null && bracket.limit !== undefined ? parseFloat(bracket.limit) : remaining;
+        const taxableAmount = Math.min(remaining, bracketSize);
+        const taxRate = parseFloat(bracket.rate) || 0;
+        const taxAmount = Math.round(taxableAmount * taxRate / 100 * 100) / 100;
+        if (taxableAmount > 0) {
+          let description = index === 0 ? `First ${formatCurrency(bracketSize)} @ ${taxRate}%`
+            : (bracket.limit === null || bracket.limit === undefined) ? `Remaining ${formatCurrency(taxableAmount)} @ ${taxRate}%`
+            : `Next ${formatCurrency(bracketSize)} @ ${taxRate}%`;
+          taxBreakdown.push({ description, rate: taxRate, amount: taxAmount });
+          annualTax += taxAmount;
+          remaining -= taxableAmount;
         }
       });
     }
 
-    const monthlyTax = Math.round((annualTax / 12) * 100) / 100;
-    const effectiveTaxRate = grossIncomeMonthly > 0
-      ? Math.round((monthlyTax / grossIncomeMonthly * 100) * 100) / 100
-      : 0;
+    const monthlyTax = Math.round(annualTax / 12 * 100) / 100;
+    const effectiveTaxRate = grossIncomeMonthly > 0 ? Math.round(monthlyTax / grossIncomeMonthly * 100 * 100) / 100 : 0;
 
     return {
-      basicComponents,
-      leaveAllowancePercentage,
-      leaveAllowanceMonthly,
-      leaveAllowanceAnnual,
-      allowances,
-      grossIncomeMonthly,
-      grossIncomeAnnual,
-      reliefs,
-      totalReliefs,
-      taxableIncome,
-      taxBreakdown,
-      annualTax,
-      monthlyTax,
-      effectiveTaxRate,
-      statutoryDeductions,
-      totalStatutoryDeductions
+      basicComponents, leaveAllowancePercentage, leaveAllowanceMonthly, leaveAllowanceAnnual,
+      allowances, grossIncomeMonthly, grossIncomeAnnual, reliefs, totalReliefs,
+      taxableIncome, taxBreakdown, annualTax, monthlyTax, effectiveTaxRate,
+      statutoryDeductions, totalStatutoryDeductions
     };
   }
 
-  // Render preview
   function renderPreview() {
     const monthlySalary = parseFloat(monthlySalaryInput.value) || 0;
     const settingId = settingSelect.value;
-
     if (!settingId || monthlySalary <= 0 || !salarySettingsData) {
       previewLoading.style.display = 'block';
       previewContent.style.display = 'none';
@@ -612,225 +577,129 @@ document.addEventListener('DOMContentLoaded', function () {
       calculationStatus.className = 'badge bg-light text-primary';
       return;
     }
-
     const setting = salarySettingsData[settingId];
-    if (!setting) {
-      previewLoading.style.display = 'block';
-      previewContent.style.display = 'none';
-      calculationStatus.textContent = 'Invalid setting';
-      calculationStatus.className = 'badge bg-danger';
-      return;
-    }
+    if (!setting) { previewLoading.style.display = 'block'; previewContent.style.display = 'none'; return; }
 
     previewLoading.style.display = 'none';
     previewContent.style.display = 'block';
     calculationStatus.textContent = 'Calculation complete';
     calculationStatus.className = 'badge bg-success';
 
-    const calculation = calculateSalary(monthlySalary, setting);
+    const c = calculateSalary(monthlySalary, setting);
 
-    // Salary & leave allowance table
+    // Salary & leave
     const salaryLeaveTableBody = document.getElementById('salaryLeaveTableBody');
-    salaryLeaveTableBody.innerHTML = '';
-
-    const salaryRow = document.createElement('tr');
-    salaryRow.innerHTML = `
-      <td><strong>Salary</strong></td>
-      <td></td>
-      <td class="text-end">${formatCurrency(monthlySalary)}</td>
-      <td class="text-end">${formatCurrency(monthlySalary * 12)}</td>
-    `;
-    salaryLeaveTableBody.appendChild(salaryRow);
-
-    const leaveAllowanceRow = document.createElement('tr');
-    leaveAllowanceRow.innerHTML = `
-      <td><strong>Leave Allowance</strong></td>
-      <td class="text-center">${calculation.leaveAllowancePercentage.toFixed(2)}%</td>
-      <td class="text-end">${formatCurrency(calculation.leaveAllowanceMonthly)}</td>
-      <td class="text-end">${formatCurrency(calculation.leaveAllowanceAnnual)}</td>
-    `;
-    salaryLeaveTableBody.appendChild(leaveAllowanceRow);
-
-    // Income breakdown table
-    const incomeBreakdownTableBody = document.getElementById('incomeBreakdownTableBody');
-    incomeBreakdownTableBody.innerHTML = '';
-
-    Object.values(calculation.basicComponents).forEach(component => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${component.name}</td>
-        <td class="text-end">${formatCurrency(component.monthly)}</td>
-        <td class="text-end">${formatCurrency(component.annual)}</td>
-        <td class="text-end">${component.percentage.toFixed(2)}%</td>
-      `;
-      incomeBreakdownTableBody.appendChild(row);
-    });
-
-    const separatorRow = document.createElement('tr');
-    separatorRow.className = 'table-secondary fw-bold';
-    separatorRow.innerHTML = `<td colspan="3" class="text-center">100%</td><td></td>`;
-    incomeBreakdownTableBody.appendChild(separatorRow);
-
-    calculation.allowances.forEach(allowance => {
-      const row = document.createElement('tr');
-      const monthlyPercentage = monthlySalary > 0 ? (allowance.monthly / monthlySalary * 100).toFixed(2) : 0;
-      row.innerHTML = `
-        <td>${allowance.name}</td>
-        <td class="text-end">${formatCurrency(allowance.monthly)}</td>
-        <td class="text-end">${formatCurrency(allowance.annual)}</td>
-        <td class="text-end">${monthlyPercentage}%</td>
-      `;
-      incomeBreakdownTableBody.appendChild(row);
-    });
-
-    document.getElementById('annualGrossIncome').textContent = formatCurrency(calculation.grossIncomeAnnual);
-
-    // Relief & exemption table
-    const reliefExemptionTableBody = document.getElementById('reliefExemptionTableBody');
-    reliefExemptionTableBody.innerHTML = '';
-
-    calculation.statutoryDeductions.forEach(deduction => {
-      const row = document.createElement('tr');
-      let label = deduction.name;
-      if (deduction.calcType === 'fixed') {
-        label += ` (Fixed)`;
-      } else if (deduction.percentage !== null) {
-        const basis = deduction.basedOnType === 'additional_field'
-          ? deduction.basedOn
-          : deduction.basedOn.toUpperCase();
-        label += ` (${deduction.percentage}% of ${basis})`;
-      }
-      row.innerHTML = `
-        <td>${label}</td>
-        <td class="text-end">${formatCurrency(deduction.annual)}</td>
-      `;
-      reliefExemptionTableBody.appendChild(row);
-    });
-
-    calculation.reliefs.forEach(relief => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${relief.name}</td>
-        <td class="text-end">${formatCurrency(relief.amount)}</td>
-      `;
-      reliefExemptionTableBody.appendChild(row);
-    });
-
-    const totalReliefRow = document.createElement('tr');
-    totalReliefRow.className = 'table-warning fw-bold';
-    totalReliefRow.innerHTML = `
-      <td>Tax Free Pay (Total Relief)</td>
-      <td class="text-end">${formatCurrency(calculation.totalReliefs)}</td>
-    `;
-    reliefExemptionTableBody.appendChild(totalReliefRow);
-
-    // PAYE tax table
-    const payeTaxTableBody = document.getElementById('payeTaxTableBody');
-    payeTaxTableBody.innerHTML = '';
-
-    payeTaxTableBody.innerHTML += `
-      <tr>
-        <td>Annual Gross Income</td>
-        <td class="text-end">${formatCurrency(calculation.grossIncomeAnnual)}</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>Less: Tax Free Pay</td>
-        <td class="text-end">${formatCurrency(calculation.totalReliefs)}</td>
-        <td></td>
-      </tr>
-      <tr class="table-warning fw-bold">
-        <td>Taxable Income</td>
-        <td class="text-end">${formatCurrency(calculation.taxableIncome)}</td>
-        <td></td>
-      </tr>
+    salaryLeaveTableBody.innerHTML = `
+      <tr><td><strong>Salary</strong></td><td></td><td class="text-end">${formatCurrency(monthlySalary)}</td><td class="text-end">${formatCurrency(monthlySalary * 12)}</td></tr>
+      <tr><td><strong>Leave Allowance</strong></td><td class="text-center">${c.leaveAllowancePercentage.toFixed(2)}%</td><td class="text-end">${formatCurrency(c.leaveAllowanceMonthly)}</td><td class="text-end">${formatCurrency(c.leaveAllowanceAnnual)}</td></tr>
     `;
 
-    calculation.taxBreakdown.forEach(breakdown => {
-      payeTaxTableBody.innerHTML += `
-        <tr>
-          <td>${breakdown.description}</td>
-          <td class="text-end">${formatCurrency(breakdown.amount)}</td>
-          <td></td>
-        </tr>
-      `;
+    // Income breakdown
+    const incomeTableBody = document.getElementById('incomeBreakdownTableBody');
+    incomeTableBody.innerHTML = '';
+    Object.values(c.basicComponents).forEach(comp => {
+      incomeTableBody.innerHTML += `<tr><td>${comp.name}</td><td class="text-end">${formatCurrency(comp.monthly)}</td><td class="text-end">${formatCurrency(comp.annual)}</td><td class="text-end">${comp.percentage.toFixed(2)}%</td></tr>`;
+    });
+    incomeTableBody.innerHTML += `<tr class="table-secondary fw-bold"><td colspan="3" class="text-center">100%</td><td></td></tr>`;
+    c.allowances.forEach(a => {
+      const pct = monthlySalary > 0 ? (a.monthly / monthlySalary * 100).toFixed(2) : '0.00';
+      const overrideBadge = a.isOverridden ? ' <span class="badge bg-warning text-dark" title="Manually overridden">*override</span>' : '';
+      incomeTableBody.innerHTML += `<tr><td>${a.name}${overrideBadge}</td><td class="text-end">${formatCurrency(a.monthly)}</td><td class="text-end">${formatCurrency(a.annual)}</td><td class="text-end">${pct}%</td></tr>`;
     });
 
-    payeTaxTableBody.innerHTML += `
-      <tr class="table-danger fw-bold">
-        <td>Total PAYE (Annual)</td>
-        <td class="text-end">${formatCurrency(calculation.annualTax)}</td>
-        <td class="text-end">${formatCurrency(calculation.monthlyTax)} (per month)</td>
-      </tr>
-    `;
+    document.getElementById('annualGrossIncome').textContent = formatCurrency(c.grossIncomeAnnual);
 
-    // Summary cards
-    document.getElementById('monthlyIncome').textContent = formatCurrency(calculation.grossIncomeMonthly);
-    document.getElementById('monthlyPayeTax').textContent = formatCurrency(calculation.monthlyTax);
-    document.getElementById('netSalary').textContent = formatCurrency(calculation.grossIncomeMonthly - calculation.monthlyTax);
-    document.getElementById('effectiveTaxRate').textContent = formatCurrency(calculation.effectiveTaxRate);
-    document.getElementById('annualGross').textContent = formatCurrency(calculation.grossIncomeAnnual);
-    document.getElementById('taxFreePay').textContent = formatCurrency(calculation.totalReliefs);
-    document.getElementById('taxableIncome').textContent = formatCurrency(calculation.taxableIncome);
-    document.getElementById('totalPayeTax').textContent = formatCurrency(calculation.annualTax);
+    // Reliefs
+    const reliefTableBody = document.getElementById('reliefExemptionTableBody');
+    reliefTableBody.innerHTML = '';
+    c.statutoryDeductions.forEach(d => {
+      let label = d.name;
+      if (d.calcType === 'fixed') label += ' (Fixed)';
+      else if (d.percentage) label += ` (${d.percentage}% of ${d.basedOnType === 'additional_field' ? d.basedOn : d.basedOn.toUpperCase()})`;
+      reliefTableBody.innerHTML += `<tr><td>${label}</td><td class="text-end">${formatCurrency(d.annual)}</td></tr>`;
+    });
+    c.reliefs.forEach(r => {
+      const overrideBadge = r.isOverridden ? ' <span class="badge bg-warning text-dark" title="Manually overridden">*override</span>' : '';
+      reliefTableBody.innerHTML += `<tr><td>${r.name}${overrideBadge}</td><td class="text-end">${formatCurrency(r.amount)}</td></tr>`;
+    });
+    reliefTableBody.innerHTML += `<tr class="table-warning fw-bold"><td>Tax Free Pay (Total Relief)</td><td class="text-end">${formatCurrency(c.totalReliefs)}</td></tr>`;
+
+    // PAYE
+    const payeTableBody = document.getElementById('payeTaxTableBody');
+    payeTableBody.innerHTML = `
+      <tr><td>Annual Gross Income</td><td class="text-end">${formatCurrency(c.grossIncomeAnnual)}</td><td></td></tr>
+      <tr><td>Less: Tax Free Pay</td><td class="text-end">${formatCurrency(c.totalReliefs)}</td><td></td></tr>
+      <tr class="table-warning fw-bold"><td>Taxable Income</td><td class="text-end">${formatCurrency(c.taxableIncome)}</td><td></td></tr>
+    `;
+    c.taxBreakdown.forEach(b => {
+      payeTableBody.innerHTML += `<tr><td>${b.description}</td><td class="text-end">${formatCurrency(b.amount)}</td><td></td></tr>`;
+    });
+    payeTableBody.innerHTML += `<tr class="table-danger fw-bold"><td>Total PAYE (Annual)</td><td class="text-end">${formatCurrency(c.annualTax)}</td><td class="text-end">${formatCurrency(c.monthlyTax)} (per month)</td></tr>`;
+
+    // Summary
+    document.getElementById('monthlyIncome').textContent = formatCurrency(c.grossIncomeMonthly);
+    document.getElementById('monthlyPayeTax').textContent = formatCurrency(c.monthlyTax);
+    document.getElementById('netSalary').textContent = formatCurrency(c.grossIncomeMonthly - c.monthlyTax);
+    document.getElementById('effectiveTaxRate').textContent = c.effectiveTaxRate.toFixed(2);
+    document.getElementById('annualGross').textContent = formatCurrency(c.grossIncomeAnnual);
+    document.getElementById('taxFreePay').textContent = formatCurrency(c.totalReliefs);
+    document.getElementById('taxableIncome').textContent = formatCurrency(c.taxableIncome);
+    document.getElementById('totalPayeTax').textContent = formatCurrency(c.annualTax);
   }
 
-  // Render additional fields based on selected setting
   function renderAdditionalFields() {
     const settingId = settingSelect.value;
     const container = document.getElementById('additionalFieldsContainer');
     const section = document.getElementById('additionalFieldsSection');
-
     if (!settingId || !salarySettingsData || !salarySettingsData[settingId]) {
-      section.style.display = 'none';
-      container.innerHTML = '';
-      return;
+      section.style.display = 'none'; container.innerHTML = ''; return;
     }
-
     const setting = salarySettingsData[settingId];
     const fields = setting.additional_fields || [];
-
-    if (fields.length === 0) {
-      section.style.display = 'none';
-      container.innerHTML = '';
-      return;
-    }
+    if (fields.length === 0) { section.style.display = 'none'; container.innerHTML = ''; return; }
 
     section.style.display = 'block';
-
-    // Get values already typed into existing inputs (takes priority over DB values)
     const currentInputValues = getAdditionalFieldValues();
-
     container.innerHTML = '';
     fields.forEach(field => {
       const code = field.code;
-      const name = field.name;
-
-      // Priority: 1) value already in current inputs (user typed), 2) DB value, 3) zero
-      let value = 0;
-      if (currentInputValues[code] !== undefined) {
-        value = currentInputValues[code];
-      } else if (initialAdditionalFieldValues[code] !== undefined) {
-        value = initialAdditionalFieldValues[code];
-      }
-
+      let value = currentInputValues[code] !== undefined ? currentInputValues[code]
+        : initialAdditionalFieldValues[code] !== undefined ? initialAdditionalFieldValues[code] : 0;
       const col = document.createElement('div');
       col.className = 'col-md-4';
       col.innerHTML = `
-        <label class="form-label">${name}</label>
+        <label class="form-label">${field.name}</label>
         <input type="number" name="add_field_${code}" class="form-control additional-field-input"
                step="0.01" data-code="${code}" value="${value}">
       `;
       container.appendChild(col);
     });
-
-    // Re-attach event listeners to new inputs
     document.querySelectorAll('.additional-field-input').forEach(input => {
       input.addEventListener('input', renderPreview);
     });
   }
 
-  // Attach event listeners
+  // Override badge + apply button
+  const overrideBadge = document.getElementById('overrideBadge');
+  function checkOverridesBadge() {
+    if (!overrideBadge) return;
+    const hasAny = Array.from(document.querySelectorAll('.override-allowance-input, .override-relief-input')).some(i => i.value.trim() !== '');
+    overrideBadge.style.display = hasAny ? 'inline' : 'none';
+  }
+
+  document.querySelectorAll('.override-allowance-input, .override-relief-input').forEach(input => {
+    input.addEventListener('input', checkOverridesBadge);
+  });
+
+  const applyBtn = document.getElementById('applyOverridesBtn');
+  if (applyBtn) {
+    applyBtn.addEventListener('click', function () {
+      checkOverridesBadge();
+      renderPreview();
+    });
+  }
+
+  // Event listeners
   if (monthlySalaryInput) monthlySalaryInput.addEventListener('input', renderPreview);
   if (settingSelect) {
     settingSelect.addEventListener('change', function () {
@@ -839,14 +708,15 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Initial render
+  // Init
   renderAdditionalFields();
   renderPreview();
+  checkOverridesBadge();
 
   // Form validation
-  const form = document.getElementById('salaryStructureForm');
-  if (form) {
-    form.addEventListener('submit', function (e) {
+  const formEl = document.getElementById('salaryStructureForm');
+  if (formEl) {
+    formEl.addEventListener('submit', function (e) {
       const monthly = parseFloat(monthlySalaryInput.value) || 0;
       if (monthly <= 0) {
         e.preventDefault();
@@ -854,7 +724,6 @@ document.addEventListener('DOMContentLoaded', function () {
         monthlySalaryInput.focus();
         return false;
       }
-      return true;
     });
   }
 });
@@ -862,88 +731,52 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-// Bank API Integration with Select2
 document.addEventListener('DOMContentLoaded', function () {
   const bankSelect = document.getElementById('bankSelect');
   const bankCodeInput = document.getElementById('bankCode');
   const bankLoading = document.getElementById('bankLoading');
-
   const currentBankName = "{{ form.bank_name.value|default:'' }}";
   const currentBankCode = "{{ form.bank_code.value|default:'' }}";
 
   if (bankSelect) {
     bankLoading.style.display = 'block';
-
     fetch('https://app.nuban.com.ng/bank_codes.json')
-      .then(response => response.json())
+      .then(r => r.json())
       .then(banks => {
         bankLoading.style.display = 'none';
         bankSelect.innerHTML = '<option value="">Select Bank</option>';
-
         banks.forEach(bank => {
           const option = document.createElement('option');
           option.value = bank.bank_name;
           option.textContent = bank.bank_name;
           option.setAttribute('data-code', bank.code);
-          if (bank.bank_name === currentBankName) {
-            option.selected = true;
-          }
+          if (bank.bank_name === currentBankName) option.selected = true;
           bankSelect.appendChild(option);
         });
-
-        $(bankSelect).select2({
-          placeholder: 'Select Bank',
-          allowClear: true,
-          width: '100%'
-        });
-
-        if (currentBankCode && bankCodeInput) {
-          bankCodeInput.value = currentBankCode;
-        }
+        $(bankSelect).select2({ placeholder: 'Select Bank', allowClear: true, width: '100%' });
+        if (currentBankCode && bankCodeInput) bankCodeInput.value = currentBankCode;
       })
-      .catch(error => {
+      .catch(() => {
         bankLoading.style.display = 'none';
-        console.error('Error loading banks:', error);
         bankSelect.innerHTML = '<option value="">Failed to load banks</option>';
       });
 
     $(bankSelect).on('change', function () {
-      const selectedOption = this.options[this.selectedIndex];
-      const code = selectedOption.getAttribute('data-code');
-      if (bankCodeInput && code) {
-        bankCodeInput.value = code;
-      }
+      const code = this.options[this.selectedIndex].getAttribute('data-code');
+      if (bankCodeInput && code) bankCodeInput.value = code;
     });
   }
 });
 </script>
 
 <style>
-.select2-container--default .select2-selection--single {
-  height: 38px;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-}
-.select2-container--default .select2-selection--single .select2-selection__rendered {
-  line-height: 36px;
-  padding-left: 12px;
-}
-.select2-container--default .select2-selection--single .select2-selection__arrow {
-  height: 36px;
-}
-.table th {
-  border: 1px solid #dee2e6;
-}
-.table td {
-  border: 1px solid #dee2e6;
-  vertical-align: middle;
-}
-.card {
-  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-}
-.card-header {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.125);
-}
+.select2-container--default .select2-selection--single { height: 38px; border: 1px solid #ced4da; border-radius: 4px; }
+.select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 36px; padding-left: 12px; }
+.select2-container--default .select2-selection--single .select2-selection__arrow { height: 36px; }
+.table th { border: 1px solid #dee2e6; }
+.table td { border: 1px solid #dee2e6; vertical-align: middle; }
+.card { box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); }
+.card-header { border-bottom: 1px solid rgba(0,0,0,0.125); }
 </style>
 
 {% endblock %}

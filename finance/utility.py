@@ -49,12 +49,10 @@ class SalaryCalculator:
         return self._calculate_combined_base(based_on, basic_components)
 
     def calculate_allowances(self):
-        """
-        Calculate all allowances based on configuration
-        Returns: dict with allowance names as keys
-        """
         breakdown = {}
         basic_components = self.calculate_basic_components()
+        overrides = getattr(self.salary_structure, 'component_overrides', {}) or {}
+        allowance_overrides = overrides.get('allowances', {})
 
         for allowance in self.salary_setting.allowances:
             if not allowance.get('is_active', False):
@@ -66,27 +64,31 @@ class SalaryCalculator:
             based_on = allowance.get('based_on', 'TOTAL')
             based_on_type = allowance.get('based_on_type', 'component')
 
-            amount = Decimal('0.00')
-            base_amount = self._get_base_amount(based_on, based_on_type, basic_components)
+            # Check override first
+            if name in allowance_overrides:
+                amount = Decimal(str(allowance_overrides[name]))
+            else:
+                amount = Decimal('0.00')
+                base_amount = self._get_base_amount(based_on, based_on_type, basic_components)
 
-            if calc_type == 'percentage':
-                percentage = Decimal(str(allowance.get('percentage', 0)))
-                amount = (base_amount * percentage) / Decimal('100')
-            elif calc_type == 'fixed':
-                amount = Decimal(str(allowance.get('fixed_amount', 0)))
-            elif calc_type == 'combined':
-                percentage = Decimal(str(allowance.get('percentage', 0)))
-                fixed_amount = Decimal(str(allowance.get('fixed_amount', 0)))
-                amount = ((base_amount * percentage) / Decimal('100')) + fixed_amount
+                if calc_type == 'percentage':
+                    percentage = Decimal(str(allowance.get('percentage', 0)))
+                    amount = (base_amount * percentage) / Decimal('100')
+                elif calc_type == 'fixed':
+                    amount = Decimal(str(allowance.get('fixed_amount', 0)))
+                elif calc_type == 'combined':
+                    percentage = Decimal(str(allowance.get('percentage', 0)))
+                    fixed_amount = Decimal(str(allowance.get('fixed_amount', 0)))
+                    amount = ((base_amount * percentage) / Decimal('100')) + fixed_amount
 
-            # If annual only, multiply by 12
-            if annual_only:
-                amount = amount * 12
+                if annual_only:
+                    amount = amount * 12
 
             breakdown[name] = {
                 'calculation_type': calc_type,
                 'amount': amount,
-                'annual_only': annual_only
+                'annual_only': annual_only,
+                'is_overridden': name in allowance_overrides,
             }
 
         return breakdown
@@ -343,42 +345,45 @@ class SalaryCalculator:
         return total
 
     def _calculate_reliefs(self, annual_gross_income):
-        """Calculate total tax reliefs and exemptions"""
         total_reliefs = Decimal('0.00')
         basic_components = self.calculate_basic_components()
+        overrides = getattr(self.salary_structure, 'component_overrides', {}) or {}
+        relief_overrides = overrides.get('reliefs', {})
 
         for relief in self.salary_setting.reliefs_exemptions:
             if not relief.get('is_active', True):
                 continue
 
-            calc_type = relief.get('calculation_type', 'fixed')
-            based_on = relief.get('based_on', 'gross_income')
-            based_on_type = relief.get('based_on_type', 'component')
+            name = relief.get('name', '')
 
-            relief_amount = Decimal('0.00')
-            
-            # Get base amount
-            if based_on == 'gross_income':
-                base_amount = annual_gross_income
+            if name in relief_overrides:
+                relief_amount = Decimal(str(relief_overrides[name]))
             else:
-                base_amount = self._get_base_amount(based_on, based_on_type, basic_components)
-                # If it's a monthly component/field, convert to annual
-                if based_on != 'gross_income':
-                    base_amount = base_amount * 12
+                calc_type = relief.get('calculation_type', 'fixed')
+                based_on = relief.get('based_on', 'gross_income')
+                based_on_type = relief.get('based_on_type', 'component')
 
-            if calc_type == 'percentage':
-                percentage = Decimal(str(relief.get('percentage', 0)))
-                relief_amount = (base_amount * percentage) / Decimal('100')
-            elif calc_type == 'fixed':
-                relief_amount = Decimal(str(relief.get('fixed_amount', 0)))
-            elif calc_type == 'combined':
-                percentage = Decimal(str(relief.get('percentage', 0)))
-                fixed_amount = Decimal(str(relief.get('fixed_amount', 0)))
-                relief_amount = ((base_amount * percentage) / Decimal('100')) + fixed_amount
+                if based_on == 'gross_income':
+                    base_amount = annual_gross_income
+                else:
+                    base_amount = self._get_base_amount(based_on, based_on_type, basic_components)
+                    if based_on != 'gross_income':
+                        base_amount = base_amount * 12
+
+                relief_amount = Decimal('0.00')
+                if calc_type == 'percentage':
+                    percentage = Decimal(str(relief.get('percentage', 0)))
+                    relief_amount = (base_amount * percentage) / Decimal('100')
+                elif calc_type == 'fixed':
+                    relief_amount = Decimal(str(relief.get('fixed_amount', 0)))
+                elif calc_type == 'combined':
+                    percentage = Decimal(str(relief.get('percentage', 0)))
+                    fixed_amount = Decimal(str(relief.get('fixed_amount', 0)))
+                    relief_amount = ((base_amount * percentage) / Decimal('100')) + fixed_amount
 
             total_reliefs += relief_amount
 
-        # Add statutory deductions to reliefs (typically they are tax exempt)
+        # Statutory deductions still feed in automatically (not overridable)
         statutory_deductions = self.calculate_statutory_deductions()
         annual_statutory = sum(s['amount'] for s in statutory_deductions.values()) * 12
         total_reliefs += annual_statutory

@@ -6683,58 +6683,48 @@ def salary_structure_detail_view(request, pk):
 
 
 def calculate_salary_breakdown(structure):
-    """
-    Calculate complete salary breakdown for a salary structure.
-    This mirrors the JavaScript calculation logic from the form.
-    """
     monthly_salary = structure.monthly_salary
     annual_salary = monthly_salary * 12
     setting = structure.salary_setting
     additional_field_values = structure.additional_field_values or {}
 
-    # Round to 2 decimal places
+    # GET OVERRIDES
+    overrides = structure.component_overrides or {}
+    allowance_overrides = overrides.get('allowances', {})
+    relief_overrides = overrides.get('reliefs', {})
+
     def round_decimal(value):
         return round(Decimal(str(value)), 2)
 
-    # Calculate basic components
+    # Basic components (unchanged)
     basic_components = {}
-    total_basic_percentage = Decimal('0')
-
     for key, component in setting.basic_components.items():
         percentage = Decimal(str(component.get('percentage', 0)))
         monthly_amount = round_decimal((monthly_salary * percentage) / Decimal('100'))
         annual_amount = round_decimal(monthly_amount * 12)
-
         basic_components[component['code']] = {
             'name': component['name'],
             'percentage': percentage,
             'monthly': monthly_amount,
             'annual': annual_amount
         }
-        total_basic_percentage += percentage
 
-    # Calculate leave allowance
+    # Leave allowance (unchanged)
     leave_allowance_percentage = Decimal(str(setting.leave_allowance_percentage or 0))
     annual_basic_salary = sum(comp['annual'] for comp in basic_components.values())
     leave_allowance_annual = round_decimal((annual_basic_salary * leave_allowance_percentage) / Decimal('100'))
     leave_allowance_monthly = round_decimal(leave_allowance_annual / 12)
 
-    # Helper function to calculate amount based on component codes
     def calculate_based_on_components(based_on, based_on_type='component'):
         if not based_on:
             return Decimal('0')
-
-        # Handle additional fields (monthly value stored → convert to annual)
         if based_on_type == 'additional_field':
             val = additional_field_values.get(based_on, 0) or 0
             return Decimal(str(val)) * 12
-
         if based_on.upper() == 'TOTAL':
             return sum(comp['monthly'] for comp in basic_components.values()) * 12
-
         if based_on.upper() == 'GROSS_INCOME':
             return Decimal('0')
-
         codes = [code.strip().upper() for code in based_on.split('+')]
         total = Decimal('0')
         for code in codes:
@@ -6743,44 +6733,56 @@ def calculate_salary_breakdown(structure):
                     total += comp_data['monthly']
         return total * 12
 
-    # Calculate other allowances
+    # Allowances — APPLY OVERRIDES HERE
     allowances = []
     total_other_allowances_monthly = Decimal('0')
     total_other_allowances_annual = Decimal('0')
 
     for allowance in setting.allowances:
-        if allowance.get('is_active', False):
-            monthly_amount = Decimal('0')
+        if not allowance.get('is_active', False):
+            continue
 
-            if allowance.get('calculation_type') == 'fixed':
+        name = allowance['name']
+        is_overridden = name in allowance_overrides
+
+        if is_overridden:
+            monthly_amount = round_decimal(Decimal(str(allowance_overrides[name])))
+            annual_amount = round_decimal(monthly_amount * 12)
+        else:
+            calc_type = allowance.get('calculation_type', 'fixed')
+            based_on = allowance.get('based_on', 'TOTAL')
+            based_on_type = allowance.get('based_on_type', 'component')
+
+            if calc_type == 'fixed':
                 monthly_amount = round_decimal(Decimal(str(allowance.get('fixed_amount', 0))))
-
-            elif allowance.get('calculation_type') == 'percentage':
+            elif calc_type == 'percentage':
                 percentage = Decimal(str(allowance.get('percentage', 0)))
-                based_on = allowance.get('based_on', 'TOTAL')
-
                 if based_on.upper() == 'TOTAL':
-                    monthly_amount = round_decimal((monthly_salary * percentage) / Decimal('100'))
+                    base = monthly_salary
                 elif based_on.upper() == 'GROSS_INCOME':
-                    temp_gross = monthly_salary + total_other_allowances_monthly
-                    monthly_amount = round_decimal((temp_gross * percentage) / Decimal('100'))
+                    base = monthly_salary + total_other_allowances_monthly
                 else:
-                    base_amount = calculate_based_on_components(based_on)
-                    monthly_amount = round_decimal((base_amount * percentage) / Decimal('100'))
+                    base = calculate_based_on_components(based_on, based_on_type) / 12
+                monthly_amount = round_decimal((base * percentage) / Decimal('100'))
+            else:
+                monthly_amount = Decimal('0')
 
             annual_amount = round_decimal(monthly_amount * 12)
 
-            allowances.append({
-                'name': allowance['name'],
-                'monthly': monthly_amount,
-                'annual': annual_amount,
-                'percentage': round_decimal((monthly_amount / monthly_salary * 100) if monthly_salary > 0 else 0)
-            })
+        percentage_of_monthly = round_decimal(
+            (monthly_amount / monthly_salary * 100) if monthly_salary > 0 else Decimal('0')
+        )
+        allowances.append({
+            'name': name,
+            'monthly': monthly_amount,
+            'annual': annual_amount,
+            'percentage': percentage_of_monthly,
+            'is_overridden': is_overridden,
+        })
+        total_other_allowances_monthly += monthly_amount
+        total_other_allowances_annual += annual_amount
 
-            total_other_allowances_monthly += monthly_amount
-            total_other_allowances_annual += annual_amount
-
-    # Calculate gross income based on include_leave_in_gross setting
+    # Gross income
     if setting.include_leave_in_gross:
         gross_income_monthly = round_decimal(monthly_salary + total_other_allowances_monthly + leave_allowance_monthly)
         gross_income_annual = round_decimal(annual_salary + total_other_allowances_annual + leave_allowance_annual)
@@ -6788,7 +6790,7 @@ def calculate_salary_breakdown(structure):
         gross_income_monthly = round_decimal(monthly_salary + total_other_allowances_monthly)
         gross_income_annual = round_decimal(annual_salary + total_other_allowances_annual)
 
-    # Calculate statutory deductions
+    # Statutory deductions (unchanged)
     statutory_deductions = []
     total_statutory_deductions = Decimal('0')
     total_reliefs = Decimal('0')
@@ -6797,62 +6799,64 @@ def calculate_salary_breakdown(structure):
         if deduction.get('is_active', True):
             percentage = Decimal(str(deduction.get('percentage', 0)))
             based_on = deduction.get('based_on', '')
-            based_on_type = deduction.get('based_on_type', 'component')  # ADD
-            base_amount = calculate_based_on_components(based_on, based_on_type)  # UPDATED
+            based_on_type = deduction.get('based_on_type', 'component')
+            base_amount = calculate_based_on_components(based_on, based_on_type)
             amount = round_decimal((base_amount * percentage) / Decimal('100'))
-
             statutory_deductions.append({
                 'name': deduction['name'],
                 'percentage': percentage,
-                'monthly': amount,
-                'annual': round_decimal(amount * 12),
-                'based_on': based_on,  # ADD
-                'based_on_type': based_on_type  # ADD
+                'monthly': amount / 12,
+                'annual': amount,
+                'based_on': based_on,
+                'based_on_type': based_on_type
             })
-            total_statutory_deductions += amount
+            total_statutory_deductions += amount / 12
             total_reliefs += amount
 
-    # Calculate reliefs and exemptions
+    # Reliefs — APPLY OVERRIDES HERE
     reliefs = []
 
     for relief in setting.reliefs_exemptions:
-        amount = Decimal('0')
+        name = relief.get('name', '')
+        is_overridden = name in relief_overrides
 
-        # Determine base amount
-        base_amount = Decimal('0')
-        based_on = relief.get('based_on', '')
-
-        if based_on.upper() == 'GROSS_INCOME':
-            base_amount = gross_income_annual
-        elif based_on:
-            base_amount = calculate_based_on_components(based_on)
+        if is_overridden:
+            amount = round_decimal(Decimal(str(relief_overrides[name])))
         else:
-            base_amount = gross_income_annual
+            based_on = relief.get('based_on', '')
+            based_on_type = relief.get('based_on_type', 'component')
 
-        # Calculate relief amount
-        if relief.get('formula_type') == 'percentage_plus_fixed':
-            if relief.get('percentage'):
+            if based_on.upper() == 'GROSS_INCOME':
+                base_amount = gross_income_annual
+            elif based_on:
+                base_amount = calculate_based_on_components(based_on, based_on_type)
+            else:
+                base_amount = gross_income_annual
+
+            amount = Decimal('0')
+            if relief.get('formula_type') == 'percentage_plus_fixed' or relief.get('calculation_type') == 'combined':
+                if relief.get('percentage'):
+                    amount = round_decimal((base_amount * Decimal(str(relief['percentage']))) / Decimal('100'))
+                if relief.get('fixed_amount'):
+                    amount += round_decimal(Decimal(str(relief['fixed_amount'])))
+            elif relief.get('percentage'):
                 amount = round_decimal((base_amount * Decimal(str(relief['percentage']))) / Decimal('100'))
-            if relief.get('fixed_amount'):
-                amount += round_decimal(Decimal(str(relief['fixed_amount'])))
-        else:
-            if relief.get('percentage'):
-                amount = round_decimal((base_amount * Decimal(str(relief['percentage']))) / Decimal('100'))
-            if relief.get('fixed_amount'):
-                amount += round_decimal(Decimal(str(relief['fixed_amount'])))
+                if relief.get('fixed_amount'):
+                    amount += round_decimal(Decimal(str(relief['fixed_amount'])))
+            elif relief.get('fixed_amount'):
+                amount = round_decimal(Decimal(str(relief['fixed_amount'])))
 
         reliefs.append({
-            'name': relief['name'],
+            'name': name,
             'amount': amount,
             'percentage': relief.get('percentage'),
-            'fixed_amount': relief.get('fixed_amount')
+            'fixed_amount': relief.get('fixed_amount'),
+            'is_overridden': is_overridden,
         })
         total_reliefs += amount
 
-    # Calculate taxable income
+    # Taxable income and PAYE (unchanged logic)
     taxable_income = round_decimal(gross_income_annual - total_reliefs)
-
-    # Calculate PAYE tax using brackets
     annual_tax = Decimal('0')
     tax_breakdown = []
     remaining_income = taxable_income
@@ -6861,11 +6865,9 @@ def calculate_salary_breakdown(structure):
         if remaining_income > 0:
             bracket_limit = bracket.get('limit')
             bracket_size = Decimal(str(bracket_limit)) if bracket_limit is not None else remaining_income
-
             taxable_amount = min(remaining_income, bracket_size)
             tax_rate = Decimal(str(bracket.get('rate', 0)))
             tax_amount = round_decimal((taxable_amount * tax_rate) / Decimal('100'))
-
             if taxable_amount > 0:
                 if index == 0:
                     description = f"First {taxable_amount:,.2f}"
@@ -6873,19 +6875,11 @@ def calculate_salary_breakdown(structure):
                     description = f"Remaining {taxable_amount:,.2f}"
                 else:
                     description = f"Next {bracket_size:,.2f}"
-
-                tax_breakdown.append({
-                    'description': description,
-                    'rate': tax_rate,
-                    'amount': tax_amount
-                })
-
+                tax_breakdown.append({'description': description, 'rate': tax_rate, 'amount': tax_amount})
                 annual_tax += tax_amount
                 remaining_income -= taxable_amount
 
     monthly_tax = round_decimal(annual_tax / 12)
-
-    # Calculate net salary and effective tax rate
     net_salary = round_decimal(gross_income_monthly - monthly_tax)
     effective_tax_rate = round_decimal((monthly_tax / gross_income_monthly * 100) if gross_income_monthly > 0 else 0)
 
@@ -6905,15 +6899,16 @@ def calculate_salary_breakdown(structure):
             'name': a['name'],
             'monthly': float(a['monthly']),
             'annual': float(a['annual']),
-            'percentage': float(a['percentage'])
+            'percentage': float(a['percentage']),
+            'is_overridden': a['is_overridden'],
         } for a in allowances],
         'gross_income_monthly': float(gross_income_monthly),
         'gross_income_annual': float(gross_income_annual),
         'statutory_deductions': [{
             'name': s['name'],
             'percentage': float(s['percentage']),
-            'monthly': float(s['monthly']) / 12,
-            'annual': float(s['annual']) / 12,
+            'monthly': float(s['monthly']),
+            'annual': float(s['annual']),
             'based_on': s['based_on'],
             'based_on_type': s['based_on_type']
         } for s in statutory_deductions],
@@ -6922,21 +6917,18 @@ def calculate_salary_breakdown(structure):
             'name': r['name'],
             'amount': float(r['amount']),
             'percentage': r.get('percentage'),
-            'fixed_amount': r.get('fixed_amount')
+            'fixed_amount': r.get('fixed_amount'),
+            'is_overridden': r['is_overridden'],
         } for r in reliefs],
         'total_reliefs': float(total_reliefs),
         'taxable_income': float(taxable_income),
-        'tax_breakdown': [{
-            'description': t['description'],
-            'rate': float(t['rate']),
-            'amount': float(t['amount'])
-        } for t in tax_breakdown],
+        'tax_breakdown': [{'description': t['description'], 'rate': float(t['rate']), 'amount': float(t['amount'])} for t in tax_breakdown],
         'annual_tax': float(annual_tax),
         'monthly_tax': float(monthly_tax),
         'net_salary': float(net_salary),
-        'effective_tax_rate': float(effective_tax_rate)
+        'effective_tax_rate': float(effective_tax_rate),
+        'has_overrides': bool(allowance_overrides or relief_overrides),
     }
-
 
 @login_required
 @permission_required('finance.view_salaryrecord', raise_exception=True)
@@ -7173,7 +7165,8 @@ def process_payroll_view(request, structure_id):
             'statutory_deductions': structure.salary_setting.statutory_deductions,
             'tax_brackets': structure.salary_setting.tax_brackets,
             'reliefs_exemptions': structure.salary_setting.reliefs_exemptions,
-            'additional_values': structure.additional_field_values
+            'additional_values': structure.additional_field_values,
+            'component_overrides': structure.component_overrides or {},  # ADD THIS
         })
     }
     return render(request, 'finance/payroll/process.html', context)
@@ -10840,7 +10833,6 @@ def paystack_webhook_view(request):
     - charge.success → confirms FeePaymentModel, StudentFundingModel,
                         or StaffFundingModel based on reference lookup.
     """
-
     # --- 1. Verify signature ---
     try:
         gateway = PaymentGatewayModel.objects.get(

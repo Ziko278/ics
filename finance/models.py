@@ -1612,6 +1612,11 @@ class SalaryStructure(models.Model):
         blank=True,
         help_text="Values for the extra fields defined in SalarySetting"
     )
+    component_overrides = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Manual overrides for allowances/reliefs. Format: {'allowances': {'Housing Allowance': 75000.0}, 'reliefs': {'Personal Relief': 200000.0}}"
+    )
 
     # Optional bank details
     bank_name = models.CharField(max_length=200, blank=True, null=True)
