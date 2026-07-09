@@ -77,6 +77,20 @@ def generate_invoices_task(job_id):
                     }
                 )
 
+                # ==================== NEW CLEANUP STEP ====================
+                # Extract the IDs of the fees that actually apply to the student right now
+                valid_fee_ids = [f.id for f in applicable_fees_for_student]
+
+                # Find and delete any items on this invoice that don't belong in the valid list
+                invalid_items = InvoiceItemModel.objects.filter(
+                    invoice=invoice
+                ).exclude(fee_master_id__in=valid_fee_ids)
+
+                if invalid_items.exists():
+                    deleted_count, _ = invalid_items.delete()
+                    logger.info(f"Cleaned up {deleted_count} outdated fee(s) for student {student.id}")
+                # ==========================================================
+
                 # Add all applicable fees as line items
                 for fee_master in applicable_fees_for_student:
                     # Get the amount for the correct term
