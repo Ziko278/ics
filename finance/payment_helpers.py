@@ -98,47 +98,51 @@ def _parse_parent_allocations(notes: str) -> dict:
 
 @transaction.atomic
 def do_confirm_fee_payment(payment: FeePaymentModel, override_allocation: bool = False, request=None) -> None:
-    """
-    Confirm a pending FeePaymentModel and allocate the amount across
-    invoice items. Replicates the full logic of confirm_fee_payment_view.
-
-    Raises ValueError if the payment is not in PENDING status.
-    Must be called inside a transaction (wraps itself atomically as well
-    for safety when called from the webhook).
-    """
     if payment.status != FeePaymentModel.PaymentStatus.PENDING:
         raise ValueError(
             f"Payment {payment.pk} is not pending (status={payment.status}). Cannot confirm."
         )
 
-    item_breakdown = {}
-    invoice = payment.invoice
-    amount_to_allocate = payment.amount
+    try:
+        item_breakdown = {}
+        invoice = payment.invoice
+        student = invoice.student
+        original_amount = payment.amount
+        amount_to_allocate = payment.amount
 
-    parent_allocations = _parse_parent_allocations(payment.notes)
+        parent_allocations = _parse_parent_allocations(payment.notes)
 
-    if parent_allocations and not override_allocation:
-        # --- Honour the parent's itemized selections ---
-        for item_id_str, allocation_data in parent_allocations.items():
-            try:
-                item_id = int(item_id_str)
-                allocated_amount = Decimal(str(allocation_data['amount']))
-                item = InvoiceItemModel.objects.prefetch_related(
-                    'discounts_applied'
-                ).get(pk=item_id, invoice=invoice)
+        if parent_allocations and not override_allocation:
+            for item_id_str, allocation_data in parent_allocations.items():
+                try:
+                    item_id = int(item_id_str)
+                    allocated_amount = Decimal(str(allocation_data['amount']))
+                    item = InvoiceItemModel.objects.prefetch_related(
+                        'discounts_applied'
+                    ).get(pk=item_id, invoice=invoice)
 
-                payable = min(item.balance, allocated_amount)
-                item.amount_paid += payable
-                item.save(update_fields=['amount_paid'])
-                amount_to_allocate -= payable
-                item_breakdown[str(item.pk)] = str(payable)
-                _apply_sibling_logic(item, invoice)
+                    payable = min(item.balance, allocated_amount)
+                    item.amount_paid += payable
+                    item.save(update_fields=['amount_paid'])
+                    amount_to_allocate -= payable
+                    item_breakdown[str(item.pk)] = str(payable)
+                    _apply_sibling_logic(item, invoice)
 
-            except (ValueError, InvoiceItemModel.DoesNotExist):
-                continue
+                except (ValueError, InvoiceItemModel.DoesNotExist):
+                    continue
 
-        # Distribute any leftover (e.g. parent over-specified or rounding)
-        if amount_to_allocate > Decimal('0.01'):
+            if amount_to_allocate > Decimal('0.01'):
+                for item in _get_unpaid_items(invoice):
+                    if amount_to_allocate <= Decimal('0'):
+                        break
+                    payable = min(item.balance, amount_to_allocate)
+                    item.amount_paid += payable
+                    item.save(update_fields=['amount_paid'])
+                    amount_to_allocate -= payable
+                    current = Decimal(item_breakdown.get(str(item.pk), '0'))
+                    item_breakdown[str(item.pk)] = str(current + payable)
+
+        else:
             for item in _get_unpaid_items(invoice):
                 if amount_to_allocate <= Decimal('0'):
                     break
@@ -146,40 +150,55 @@ def do_confirm_fee_payment(payment: FeePaymentModel, override_allocation: bool =
                 item.amount_paid += payable
                 item.save(update_fields=['amount_paid'])
                 amount_to_allocate -= payable
-                current = Decimal(item_breakdown.get(str(item.pk), '0'))
-                item_breakdown[str(item.pk)] = str(current + payable)
+                item_breakdown[str(item.pk)] = str(payable)
+                _apply_sibling_logic(item, invoice)
 
-    else:
-        # --- Auto-distribute across unpaid items in order ---
-        for item in _get_unpaid_items(invoice):
-            if amount_to_allocate <= Decimal('0'):
-                break
-            payable = min(item.balance, amount_to_allocate)
-            item.amount_paid += payable
-            item.save(update_fields=['amount_paid'])
-            amount_to_allocate -= payable
-            item_breakdown[str(item.pk)] = str(payable)
-            _apply_sibling_logic(item, invoice)
+        # ==================== OVERPAYMENT HANDLING (NEW) ====================
+        excess = amount_to_allocate  # whatever's left after all items are fully paid
+        applied_to_invoice = original_amount - excess
 
-    # Update payment record
-    payment.status = FeePaymentModel.PaymentStatus.CONFIRMED
-    payment.item_breakdown = item_breakdown
-    payment.save(update_fields=['status', 'item_breakdown', 'confirmed_by'])
+        if excess > Decimal('0.01'):
+            # The invoice-linked payment record must only reflect what was
+            # actually applied to this invoice, or InvoiceModel.amount_paid
+            # (which sums confirmed FeePaymentModel.amount) overcounts and
+            # drives the invoice balance negative.
+            payment.amount = applied_to_invoice
+            payment.notes = (payment.notes or '') + (
+                f"\n[System] Original payment ₦{original_amount:,.2f}; "
+                f"₦{excess:,.2f} exceeded invoice balance and was credited to fee wallet."
+            )
 
-    # Update invoice status
-    invoice.refresh_from_db()
-    if invoice.balance <= Decimal('0.01'):
-        invoice.status = InvoiceModel.Status.PAID
-    else:
-        invoice.status = InvoiceModel.Status.PARTIALLY_PAID
-    invoice.save(update_fields=['status'])
+            wallet, _ = StudentWalletModel.objects.select_for_update().get_or_create(student=student)
+            wallet.fee_balance += excess
+            wallet.save(update_fields=['fee_balance'])
 
-    send_fee_payment_confirmation_email(payment, request=request)
+            logger.info(
+                f"FeePayment {payment.pk}: excess ₦{excess:,.2f} routed to "
+                f"{student}'s fee wallet (new balance ₦{wallet.fee_balance:,.2f})."
+            )
+        # ======================================================================
 
-    logger.info(
-        f"FeePayment {payment.pk} confirmed. "
-        f"Invoice {invoice.invoice_number} status → {invoice.status}."
-    )
+        payment.status = FeePaymentModel.PaymentStatus.CONFIRMED
+        payment.item_breakdown = item_breakdown
+        payment.save(update_fields=['status', 'item_breakdown', 'confirmed_by', 'amount', 'notes'])
+
+        invoice.refresh_from_db()
+        if invoice.balance <= Decimal('0.01'):
+            invoice.status = InvoiceModel.Status.PAID
+        else:
+            invoice.status = InvoiceModel.Status.PARTIALLY_PAID
+        invoice.save(update_fields=['status'])
+
+        send_fee_payment_confirmation_email(payment, request=request)
+
+        logger.info(
+            f"FeePayment {payment.pk} confirmed. "
+            f"Invoice {invoice.invoice_number} status → {invoice.status}."
+        )
+
+    except Exception:
+        logger.exception(f"Error confirming fee payment {payment.pk}")
+        raise
 
 
 @transaction.atomic

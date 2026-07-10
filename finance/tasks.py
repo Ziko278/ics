@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 import logging
 
+from admin_site.models import SchoolSettingModel
 from .models import (
     InvoiceGenerationJob, InvoiceModel, InvoiceItemModel,
     DiscountModel, DiscountApplicationModel, StudentDiscountModel
@@ -32,6 +33,30 @@ def generate_invoices_task(job_id):
     try:
         # 1. Get the job record from the database
         job = InvoiceGenerationJob.objects.get(pk=job_id)
+        # ==================== SESSION/TERM GUARD (NEW) ====================
+        # Only refuse jobs targeting a PAST session/term. Jobs for the
+        # current or a future term are allowed (e.g. generating next
+        # quarter's invoices ahead of rollover).
+        current_setting = SchoolSettingModel.objects.first()
+        if current_setting:
+            is_past_session = job.session.start_year < current_setting.session.start_year
+            is_same_session_past_term = (
+                    job.session_id == current_setting.session_id
+                    and job.term.order < current_setting.term.order
+            )
+            if is_past_session or is_same_session_past_term:
+                job.status = InvoiceGenerationJob.Status.FAILURE
+                job.error_message = (
+                    f"Refused: job targets a past session/term "
+                    f"(session={job.session_id}/term={job.term_id}), "
+                    f"active is session={current_setting.session_id}/term={current_setting.term_id}"
+                )
+                job.completed_at = timezone.now()
+                job.save()
+                logger.warning(f"Blocked historical invoice generation for job {job_id}")
+                return
+        # =====================================================================
+
         job.status = InvoiceGenerationJob.Status.IN_PROGRESS
         job.save()
 
@@ -76,20 +101,6 @@ def generate_invoices_task(job_id):
                         'status': 'unpaid',
                     }
                 )
-
-                # ==================== NEW CLEANUP STEP ====================
-                # Extract the IDs of the fees that actually apply to the student right now
-                valid_fee_ids = [f.id for f in applicable_fees_for_student]
-
-                # Find and delete any items on this invoice that don't belong in the valid list
-                invalid_items = InvoiceItemModel.objects.filter(
-                    invoice=invoice
-                ).exclude(fee_master_id__in=valid_fee_ids)
-
-                if invalid_items.exists():
-                    deleted_count, _ = invalid_items.delete()
-                    logger.info(f"Cleaned up {deleted_count} outdated fee(s) for student {student.id}")
-                # ==========================================================
 
                 # Add all applicable fees as line items
                 for fee_master in applicable_fees_for_student:
